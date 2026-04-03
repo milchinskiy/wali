@@ -26,7 +26,7 @@ pub enum SshAuth {
 
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct RawHostSshConnection {
+pub struct HostSshConnection {
     pub user: Option<String>,
     pub host: String,
     pub port: Option<u16>,
@@ -44,9 +44,9 @@ pub struct RawHostSshConnection {
 
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum RawHostKind {
+pub enum HostKind {
     Local,
-    Ssh(Box<RawHostSshConnection>),
+    Ssh(Box<HostSshConnection>),
 }
 
 #[derive(Clone, serde::Deserialize)]
@@ -54,8 +54,19 @@ pub enum RawHostKind {
 pub struct Host {
     pub id: HostId,
     pub tags: Option<Vec<super::Tag>>,
-    pub kind: RawHostKind,
+    pub kind: HostKind,
     pub vars: Option<BTreeMap<String, String>>,
+}
+
+impl Default for Host {
+    fn default() -> Self {
+        Self {
+            id: "local".to_string(),
+            tags: None,
+            kind: HostKind::Local,
+            vars: None,
+        }
+    }
 }
 
 impl Host {
@@ -96,7 +107,7 @@ mod tests {
         let host = Host {
             id: "test-id".to_string(),
             tags: Some(vec!["tag1".to_string(), "tag2".to_string()]),
-            kind: RawHostKind::Local,
+            kind: HostKind::Local,
             vars: None,
         };
         let selectors = vec![

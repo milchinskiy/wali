@@ -5,7 +5,7 @@ pub type TaskId = String;
 
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct RawTask {
+pub struct Task {
     pub id: TaskId,
     pub tags: Option<Vec<super::Tag>>,
     pub depends_on: Option<Vec<TaskId>>,
