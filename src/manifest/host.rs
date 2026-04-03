@@ -1,7 +1,7 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub type HostTag = String;
 pub type HostId = String;
 
 #[derive(Clone, serde::Deserialize)]
@@ -26,12 +26,13 @@ pub enum SshAuth {
 
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct HostSshConnection {
+pub struct RawHostSshConnection {
     pub user: Option<String>,
     pub host: String,
     pub port: Option<u16>,
     pub host_key_policy: Option<SshHostKeyPolicy>,
     pub auth: SshAuth,
+    pub cwd: Option<String>,
 
     #[serde(default, with = "serde_ext_duration::opt::human")]
     pub connect_timeout: Option<Duration>,
@@ -43,17 +44,18 @@ pub struct HostSshConnection {
 
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum HostKind {
+pub enum RawHostKind {
     Local,
-    Ssh(Box<HostSshConnection>),
+    Ssh(Box<RawHostSshConnection>),
 }
 
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Host {
     pub id: HostId,
-    pub tags: Option<Vec<HostTag>>,
-    pub kind: HostKind,
+    pub tags: Option<Vec<super::Tag>>,
+    pub kind: RawHostKind,
+    pub vars: Option<BTreeMap<String, String>>,
 }
 
 impl Host {
@@ -61,7 +63,9 @@ impl Host {
         match selector {
             HostSelector::Id(id) => &self.id == id,
             HostSelector::Tag(tag) => self.tags.as_ref().is_some_and(|tags| tags.contains(tag)),
-            HostSelector::List(list) => list.iter().any(|s| self.matches(s)),
+            HostSelector::Not(s) => !self.matches(s),
+            HostSelector::All(s) => s.iter().all(|s| self.matches(s)),
+            HostSelector::Any(s) => s.iter().any(|s| self.matches(s)),
         }
     }
 }
@@ -70,12 +74,78 @@ impl Host {
 #[serde(rename_all = "snake_case")]
 pub enum HostSelector {
     Id(HostId),
-    Tag(HostTag),
-    List(Vec<Self>),
+    Tag(super::Tag),
+
+    Not(Box<Self>),
+    All(Vec<Self>),
+    Any(Vec<Self>),
 }
 
 impl HostSelector {
     pub fn matches(&self, host: &Host) -> bool {
         host.matches(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_mixed_selectors() {
+        let host = Host {
+            id: "test-id".to_string(),
+            tags: Some(vec!["tag1".to_string(), "tag2".to_string()]),
+            kind: RawHostKind::Local,
+            vars: None,
+        };
+        let selectors = vec![
+            (true, HostSelector::Id("test-id".to_string())),
+            (true, HostSelector::Tag("tag1".to_string())),
+            (true, HostSelector::Tag("tag2".to_string())),
+            (
+                true,
+                HostSelector::All(vec![
+                    HostSelector::Tag("tag1".to_string()),
+                    HostSelector::Tag("tag2".to_string()),
+                ]),
+            ),
+            (
+                true,
+                HostSelector::Any(vec![
+                    HostSelector::Tag("tag1".to_string()),
+                    HostSelector::Tag("tag2".to_string()),
+                ]),
+            ),
+            (true, HostSelector::Not(Box::new(HostSelector::Tag("tag3".to_string())))),
+            (
+                true,
+                HostSelector::Not(Box::new(HostSelector::All(vec![
+                    HostSelector::Tag("tag4".to_string()),
+                    HostSelector::Tag("tag4".to_string()),
+                ]))),
+            ),
+            (false, HostSelector::Id("other-id".to_string())),
+            (false, HostSelector::Tag("other-tag".to_string())),
+            (false, HostSelector::Not(Box::new(HostSelector::Tag("tag1".to_string())))),
+            (
+                false,
+                HostSelector::Any(vec![
+                    HostSelector::Tag("tag3".to_string()),
+                    HostSelector::Tag("tag4".to_string()),
+                ]),
+            ),
+            (
+                false,
+                HostSelector::All(vec![
+                    HostSelector::Tag("tag2".to_string()),
+                    HostSelector::Tag("tag3".to_string()),
+                ]),
+            ),
+        ];
+
+        for (expected, selector) in selectors {
+            assert_eq!(host.matches(&selector), expected);
+        }
     }
 }

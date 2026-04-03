@@ -1,5 +1,4 @@
-pub mod manifest;
-pub mod modules;
+pub mod module;
 
 pub struct Runtime {
     lua: mlua::Lua,
@@ -17,6 +16,28 @@ impl Runtime {
         package.set("cpath", "")?;
 
         Ok(Runtime { lua })
+    }
+
+    pub fn with_manifest_flow() -> mlua::Result<Self> {
+        let runtime = Self::new()?;
+
+        #[allow(clippy::single_element_loop)]
+        for (name, content) in &[("manifest", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/manifest.lua")))] {
+            runtime.register_module_content(name, content)?;
+        }
+
+        Ok(runtime)
+    }
+
+    pub fn with_modules_flow() -> mlua::Result<Self> {
+        let runtime = Self::new()?;
+
+        #[allow(clippy::single_element_loop)]
+        for (name, content) in &[("api", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/api.lua")))] {
+            runtime.register_module_content(name, content)?;
+        }
+
+        Ok(runtime)
     }
 
     pub fn add_include_path<P>(&self, path: P) -> mlua::Result<()>
@@ -67,5 +88,21 @@ impl Runtime {
     {
         use mlua::LuaSerdeExt;
         self.lua.to_value(&value)
+    }
+
+    pub fn module_load_by_name<N>(&self, name: N) -> mlua::Result<module::Module>
+    where
+        N: AsRef<str>,
+    {
+        let module: mlua::Table = self
+            .lua
+            .globals()
+            .get::<mlua::Function>("require")?
+            .call(name.as_ref())?;
+
+        if module.contains_key("run")? {
+            todo!("validate the module struct");
+        }
+        unimplemented!();
     }
 }

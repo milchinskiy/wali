@@ -1,0 +1,21 @@
+use std::path::PathBuf;
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ModuleGit {
+    pub url: String,
+    #[serde(rename = "ref")]
+    pub git_ref: Option<String>,
+    pub depth: Option<u32>,
+    pub submodules: Option<bool>,
+    pub update: Option<bool>,
+    pub name: Option<String>,
+    pub subdir: Option<PathBuf>,
+}
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Module {
+    Path(PathBuf),
+    Git(Box<ModuleGit>),
+}
