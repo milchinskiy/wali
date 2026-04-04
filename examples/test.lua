@@ -18,7 +18,7 @@ return {
 	modules = {
 		"test-modules",
 		{
-			repo = "https://github.com/test-modules/test-modules.git",
+			url = "https://github.com/test-modules/test-modules.git",
 			ref = "main",
 			name = "test-modules-2",
 		},

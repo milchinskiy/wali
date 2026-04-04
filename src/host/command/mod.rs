@@ -2,10 +2,6 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct Shell(pub String);
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct Command {
     pub command: String,
     pub args: Vec<String>,
@@ -23,8 +19,8 @@ pub struct CommandOutput {
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
+#[serde(rename_all = "snake_case")]
 pub enum ExecSpec {
-    Shell(Shell),
-    Command(Command),
+    Shell(String),
+    Spec(Command),
 }
