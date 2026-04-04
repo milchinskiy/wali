@@ -7,30 +7,24 @@ pub mod task;
 pub type Tag = String;
 
 #[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-struct RawManifest {
-    pub name: Option<String>,
-    pub base_path: Option<PathBuf>,
-
-    pub hosts: Option<Vec<host::Host>>,
-    pub modules: Option<Vec<modules::Module>>,
-
-    pub tasks: Vec<task::Task>,
-}
-
 pub struct Manifest {
+    #[serde(skip)]
     pub file: PathBuf,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub base_path: PathBuf,
 
+    #[serde(default)]
     pub hosts: Vec<host::Host>,
+    #[serde(default)]
     pub modules: Vec<modules::Module>,
 
     pub tasks: Vec<task::Task>,
 }
 
 pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
-    let path = path.as_ref();
+    let path = path.as_ref().canonicalize()?;
     if !path.exists() || !path.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -39,41 +33,27 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
         .into());
     }
 
-    let Some(parent_path) = path.parent() else {
-        return Err(std::io::Error::new(
+    let parent_path = path.parent().ok_or_else(|| {
+        std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Manifest file not found: {}", path.display()),
+            format!("Manifest parent path cannot be determined: {}", path.display()),
         )
-        .into());
-    };
+    })?;
 
-    let content = std::fs::read_to_string(path)?;
+    let content = std::fs::read_to_string(&path)?;
+
     let runtime = crate::runtime::Runtime::with_manifest_flow()?;
-    let raw: mlua::Table =
-        runtime.eval(path.file_name().unwrap_or_default().to_string_lossy(), &content)?;
-    let raw: RawManifest = runtime.from_lua_value(mlua::Value::Table(raw))?;
+    runtime.add_include_path(parent_path)?;
 
-    let name = raw
-        .name
-        .unwrap_or(path.to_string_lossy().to_string());
-    let controller_base_path = if let Some(controller_base_path) = raw.base_path {
-        controller_base_path
-    } else {
-        parent_path.to_path_buf()
-    };
+    let mainfest: mlua::Value = runtime.eval(path.file_name().unwrap_or_default().to_string_lossy(), &content)?;
+    let mut manifest: Manifest = runtime.from_lua_value(mainfest)?;
+    manifest.file = path.to_path_buf();
+    if manifest.name.is_empty() {
+        manifest.name = path.to_string_lossy().to_string();
+    }
+    if manifest.base_path.as_os_str().is_empty() {
+        manifest.base_path = parent_path.to_path_buf();
+    }
 
-    let hosts = if let Some(hosts) = raw.hosts {
-        hosts
-    } else {
-        vec![host::Host::default()]
-    };
-
-    Ok(Manifest {
-        file: path.to_path_buf(),
-        name,
-        base_path: controller_base_path,
-        hosts,
-        modules: raw.modules.unwrap_or_default(),
-        tasks: raw.tasks,
-    })
+    Ok(manifest)
 }

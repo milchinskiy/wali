@@ -11,7 +11,8 @@ impl Runtime {
         let opts = LuaOptions::default();
         let lua = mlua::Lua::new_with(libs, opts)?;
 
-        let package = lua.globals().get::<mlua::Table>("package")?;
+        let globals = lua.globals();
+        let package = globals.get::<mlua::Table>("package")?;
         package.set("path", "")?;
         package.set("cpath", "")?;
 

@@ -1,20 +1,69 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
 pub type HostId = String;
 
+#[derive(Default, Clone, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct Host {
+    pub id: HostId,
+    pub transport: HostTransport,
+    #[serde(default = "BTreeSet::new")]
+    pub tags: BTreeSet<super::Tag>,
+    #[serde(default = "BTreeMap::new")]
+    pub vars: BTreeMap<String, String>,
+
+    #[serde(default, with = "serde_ext_duration::opt::human")]
+    pub command_timeout: Option<Duration>,
+}
+
+impl Host {
+    pub fn matches(&self, selector: &HostSelector) -> bool {
+        match selector {
+            HostSelector::Id(id) => &self.id == id,
+            HostSelector::Tag(tag) => self.tags.contains(tag),
+            HostSelector::Not(s) => !self.matches(s),
+            HostSelector::All(s) => s.iter().all(|s| self.matches(s)),
+            HostSelector::Any(s) => s.iter().any(|s| self.matches(s)),
+        }
+    }
+}
+
+#[derive(Default, Clone, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostTransport {
+    #[default]
+    Local,
+    Ssh(Box<HostSshConnection>),
+}
+
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SshHostKeyPolicy {
     Ignore,
-    AllowAdd { path: Option<PathBuf> },
-    Strict { path: Option<PathBuf> },
+    AllowAdd {
+        #[serde(default = "default_host_key_path")]
+        path: PathBuf,
+    },
+    Strict {
+        #[serde(default = "default_host_key_path")]
+        path: PathBuf,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+impl Default for SshHostKeyPolicy {
+    fn default() -> Self {
+        SshHostKeyPolicy::Strict {
+            path: default_host_key_path(),
+        }
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SshAuth {
+    #[default]
     Agent,
     KeyFile {
         private_key: PathBuf,
@@ -27,58 +76,19 @@ pub enum SshAuth {
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct HostSshConnection {
-    pub user: Option<String>,
+    pub user: String,
     pub host: String,
-    pub port: Option<u16>,
-    pub host_key_policy: Option<SshHostKeyPolicy>,
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
+    #[serde(default = "SshHostKeyPolicy::default")]
+    pub host_key_policy: SshHostKeyPolicy,
+    #[serde(default = "SshAuth::default")]
     pub auth: SshAuth,
-    pub cwd: Option<String>,
 
     #[serde(default, with = "serde_ext_duration::opt::human")]
     pub connect_timeout: Option<Duration>,
     #[serde(default, with = "serde_ext_duration::opt::human")]
-    pub command_timeout: Option<Duration>,
-    #[serde(default, with = "serde_ext_duration::opt::human")]
     pub keepalive_interval: Option<Duration>,
-}
-
-#[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HostKind {
-    Local,
-    Ssh(Box<HostSshConnection>),
-}
-
-#[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct Host {
-    pub id: HostId,
-    pub tags: Option<Vec<super::Tag>>,
-    pub kind: HostKind,
-    pub vars: Option<BTreeMap<String, String>>,
-}
-
-impl Default for Host {
-    fn default() -> Self {
-        Self {
-            id: "local".to_string(),
-            tags: None,
-            kind: HostKind::Local,
-            vars: None,
-        }
-    }
-}
-
-impl Host {
-    pub fn matches(&self, selector: &HostSelector) -> bool {
-        match selector {
-            HostSelector::Id(id) => &self.id == id,
-            HostSelector::Tag(tag) => self.tags.as_ref().is_some_and(|tags| tags.contains(tag)),
-            HostSelector::Not(s) => !self.matches(s),
-            HostSelector::All(s) => s.iter().all(|s| self.matches(s)),
-            HostSelector::Any(s) => s.iter().any(|s| self.matches(s)),
-        }
-    }
 }
 
 #[derive(Clone, serde::Deserialize)]
@@ -98,6 +108,14 @@ impl HostSelector {
     }
 }
 
+fn default_ssh_port() -> u16 {
+    22
+}
+
+fn default_host_key_path() -> PathBuf {
+    crate::utils::path::home().join(".ssh").join("known_hosts")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,9 +124,8 @@ mod tests {
     fn host_mixed_selectors() {
         let host = Host {
             id: "test-id".to_string(),
-            tags: Some(vec!["tag1".to_string(), "tag2".to_string()]),
-            kind: HostKind::Local,
-            vars: None,
+            tags: BTreeSet::from(["tag1".to_string(), "tag2".to_string()]),
+            ..Default::default()
         };
         let selectors = vec![
             (true, HostSelector::Id("test-id".to_string())),
