@@ -6,7 +6,7 @@ pub mod task;
 
 pub type Tag = String;
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct Manifest {
     #[serde(skip)]
     pub file: PathBuf,

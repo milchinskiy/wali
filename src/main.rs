@@ -1,3 +1,5 @@
+mod cli;
+
 fn main() {
-    println!("test");
+    cli::setup_commands();
 }

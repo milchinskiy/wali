@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 pub type TaskId = String;
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Task {
     pub id: TaskId,
@@ -15,7 +15,7 @@ pub struct Task {
     pub args: serde_json::Value,
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModuleSelector {
     Builtin(String),

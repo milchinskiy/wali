@@ -4,7 +4,7 @@ use std::time::Duration;
 
 pub type HostId = String;
 
-#[derive(Default, Clone, serde::Deserialize)]
+#[derive(Default, Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Host {
     pub id: HostId,
@@ -30,7 +30,7 @@ impl Host {
     }
 }
 
-#[derive(Default, Clone, serde::Deserialize)]
+#[derive(Default, Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostTransport {
     #[default]
@@ -38,7 +38,7 @@ pub enum HostTransport {
     Ssh(Box<HostSshConnection>),
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SshHostKeyPolicy {
     Ignore,
@@ -60,7 +60,7 @@ impl Default for SshHostKeyPolicy {
     }
 }
 
-#[derive(Default, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SshAuth {
     #[default]
@@ -73,7 +73,7 @@ pub enum SshAuth {
     Password,
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct HostSshConnection {
     pub user: String,
@@ -91,7 +91,7 @@ pub struct HostSshConnection {
     pub keepalive_interval: Option<Duration>,
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostSelector {
     Id(HostId),

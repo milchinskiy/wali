@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ModuleGit {
     pub url: String,
@@ -13,7 +13,7 @@ pub struct ModuleGit {
     pub subdir: Option<PathBuf>,
 }
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Module {
     Path(PathBuf),

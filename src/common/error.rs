@@ -42,3 +42,15 @@ impl From<mlua::Error> for Error {
         Error::Lua(e)
     }
 }
+
+use rust_args_parser as ap;
+impl From<Error> for ap::Error {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::Io(e) => ap::Error::ExitMsg { code: 2, message: Some(e.to_string()) },
+            Error::ParseInt(e) => ap::Error::ExitMsg { code: 2, message: Some(e.to_string()) },
+            Error::Utf8(e) => ap::Error::ExitMsg { code: 2, message: Some(e.to_string()) },
+            Error::Lua(e) => ap::Error::ExitMsg { code: 2, message: Some(e.to_string()) },
+        }
+    }
+}
