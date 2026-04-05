@@ -30,6 +30,15 @@ impl Host {
     }
 }
 
+impl std::fmt::Display for Host {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.transport {
+            HostTransport::Local => write!(f, "local"),
+            HostTransport::Ssh(ssh) => write!(f, "{}@{}", ssh.user, ssh.host),
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostTransport {
@@ -60,7 +69,7 @@ impl Default for SshHostKeyPolicy {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SshAuth {
     #[default]

@@ -17,7 +17,19 @@ pub fn setup_commands() {
     let (code, message) = match ap::parse(&env, &root, &args, &mut ctx) {
         Ok(_) => (0, None),
         Err(ap::Error::ExitMsg { code, message }) => (code, message),
-        Err(e) => (1, Some(e.to_string())),
+        Err(ap::Error::UserAny(e)) => {
+            if let Some(e) = e.downcast_ref::<ap::Error>()
+                && let ap::Error::ExitMsg { code, message } = e
+            {
+                (*code, message.clone())
+            } else {
+                (10, Some(e.to_string()))
+            }
+        }
+        Err(e) => {
+            dbg!(&e);
+            (1, Some(e.to_string()))
+        }
     };
 
     if let Some(message) = message {

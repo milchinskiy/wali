@@ -19,3 +19,12 @@ pub enum Module {
     Path(PathBuf),
     Git(Box<ModuleGit>),
 }
+
+impl std::fmt::Display for Module {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Self::Path(path) => write!(f, "{}", path.display()),
+            Self::Git(git) => write!(f, "{}#{}", git.url, git.git_ref.clone().unwrap_or_default()),
+        }
+    }
+}
