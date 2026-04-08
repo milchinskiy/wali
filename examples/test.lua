@@ -1,4 +1,6 @@
 return {
+	name = "Test wali manifest file",
+
 	hosts = {
 		{
 			id = "local",
@@ -16,11 +18,19 @@ return {
 			},
 			tags = { "remote", "ssh" },
 			vars = { user = "remote-user" },
+
+			run_as = {
+				{
+					user = "test",
+					via = "doas",
+					env_policy = { keep = { "PATH", "HOME" } },
+				},
+			},
 		},
 	},
 
 	modules = {
-		{ path = "../docs" },
+		{ path = "./custom-mods" },
 	},
 
 	tasks = {
@@ -35,7 +45,8 @@ return {
 					{ env_set = "DISPLAY" },
 				},
 			},
-			host = { ["not"] = { tag = "remote" } },
+			host = { ["not"] = { tag = "local" } },
+            run_as = "unknown-user",
 			module = { builtin = "wali.test.module" },
 			args = { path1 = "test", path2 = "../examples" },
 		},

@@ -11,6 +11,7 @@ pub struct Task {
     pub depends_on: Option<Vec<TaskId>>,
     pub when: Option<When>,
     pub host: Option<super::host::HostSelector>,
+    pub run_as: Option<String>,
     pub module: ModuleSelector,
     pub args: serde_json::Value,
 }

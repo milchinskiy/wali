@@ -52,6 +52,7 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
     canonicalize_manifest_paths(parent_path, &mut manifest)?;
     check_hosts_uniqueness(&manifest.hosts)?;
     check_modules_uniqueness(&manifest.modules)?;
+    check_run_as_validity(&manifest.hosts, &manifest.tasks)?;
 
     manifest.file = path.to_path_buf();
     if manifest.name.is_empty() {
@@ -59,9 +60,36 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
     }
     if manifest.base_path.as_os_str().is_empty() {
         manifest.base_path = parent_path.to_path_buf();
+    } else {
+        manifest.base_path = manifest.base_path.canonicalize()?;
     }
 
     Ok(manifest)
+}
+
+fn check_run_as_validity(hosts: &[host::Host], tasks: &[task::Task]) -> crate::Result {
+    for host in hosts {
+        let runas_users = host.run_as.iter().map(|r| r.user.clone()).collect::<Vec<_>>();
+        for task in tasks {
+            let Some(hsel) = task.host.as_ref() else {
+                continue;
+            };
+            if !hsel.matches(host) {
+                continue;
+            }
+            let Some(runas) = task.run_as.as_ref() else {
+                continue;
+            };
+
+            if !runas_users.contains(runas) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Task '{}' has `run_as = '{}'`, but host {} has no such user",
+                    task.id, runas, host
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn canonicalize_manifest_paths(root_path: &Path, manifest: &mut Manifest) -> crate::Result<()> {
