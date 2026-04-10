@@ -3,6 +3,6 @@ pub use common::{Error, Result};
 
 pub mod runtime;
 pub mod manifest;
-pub mod plan;
+pub mod module;
 
 pub mod utils;

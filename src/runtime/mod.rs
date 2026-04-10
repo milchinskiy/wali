@@ -1,3 +1,5 @@
+use mlua::LuaSerdeExt;
+
 pub mod module;
 
 pub struct Runtime {
@@ -12,6 +14,8 @@ impl Runtime {
         let lua = mlua::Lua::new_with(libs, opts)?;
 
         let globals = lua.globals();
+        globals.set("null", lua.null())?;
+
         let package = globals.get::<mlua::Table>("package")?;
         package.set("path", "")?;
         package.set("cpath", "")?;
@@ -79,7 +83,6 @@ impl Runtime {
     where
         T: serde::de::DeserializeOwned,
     {
-        use mlua::LuaSerdeExt;
         self.lua.from_value(value)
     }
 
@@ -87,7 +90,6 @@ impl Runtime {
     where
         T: serde::Serialize,
     {
-        use mlua::LuaSerdeExt;
         self.lua.to_value(&value)
     }
 

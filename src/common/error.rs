@@ -5,6 +5,7 @@ pub enum Error {
     Utf8(std::str::Utf8Error),
     Lua(mlua::Error),
     InvalidManifest(String),
+    ModuleSchema { path: String, message: String },
 }
 
 impl std::fmt::Display for Error {
@@ -15,6 +16,7 @@ impl std::fmt::Display for Error {
             Self::Utf8(e) => write!(f, "Utf8 error: {e}"),
             Self::Lua(e) => write!(f, "Lua error: {e}"),
             Self::InvalidManifest(e) => write!(f, "Invalid manifest: {e}"),
+            Self::ModuleSchema { path, message } => write!(f, "Invalid module input data: {path}: {message}"),
         }
     }
 }
@@ -27,6 +29,7 @@ impl std::error::Error for Error {
             Self::Utf8(e) => Some(e),
             Self::Lua(e) => Some(e),
             Self::InvalidManifest(_) => None,
+            Self::ModuleSchema { .. } => None,
         }
     }
 }
@@ -58,14 +61,18 @@ impl From<mlua::Error> for Error {
 use rust_args_parser as ap;
 impl From<Error> for ap::Error {
     fn from(value: Error) -> Self {
-        let (code, message) = match value {
-            Error::Io(e) => (2, Some(e.to_string())),
-            Error::ParseInt(e) => (13, Some(e.to_string())),
-            Error::Utf8(e) => (12, Some(e.to_string())),
-            Error::Lua(e) => (25, Some(e.to_string())),
-            Error::InvalidManifest(e) => (21, Some(e)),
+        let code = match value {
+            Error::Io(..) => 2,
+            Error::ParseInt(..) => 13,
+            Error::Utf8(..) => 12,
+            Error::Lua(..) => 25,
+            Error::InvalidManifest(..) => 21,
+            Error::ModuleSchema { .. } => 26,
         };
 
-        ap::Error::ExitMsg { code, message }
+        ap::Error::ExitMsg {
+            code,
+            message: Some(value.to_string()),
+        }
     }
 }

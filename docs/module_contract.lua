@@ -22,96 +22,41 @@ return {
 		type = "object",
 		required = true,
 		props = {
-			arg1 = { type = "string", required = true },
-			arg2 = { type = "number", default = 123 },
-			arg3 = { type = "list", default = { "a", "b", "c" } },
-			arg4 = { type = "union", default = "a", values = { "a", "b", "c" } },
-			arg5 = { type = "boolean", default = true },
-			arg6 = {
-				type = "object",
-				default = { key1 = "val1", key2 = "val2" },
-				props = { key1 = { type = "string" }, key2 = { type = "number" } },
-			},
+			arg1 = { type = "any", required = true, default = 123 },
+			arg2 = { type = "null", default = null },
+			arg3 = { type = "string", required = true, default = "test string" },
+			arg4 = { type = "number", default = 1.23 },
+			arg5 = { type = "integer", default = -123 },
+			arg6 = { type = "boolean", default = true },
+			arg7 = { type = "list", items = { type = "number" }, default = { 1, 2, 3 } },
+			arg8 = { type = "tuple", items = { { type = "number" }, { type = "integer" } }, default = { 1, 1.23 } },
+			arg9 = { type = "enum", values = { "a", "b", "c", null }, default = null },
+			arg10 = { type = "object", props = { a = { type = "string" } }, default = { a = "test" } },
+			arg11 = { type = "map", value = { type = "string" }, default = { a = "test" } },
 		},
 	},
 
 	---Validate input arguments (optional)
-    ---business logic can be added here to validate input arguments
-    ---in context to actual host state
-    ---@param ctx table
-	---@param normalized_args table
+	---business logic can be added here to validate input arguments
+	---in context to actual host state
+	---@param ctx table
+	---@param schema any
 	---@return boolean result true if input arguments are valid
 	---@error string error message
-	validate = function(ctx, normalized_args)
+	validate = function(ctx, schema)
 		return true
 		-- or
 		-- error("error message")
-	end,
-
-	---Probe input arguments with actual host state (optional)
-    ---@param ctx table
-	---@param normalized_args table
-	---@return boolean result true if input arguments and host state are ready to apply
-	probe = function(ctx, normalized_args)
-		return true
-		-- or
-		-- error("error message")
-	end,
-
-	---Generate list of changes that will be applied (optional)
-	---if not provided or returns nil or empty table, assumed changes will be "unknown"
-    ---@param ctx table
-	---@return table|nil changes
-	plan = function(ctx)
-		return {
-			{ path = "path/to/file-1", action = "created" },
-			{ path = "path/to/file-2", action = "deleted" },
-			{ path = "path/to/file-3", action = "updated" },
-			-- other kinds of actions might be added later
-		}
 	end,
 
 	---Apply changes
-    ---@param ctx table
-	---@param normalized_args table
-	---@return table|nil changes
-	apply = function(ctx, normalized_args)
+	---@param ctx table
+	---@param schema any
+	---@return boolean result true if changes were applied
+	apply = function(ctx, schema)
 		-- do something
-		-- and return the actual changes state (if applicable)
-		return {
-			{ path = "path/to/file-1", action = "created" },
-			{ path = "path/to/file-2", action = "deleted" },
-			{ path = "path/to/file-3", action = "updated" },
-		}
-	end,
-
-	---Revert changes (optional)
-    ---@param ctx table
-	---@param normalized_args table
-	---@param apply_state table state from `apply` stage if applicable
-	---@return table|nil changes
-	revert = function(ctx, normalized_args, apply_state)
-		-- do something
-		-- and return the actual changes state (if applicable)
-		return {
-			{ path = "path/to/file-1", action = "deleted" },
-			{ path = "path/to/file-2", action = "created" },
-			{ path = "path/to/file-3", action = "updated" },
-		}
-	end,
-
-	---Cleanup changes (optional)
-    ---@param ctx table
-	---@param normalized_args table
-	---@param apply_state table state from `apply` stage if applicable
-	---@return table|nil changes
-	cleanup = function(ctx, normalized_args, apply_state)
-		-- do something
-		-- and return the actual changes state (if applicable)
-		return {
-			{ path = "path/to/file-1", action = "deleted" },
-			{ path = "path/to/file-2", action = "created" },
-			{ path = "path/to/file-3", action = "updated" },
-		}
+		return true
+		-- or
+		-- error("error message")
 	end,
 }
