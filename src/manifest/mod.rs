@@ -1,5 +1,6 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+use self::host::HostSelector;
 
 pub mod host;
 pub mod modules;
@@ -17,11 +18,11 @@ pub struct Manifest {
     pub base_path: PathBuf,
 
     #[serde(default)]
-    pub hosts: BTreeMap<host::HostId, host::Host>,
+    pub hosts: Vec<host::Host>,
     #[serde(default)]
     pub modules: Vec<modules::Module>,
 
-    pub tasks: BTreeMap<task::TaskId, task::Task>,
+    pub tasks: Vec<task::Task>,
 }
 
 pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
@@ -50,7 +51,7 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
     let mut manifest: Manifest = runtime.from_lua_value(mainfest)?;
 
     canonicalize_manifest(parent_path, &mut manifest)?;
-    check_run_as_validity(&manifest.hosts, &manifest.tasks)?;
+    check_validity(&manifest)?;
 
     manifest.file = path.to_path_buf();
     if manifest.name.is_empty() {
@@ -65,53 +66,68 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
     Ok(manifest)
 }
 
-fn check_run_as_validity(
-    hosts: &BTreeMap<host::HostId, host::Host>,
-    tasks: &BTreeMap<task::TaskId, task::Task>,
-) -> crate::Result {
-    for host in hosts.values() {
-        let runas_ids = host.run_as.keys().collect::<Vec<_>>();
-        for task in tasks.values() {
-            let Some(hsel) = task.host.as_ref() else {
-                continue;
-            };
-            if !hsel.matches(host) {
-                continue;
-            }
-            let Some(runas) = task.run_as.as_ref() else {
-                continue;
-            };
+fn check_validity(manifest: &Manifest) -> crate::Result {
+    let mut host_id_set = std::collections::HashSet::with_capacity(manifest.hosts.len());
+    for host in &manifest.hosts {
+        if !host_id_set.insert(host.id.clone()) {
+            return Err(crate::Error::InvalidManifest(format!("Host id '{}' is not unique", host.id)));
+        }
+    }
 
-            if !runas_ids.contains(&runas) {
+    let mut task_id_set = std::collections::HashSet::with_capacity(manifest.tasks.len());
+    for task in &manifest.tasks {
+        if !task_id_set.insert(task.id.clone()) {
+            return Err(crate::Error::InvalidManifest(format!("Task id '{}' is not unique", task.id)));
+        }
+
+        if let Some(depends_on) = &task.depends_on {
+            if depends_on.contains(&task.id) {
+                return Err(crate::Error::InvalidManifest(format!("Task '{}' cannot depend on itself", task.id)));
+            }
+            if let Some(selfid) = depends_on.iter().find(|d| !task_id_set.contains(*d)) {
                 return Err(crate::Error::InvalidManifest(format!(
-                    "Task '{}' has `run_as = '{}'`, but host {} has no such run_as id",
-                    task.id, runas, host
+                    "Task '{}' depends on non-existent task '{}'",
+                    task.id, selfid
                 )));
             }
         }
+
+        if let Some(hsel) = task.host.as_ref()
+            && let host::HostSelector::Id(id) = hsel
+            && !host_id_set.contains(id)
+        {
+            return Err(crate::Error::InvalidManifest(format!(
+                "Task '{}' has `host = '{}'`, but no such host id",
+                task.id, id
+            )));
+        }
+
+        if let Some(run_as) = &task.run_as {
+            for host in manifest
+                .hosts
+                .iter()
+                .filter(|h| h.matches(task.host.as_ref().unwrap_or(&HostSelector::Id(h.id.clone()))))
+            {
+                if !host.run_as.iter().any(|h| h.id == *run_as) {
+                    return Err(crate::Error::InvalidManifest(format!(
+                        "Task '{}' has `run_as = '{}'`, but host {} has no such run_as id",
+                        task.id, run_as, host
+                    )));
+                }
+            }
+        }
     }
+
     Ok(())
 }
 
 fn canonicalize_manifest(root_path: &Path, manifest: &mut Manifest) -> crate::Result<()> {
-    for (host_id, host) in &mut manifest.hosts {
-        host.id = host_id.clone();
-        for (runas_id, runas) in &mut host.run_as {
-            runas.id = runas_id.clone();
-        }
-    }
-    for (task_id, task) in &mut manifest.tasks {
-        task.id = task_id.clone();
-    }
     for module in &mut manifest.modules {
         if let modules::Module::Path(mpath) = module
             && mpath.is_relative()
         {
             *mpath = root_path.join(&mpath).canonicalize().map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid module include path: {}: {}", mpath.display(), e),
-                )
+                crate::Error::InvalidManifest(format!("Invalid module include path: {}: {}", mpath.display(), e))
             })?;
         }
     }

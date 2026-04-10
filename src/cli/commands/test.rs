@@ -12,10 +12,10 @@ pub fn test<'a>() -> ap::CmdSpec<'a, Context> {
 
 fn test_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
     let Some(manifest) = ctx.manifest.as_ref() else {
-        return Err(ap::Error::User("manifest path not specified".to_string()));
+        return Err(ap::Error::User("Manifest file not specified".to_string()));
     };
     if !manifest.exists() {
-        return Err(ap::Error::User("manifest file not found".to_string()));
+        return Err(ap::Error::User(format!("Manifest file {} not found", manifest.display())));
     }
 
     let m = wali::manifest::load_from_file(manifest.as_path())?;
