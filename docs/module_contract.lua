@@ -61,9 +61,8 @@ return {
 	---Generate list of changes that will be applied (optional)
 	---if not provided or returns nil or empty table, assumed changes will be "unknown"
     ---@param ctx table
-	---@param normalized_args table
 	---@return table|nil changes
-	assumed_changes = function(ctx, normalized_args)
+	plan = function(ctx)
 		return {
 			{ path = "path/to/file-1", action = "created" },
 			{ path = "path/to/file-2", action = "deleted" },

@@ -1,27 +1,19 @@
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
 pub type TaskId = String;
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Task {
+    #[serde(skip_deserializing)]
     pub id: TaskId,
     pub tags: Option<BTreeSet<super::Tag>>,
     pub depends_on: Option<Vec<TaskId>>,
     pub when: Option<When>,
     pub host: Option<super::host::HostSelector>,
     pub run_as: Option<String>,
-    pub module: ModuleSelector,
+    pub module: String,
     pub args: serde_json::Value,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ModuleSelector {
-    Builtin(String),
-    User(String),
-    Path(PathBuf),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]

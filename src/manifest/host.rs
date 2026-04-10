@@ -16,13 +16,15 @@ pub enum RunAsVia {
 #[serde(rename_all = "snake_case")]
 pub enum RunAsEnv {
     Preserve,
-    Keep(Vec<String>),
+    Keep(BTreeSet<String>),
     Clear,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RunAsRef {
+    #[serde(skip_deserializing)]
+    pub id: String,
     pub user: String,
     pub via: RunAsVia,
     pub env_policy: RunAsEnv,
@@ -35,14 +37,15 @@ pub struct RunAsRef {
 #[derive(Default, Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Host {
+    #[serde(skip_deserializing)]
     pub id: HostId,
     pub transport: HostTransport,
     #[serde(default = "BTreeSet::new")]
     pub tags: BTreeSet<super::Tag>,
     #[serde(default = "BTreeMap::new")]
     pub vars: BTreeMap<String, String>,
-    #[serde(default = "Vec::new")]
-    pub run_as: Vec<RunAsRef>,
+    #[serde(default = "BTreeMap::new")]
+    pub run_as: BTreeMap<String, RunAsRef>,
 
     #[serde(default, with = "serde_ext_duration::opt::human")]
     pub command_timeout: Option<Duration>,

@@ -2,14 +2,12 @@ return {
 	name = "Test wali manifest file",
 
 	hosts = {
-		{
-			id = "local",
+		["local"] = {
 			transport = "local",
 			tags = { "local" },
 			vars = { user = "test-user" },
 		},
-		{
-			id = "ssh-test",
+		["ssh-test"] = {
 			transport = {
 				ssh = {
 					host = "1.2.3.4",
@@ -20,7 +18,7 @@ return {
 			vars = { user = "remote-user" },
 
 			run_as = {
-				{
+				["doas-test"] = {
 					user = "test",
 					via = "doas",
 					env_policy = { keep = { "PATH", "HOME" } },
@@ -34,8 +32,7 @@ return {
 	},
 
 	tasks = {
-		{
-			id = "test task #1",
+		["test task #1"] = {
 			tags = { "task-tag-1" },
 			when = {
 				all = {
@@ -45,9 +42,9 @@ return {
 					{ env_set = "DISPLAY" },
 				},
 			},
-			host = { ["not"] = { tag = "local" } },
-            run_as = "unknown-user",
-			module = { builtin = "wali.test.module" },
+			host = { id = "ssh-test" },
+			run_as = "doas-test",
+			module = "wali.test.module",
 			args = { path1 = "test", path2 = "../examples" },
 		},
 	},
