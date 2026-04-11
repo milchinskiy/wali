@@ -14,10 +14,11 @@ impl TargetPath {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
 
-    #[must_use]
-    pub fn into_string(self) -> String {
-        self.0
+impl std::fmt::Display for TargetPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -36,12 +37,6 @@ impl From<String> for TargetPath {
 impl From<&str> for TargetPath {
     fn from(value: &str) -> Self {
         Self(value.to_owned())
-    }
-}
-
-impl fmt::Display for TargetPath {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
     }
 }
 
@@ -119,21 +114,15 @@ impl FileMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UserRef {
-    Id(u32),
-    Name(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GroupRef {
+pub enum OwnerRef {
     Id(u32),
     Name(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct OwnerSpec {
-    pub user: Option<UserRef>,
-    pub group: Option<GroupRef>,
+    pub user: Option<OwnerRef>,
+    pub group: Option<OwnerRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
