@@ -4,5 +4,6 @@ pub use common::{Error, Result};
 pub mod runtime;
 pub mod manifest;
 pub mod module;
+pub mod executor;
 
 pub mod utils;
