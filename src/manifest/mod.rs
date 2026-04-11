@@ -79,7 +79,9 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
         if !task_id_set.insert(task.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Task id '{}' is not unique", task.id)));
         }
+    }
 
+    for task in &manifest.tasks {
         if let Some(depends_on) = &task.depends_on {
             if depends_on.contains(&task.id) {
                 return Err(crate::Error::InvalidManifest(format!("Task '{}' cannot depend on itself", task.id)));
