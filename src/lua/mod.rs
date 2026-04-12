@@ -2,11 +2,11 @@ use mlua::LuaSerdeExt;
 
 pub mod module;
 
-pub struct Runtime {
+pub struct LuaRuntime {
     lua: mlua::Lua,
 }
 
-impl Runtime {
+impl LuaRuntime {
     pub fn new() -> mlua::Result<Self> {
         use mlua::{LuaOptions, StdLib as L};
         let libs = L::UTF8 | L::TABLE | L::STRING | L::MATH | L::PACKAGE;
@@ -20,7 +20,7 @@ impl Runtime {
         package.set("path", "")?;
         package.set("cpath", "")?;
 
-        Ok(Runtime { lua })
+        Ok(LuaRuntime { lua })
     }
 
     pub fn with_manifest_flow() -> mlua::Result<Self> {
@@ -43,6 +43,10 @@ impl Runtime {
         }
 
         Ok(runtime)
+    }
+
+    pub fn lua(&self) -> &mlua::Lua {
+        &self.lua
     }
 
     pub fn add_include_path<P>(&self, path: P) -> mlua::Result<()>
@@ -93,19 +97,19 @@ impl Runtime {
         self.lua.to_value(&value)
     }
 
+    pub fn require<N, R>(&self, name: N) -> mlua::Result<R>
+    where
+        N: AsRef<str>,
+        R: mlua::FromLuaMulti,
+    {
+        self.lua.globals().get::<mlua::Function>("require")?.call(name.as_ref())
+    }
+
     pub fn module_load_by_name<N>(&self, name: N) -> mlua::Result<module::Module>
     where
         N: AsRef<str>,
     {
-        let module: mlua::Table = self
-            .lua
-            .globals()
-            .get::<mlua::Function>("require")?
-            .call(name.as_ref())?;
-
-        if module.contains_key("run")? {
-            todo!("validate the module struct");
-        }
-        unimplemented!();
+        let module: mlua::Table = self.require(name.as_ref())?;
+        Ok(module::Module::new(module))
     }
 }

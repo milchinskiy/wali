@@ -44,7 +44,7 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
 
     let content = std::fs::read_to_string(&path)?;
 
-    let runtime = crate::runtime::Runtime::with_manifest_flow()?;
+    let runtime = crate::lua::LuaRuntime::with_manifest_flow()?;
     runtime.add_include_path(parent_path)?;
 
     let mainfest: mlua::Value = runtime.eval(path.file_name().unwrap_or_default().to_string_lossy(), &content)?;

@@ -18,8 +18,9 @@ fn test_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
         return Err(ap::Error::User(format!("Manifest file {} not found", manifest.display())));
     }
 
-    let m = wali::manifest::load_from_file(manifest.as_path())?;
-    dbg!(&m);
+    let manifest = wali::manifest::load_from_file(manifest.as_path())?;
+    let plan = wali::plan::compile(manifest)?;
+    dbg!(plan);
 
     Ok(())
 }

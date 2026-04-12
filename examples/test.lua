@@ -46,15 +46,13 @@ return {
 					{ env_set = "DISPLAY" },
 				},
 			},
-			host = { id = "ssh-test" },
-			run_as = "doas-test",
-			module = "wali.test.module",
+            depends_on = { "task #2" },
+			module = "test_module",
 			args = { path1 = "test", path2 = "../examples" },
 		},
         {
             id = "task #2",
-            depends_on = { "test task #1" },
-            module = "wali.test.module",
+            module = "test_module",
             args = {},
         }
 	},
