@@ -190,27 +190,18 @@ impl Default for RenameOpts {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MktempKind {
+    #[default]
     File,
     Dir,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct MktempOpts {
     pub kind: MktempKind,
     pub parent_dir: Option<TargetPath>,
     pub prefix: Option<String>,
-}
-
-impl Default for MktempOpts {
-    fn default() -> Self {
-        Self {
-            kind: MktempKind::File,
-            parent_dir: None,
-            prefix: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -360,4 +351,18 @@ pub trait PathSemantics {
     fn normalize(&self, path: &TargetPath) -> TargetPath;
     fn parent(&self, path: &TargetPath) -> Option<TargetPath>;
     fn temp_dir(&self) -> TargetPath;
+}
+
+pub trait Executor:
+    Facts<Error = crate::Error> + Fs<Error = crate::Error> + CommandExec<Error = crate::Error> + PathSemantics + Send
+{
+}
+
+impl<T> Executor for T where
+    T: Facts<Error = crate::Error>
+        + Fs<Error = crate::Error>
+        + CommandExec<Error = crate::Error>
+        + PathSemantics
+        + Send
+{
 }
