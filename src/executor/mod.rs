@@ -2,6 +2,9 @@ use std::fmt;
 use std::process::ExitStatus;
 use std::time::{Duration, SystemTime};
 
+mod local;
+mod ssh;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TargetPath(String);
 

@@ -4,12 +4,26 @@ use std::time::Duration;
 
 pub type HostId = String;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunAsVia {
     Sudo,
     Doas,
     Su,
+}
+
+impl std::fmt::Display for RunAsVia {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                RunAsVia::Sudo => "sudo",
+                RunAsVia::Doas => "doas",
+                RunAsVia::Su => "su",
+            }
+        )
+    }
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -108,7 +122,6 @@ pub enum SshAuth {
     KeyFile {
         private_key: PathBuf,
         public_key: Option<PathBuf>,
-        passphrase: Option<String>,
     },
     Password,
 }

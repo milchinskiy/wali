@@ -20,7 +20,9 @@ fn test_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
 
     let manifest = wali::manifest::load_from_file(manifest.as_path())?;
     let plan = wali::plan::compile(manifest)?;
-    dbg!(plan);
+    dbg!(&plan);
+
+    let _ = wali::engine::Engine::prepare(&plan).unwrap();
 
     Ok(())
 }

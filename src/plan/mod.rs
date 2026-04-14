@@ -1,3 +1,5 @@
+use crate::engine::secrets;
+use crate::manifest::host::{HostTransport, SshAuth};
 use crate::manifest::{Manifest, host, task};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -10,7 +12,7 @@ pub struct Plan {
     pub hosts: Vec<HostPlan>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HostPlan {
     pub id: String,
     pub run_as_defs: BTreeMap<String, host::RunAsRef>,
@@ -18,6 +20,45 @@ pub struct HostPlan {
     pub transport: host::HostTransport,
     pub modules_paths: Vec<PathBuf>,
     pub tasks: Vec<TaskInstance>,
+}
+
+impl HostPlan {
+    pub fn secret_requests(&self) -> Vec<secrets::SecretRequest> {
+        let mut requests = Vec::new();
+        if let HostTransport::Ssh(ssh) = &self.transport {
+            match &ssh.auth {
+                SshAuth::Password => requests.push(secrets::SecretRequest {
+                    key: secrets::SecretKey::SshPassword {
+                        host_id: self.id.clone(),
+                        user: ssh.user.clone(),
+                    },
+                    prompt: format!("{}@{} asks for password", ssh.user, self.id),
+                }),
+                SshAuth::KeyFile { private_key, .. } => requests.push(secrets::SecretRequest {
+                    key: secrets::SecretKey::SshKeyPhrase {
+                        host_id: self.id.clone(),
+                        private_key_path: private_key.clone(),
+                    },
+                    prompt: format!("{}@{} asks for key phrase", ssh.user, self.id),
+                }),
+                _ => {}
+            }
+        }
+
+        for runas in self.run_as_defs.values() {
+            requests.push(secrets::SecretRequest {
+                key: secrets::SecretKey::RunAsPassword {
+                    host_id: self.id.clone(),
+                    run_as_id: runas.id.clone(),
+                    user: runas.user.clone(),
+                    via: runas.via.clone(),
+                },
+                prompt: format!("{}@{} asks for '{}' password", runas.user, self.id, runas.via),
+            })
+        }
+
+        requests
+    }
 }
 
 #[derive(Debug, Clone)]
