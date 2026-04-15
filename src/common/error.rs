@@ -7,6 +7,7 @@ pub enum Error {
     InvalidManifest(String),
     ModuleSchema { path: String, message: String },
     MissingSecret(SecretKey),
+    Reporter(String),
 }
 
 impl std::fmt::Display for Error {
@@ -20,9 +21,18 @@ impl std::fmt::Display for Error {
             Self::ModuleSchema { path, message } => write!(f, "Invalid module input data: {path}: {message}"),
             Self::MissingSecret(key) => match key {
                 SecretKey::SshPassword { host_id, user } => write!(f, "Missing ssh password for {host_id}/{user}"),
-                SecretKey::SshKeyPhrase { host_id, private_key_path } => write!(f, "Missing ssh key phrase for {host_id}/{}", private_key_path.display()),
-                SecretKey::RunAsPassword { host_id, run_as_id, user, via } => write!(f, "Missing run-as password for {host_id}/{run_as_id}/{user} via {via}"),
+                SecretKey::SshKeyPhrase {
+                    host_id,
+                    private_key_path,
+                } => write!(f, "Missing ssh key phrase for {host_id}/{}", private_key_path.display()),
+                SecretKey::RunAsPassword {
+                    host_id,
+                    run_as_id,
+                    user,
+                    via,
+                } => write!(f, "Missing run-as password for {host_id}/{run_as_id}/{user} via {via}"),
             },
+            Self::Reporter(e) => write!(f, "Reporter error: {e}"),
         }
     }
 }
@@ -37,6 +47,7 @@ impl std::error::Error for Error {
             Self::InvalidManifest(_) => None,
             Self::ModuleSchema { .. } => None,
             Self::MissingSecret { .. } => None,
+            Self::Reporter(_) => None,
         }
     }
 }
@@ -65,8 +76,14 @@ impl From<mlua::Error> for Error {
     }
 }
 
-use rust_args_parser as ap;
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Self {
+        Error::Reporter(format!("JSON error: {value}"))
+    }
+}
+
 use crate::engine::SecretKey;
+use rust_args_parser as ap;
 impl From<Error> for ap::Error {
     fn from(value: Error) -> Self {
         let code = match value {
@@ -77,6 +94,7 @@ impl From<Error> for ap::Error {
             Error::InvalidManifest(..) => 21,
             Error::ModuleSchema { .. } => 26,
             Error::MissingSecret(..) => 31,
+            Error::Reporter(..) => 71,
         };
 
         ap::Error::ExitMsg {

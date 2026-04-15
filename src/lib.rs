@@ -1,3 +1,5 @@
+pub mod cli;
+
 pub mod common;
 pub use common::{Error, Result};
 
@@ -8,3 +10,5 @@ pub mod plan;
 pub mod engine;
 
 pub mod utils;
+
+pub mod report;
