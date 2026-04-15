@@ -1,5 +1,3 @@
-pub mod cli;
-
 pub mod common;
 pub use common::{Error, Result};
 

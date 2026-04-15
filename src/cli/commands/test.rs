@@ -18,11 +18,11 @@ fn test_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
         return Err(ap::Error::User(format!("Manifest file {} not found", manifest.display())));
     }
 
-    let manifest = crate::manifest::load_from_file(manifest.as_path())?;
-    let plan = crate::plan::compile(manifest)?;
+    let manifest = wali::manifest::load_from_file(manifest.as_path())?;
+    let plan = wali::plan::compile(manifest)?;
     dbg!(&plan);
 
-    let _ = crate::engine::Engine::prepare(&plan).unwrap();
+    let _ = wali::engine::Engine::prepare(&plan).unwrap();
 
     Ok(())
 }

@@ -1,3 +1,5 @@
+mod cli;
+
 fn main() {
-    wali::cli::setup_commands();
+    cli::setup_commands();
 }
