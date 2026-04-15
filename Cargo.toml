@@ -27,6 +27,9 @@ perf = "deny"
 style = "deny"
 suspicious = "deny"
 
+[lints.rust]
+unsafe_code = "deny"
+
 [profile.release]
 lto = true
 strip = true
