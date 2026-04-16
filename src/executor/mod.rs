@@ -1,9 +1,8 @@
 use std::fmt;
-use std::process::ExitStatus;
 use std::time::{Duration, SystemTime};
 
 use crate::launcher::secrets::SecretVault;
-use crate::manifest::host::HostTransport;
+use crate::manifest::host::{HostTransport, RunAsRef};
 
 mod local;
 mod ssh;
@@ -13,17 +12,10 @@ pub enum Backend {
     Ssh(ssh::SshExecutor),
 }
 impl Backend {
-    pub fn connect(
-        transport: &HostTransport,
-        secrets: &SecretVault,
-    ) -> crate::Result<Self> {
+    pub fn connect(transport: &HostTransport, secrets: &SecretVault) -> crate::Result<Self> {
         match transport {
-            HostTransport::Local => {
-                Ok(Self::Local(local::LocalExecutor::connect()?))
-            }
-            HostTransport::Ssh(ssh) => {
-                Ok(Self::Ssh(ssh::SshExecutor::connect(ssh.as_ref(), secrets)?))
-            }
+            HostTransport::Local => Ok(Self::Local(local::LocalExecutor::connect()?)),
+            HostTransport::Ssh(ssh) => Ok(Self::Ssh(ssh::SshExecutor::connect(ssh.as_ref(), secrets)?)),
         }
     }
 }
@@ -37,7 +29,7 @@ impl TargetPath {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&mut self) -> &str {
         &self.0
     }
 }
@@ -50,7 +42,7 @@ impl std::fmt::Display for TargetPath {
 
 impl AsRef<str> for TargetPath {
     fn as_ref(&self) -> &str {
-        self.as_str()
+        &self.0
     }
 }
 
@@ -66,17 +58,24 @@ impl From<&str> for TargetPath {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandStatus {
+    Exited(i32),
+    Signaled(String),
+    Unknown,
+}
+
 #[derive(Debug, Clone)]
 pub struct CommandOutput {
-    pub status: ExitStatus,
+    pub status: CommandStatus,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
 }
 
 impl CommandOutput {
     #[must_use]
-    pub fn success(&self) -> bool {
-        self.status.success()
+    pub fn success(&mut self) -> bool {
+        matches!(self.status, CommandStatus::Exited(0))
     }
 }
 
@@ -230,6 +229,25 @@ pub struct MktempOpts {
     pub prefix: Option<String>,
 }
 
+pub struct CommandRequest {
+    pub kind: CommandKind,
+    pub opts: CommandOpts,
+}
+
+pub enum CommandKind {
+    Exec { program: String, args: Vec<String> },
+    Shell { script: String },
+}
+
+pub struct ExecContext<'a> {
+    pub run_as: Option<RunAsContext<'a>>,
+}
+
+pub struct RunAsContext<'a> {
+    pub spec: &'a RunAsRef,
+    pub password: Option<&'a str>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CommandOpts {
     pub cwd: Option<TargetPath>,
@@ -244,42 +262,42 @@ pub trait Facts {
     /// host os
     /// # Errors
     /// returns an error if the host os cannot be determined
-    fn os(&self) -> Result<String, Self::Error>;
+    fn os(&mut self) -> Result<String, Self::Error>;
     /// host architecture
     /// # Errors
     /// returns an error if the host architecture cannot be determined
-    fn arch(&self) -> Result<String, Self::Error>;
+    fn arch(&mut self) -> Result<String, Self::Error>;
     /// host hostname
     /// # Errors
     /// returns an error if the host hostname cannot be determined
-    fn hostname(&self) -> Result<String, Self::Error>;
+    fn hostname(&mut self) -> Result<String, Self::Error>;
     /// environment variable
     /// # Errors
     /// returns an error if the environment variable cannot be determined
-    fn env(&self, key: &str) -> Result<Option<String>, Self::Error>;
+    fn env(&mut self, key: &str) -> Result<Option<String>, Self::Error>;
 
     // current executor identity facts
     /// returns the effective user id
     /// # Errors
     /// returns an error if the user id cannot be determined
-    fn uid(&self) -> Result<u32, Self::Error>;
+    fn uid(&mut self) -> Result<u32, Self::Error>;
     /// returns the effective group id
     /// # Errors
     /// returns an error if the group id cannot be determined
-    fn gid(&self) -> Result<u32, Self::Error>;
+    fn gid(&mut self) -> Result<u32, Self::Error>;
     /// returns the effective user name
     /// # Errors
     /// returns an error if the user name cannot be determined
-    fn user(&self) -> Result<String, Self::Error>;
+    fn user(&mut self) -> Result<String, Self::Error>;
     /// returns the effective group name
     /// # Errors
     /// returns an error if the group name cannot be determined
-    fn group(&self) -> Result<String, Self::Error>;
+    fn group(&mut self) -> Result<String, Self::Error>;
 
     /// `which` behavior: inspect the path itself and do not follow symlinks
     /// # Errors
     /// returns an error if an error occurs during the lookup
-    fn which(&self, command: &str) -> Result<Option<TargetPath>, Self::Error>;
+    fn which(&mut self, command: &str) -> Result<Option<TargetPath>, Self::Error>;
 }
 
 pub trait Fs {
@@ -288,72 +306,72 @@ pub trait Fs {
     /// `lstat` behavior: inspect the path itself and do not follow symlinks
     /// # Errors
     /// returns an error if an error occurs during the lookup
-    fn stat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error>;
+    fn stat(&mut self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error>;
 
     /// read the contents of a file
     /// # Errors
     /// returns an error if an error occurs during the read
-    fn read(&self, path: &TargetPath) -> Result<Vec<u8>, Self::Error>;
+    fn read(&mut self, path: &TargetPath) -> Result<Vec<u8>, Self::Error>;
 
     /// write the contents to the file
     /// # Errors
     /// returns an error if write fails
-    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ChangeResult, Self::Error>;
+    fn write(&mut self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ChangeResult, Self::Error>;
 
     /// create a directory
     /// # Errors
     /// returns an error if dir creation fails
-    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ChangeResult, Self::Error>;
+    fn create_dir(&mut self, path: &TargetPath, opts: DirOpts) -> Result<ChangeResult, Self::Error>;
 
     /// remove a file
     /// # Errors
     /// returns an error if removal fails
-    fn remove_file(&self, path: &TargetPath) -> Result<ChangeResult, Self::Error>;
+    fn remove_file(&mut self, path: &TargetPath) -> Result<ChangeResult, Self::Error>;
 
     /// remove a directory
     /// # Errors
     /// returns an error if removal fails
-    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ChangeResult, Self::Error>;
+    fn remove_dir(&mut self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ChangeResult, Self::Error>;
 
     /// create a temporary file or directory
     /// # Errors
     /// returns an error if mktemp fails
-    fn mktemp(&self, opts: MktempOpts) -> Result<TargetPath, Self::Error>;
+    fn mktemp(&mut self, opts: MktempOpts) -> Result<TargetPath, Self::Error>;
 
     /// list the contents of a directory
     /// # Errors
     /// returns an error if listing fails
-    fn list_dir(&self, path: &TargetPath) -> Result<Vec<DirEntry>, Self::Error>;
+    fn list_dir(&mut self, path: &TargetPath) -> Result<Vec<DirEntry>, Self::Error>;
 
     /// change the permissions of a file or directory
     /// # Errors
     /// returns an error if chmod fails
-    fn chmod(&self, path: &TargetPath, mode: FileMode) -> Result<ChangeResult, Self::Error>;
+    fn chmod(&mut self, path: &TargetPath, mode: FileMode) -> Result<ChangeResult, Self::Error>;
 
     /// change the owner of a file or directory
     /// # Errors
     /// returns an error if chown fails
-    fn chown(&self, path: &TargetPath, owner: OwnerSpec) -> Result<ChangeResult, Self::Error>;
+    fn chown(&mut self, path: &TargetPath, owner: OwnerSpec) -> Result<ChangeResult, Self::Error>;
 
     /// rename a file or directory
     /// # Errors
     /// returns an error if rename fails
-    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ChangeResult, Self::Error>;
+    fn rename(&mut self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ChangeResult, Self::Error>;
 
     /// create a symlink
     /// # Errors
     /// returns an error if symlink fails
-    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> Result<ChangeResult, Self::Error>;
+    fn symlink(&mut self, target: &TargetPath, link: &TargetPath) -> Result<ChangeResult, Self::Error>;
 
     /// read a symlink
     /// # Errors
     /// returns an error if readlink fails
-    fn read_link(&self, path: &TargetPath) -> Result<TargetPath, Self::Error>;
+    fn read_link(&mut self, path: &TargetPath) -> Result<TargetPath, Self::Error>;
 
     /// check if a path exists
     /// # Errors
     /// returns an error if stat fails
-    fn exists(&self, path: &TargetPath) -> Result<bool, Self::Error> {
+    fn exists(&mut self, path: &TargetPath) -> Result<bool, Self::Error> {
         Ok(self.stat(path)?.is_some())
     }
 }
@@ -361,22 +379,50 @@ pub trait Fs {
 pub trait CommandExec {
     type Error;
 
-    /// run a command
-    /// # Errors
-    /// returns an error if the command fails
-    fn run(&self, program: &str, args: &[&str], opts: CommandOpts) -> Result<CommandOutput, Self::Error>;
+    fn exec(&mut self, req: &CommandRequest, ctx: &ExecContext<'_>) -> Result<CommandOutput, Self::Error>;
 
-    /// run a shell command
+    /// execute a command
     /// # Errors
-    /// returns an error if the command fails
-    fn shell(&self, script: &str, opts: CommandOpts) -> Result<CommandOutput, Self::Error>;
+    /// returns an error if the command cannot be executed
+    fn run(
+        &mut self,
+        program: impl Into<String>,
+        args: impl IntoIterator<Item = impl Into<String>>,
+        opts: CommandOpts,
+        ctx: &ExecContext<'_>,
+    ) -> Result<CommandOutput, Self::Error> {
+        let req = CommandRequest {
+            kind: CommandKind::Exec {
+                program: program.into(),
+                args: args.into_iter().map(Into::into).collect(),
+            },
+            opts,
+        };
+        self.exec(&req, ctx)
+    }
+
+    /// execute a shell
+    /// # Errors
+    /// returns an error if the shell cannot be executed
+    fn shell(
+        &mut self,
+        script: impl Into<String>,
+        opts: CommandOpts,
+        ctx: &ExecContext<'_>,
+    ) -> Result<CommandOutput, Self::Error> {
+        let req = CommandRequest {
+            kind: CommandKind::Shell { script: script.into() },
+            opts,
+        };
+        self.exec(&req, ctx)
+    }
 }
 
 pub trait PathSemantics {
-    fn join(&self, base: &TargetPath, child: &str) -> TargetPath;
-    fn normalize(&self, path: &TargetPath) -> TargetPath;
-    fn parent(&self, path: &TargetPath) -> Option<TargetPath>;
-    fn temp_dir(&self) -> TargetPath;
+    fn join(&mut self, base: &TargetPath, child: &str) -> TargetPath;
+    fn normalize(&mut self, path: &TargetPath) -> TargetPath;
+    fn parent(&mut self, path: &TargetPath) -> Option<TargetPath>;
+    fn temp_dir(&mut self) -> TargetPath;
 }
 
 pub trait Executor:

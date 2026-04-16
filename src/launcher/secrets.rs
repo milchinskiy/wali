@@ -39,7 +39,6 @@ pub struct SecretVault {
 
 impl SecretVault {
     pub fn insert(&mut self, key: SecretKey, value: SecretValue) {
-        println!("inserting secret {:?}: {:?}", key, value);
         self.values.insert(key, value);
     }
 
