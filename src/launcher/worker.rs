@@ -39,12 +39,17 @@ impl Worker {
         })
     }
 
+    pub fn id(&self) -> &str {
+        &self.plan.id
+    }
+
     pub fn validate(&self) -> crate::Result {
         let _backend = crate::executor::Backend::connect(&self.plan.transport, &self.secrets)?;
         todo!();
     }
 
     pub fn apply(&self, sender: ReportSender<Event>) -> crate::Result {
+        let _ = sender;
         let _backend = crate::executor::Backend::connect(&self.plan.transport, &self.secrets)?;
         todo!();
     }

@@ -24,21 +24,21 @@ impl Backend {
 }
 
 pub struct FactCache {
-    os: Option<String>,
-    arch: Option<String>,
-    hostname: Option<String>,
-    identities: BTreeMap<ExecIdentityKey, IdentityFacts>,
-    which: BTreeMap<(ExecIdentityKey, String), Option<TargetPath>>,
+    pub os: Option<String>,
+    pub arch: Option<String>,
+    pub hostname: Option<String>,
+    pub identities: BTreeMap<ExecIdentityKey, IdentityFacts>,
+    pub which: BTreeMap<(ExecIdentityKey, String), Option<TargetPath>>,
 }
 
 pub struct IdentityFacts {
-    uid: u32,
-    gid: u32,
-    gids: Vec<u32>,
+    pub uid: u32,
+    pub gid: u32,
+    pub gids: Vec<u32>,
 
-    user: String,
-    group: String,
-    groups: Vec<String>,
+    pub user: String,
+    pub group: String,
+    pub groups: Vec<String>,
 }
 
 pub enum ExecIdentityKey {
