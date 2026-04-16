@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use crate::executor::Backend;
 use crate::plan::HostPlan;
 use crate::report::ReportSender;
 use crate::report::apply::Event;
@@ -44,13 +45,13 @@ impl Worker {
     }
 
     pub fn validate(&self) -> crate::Result {
-        let _backend = crate::executor::Backend::connect(&self.plan.transport, &self.secrets)?;
+        let _backend = Backend::connect(&self.plan.transport, &self.secrets)?;
         todo!();
     }
 
     pub fn apply(&self, sender: ReportSender<Event>) -> crate::Result {
         let _ = sender;
-        let _backend = crate::executor::Backend::connect(&self.plan.transport, &self.secrets)?;
+        let _backend = Backend::connect(&self.plan.transport, &self.secrets)?;
         todo!();
     }
 }

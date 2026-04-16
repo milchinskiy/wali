@@ -1,276 +1,30 @@
-use std::collections::BTreeMap;
-use std::fmt;
-use std::time::{Duration, SystemTime};
-
-use crate::launcher::secrets::SecretVault;
 use crate::spec::account::Owner;
-use crate::spec::host::Transport;
-use crate::spec::runas::{PtyMode, RunAs};
+use crate::spec::runas::RunAs;
 
+mod command;
+mod facts;
 mod local;
+mod path;
+mod result;
 mod ssh;
 
-pub enum Backend {
-    Local(local::LocalExecutor),
-    Ssh(ssh::SshExecutor),
-}
-impl Backend {
-    pub fn connect(transport: &Transport, secrets: &SecretVault) -> crate::Result<Self> {
-        match transport {
-            Transport::Local => Ok(Self::Local(local::LocalExecutor::connect()?)),
-            Transport::Ssh(ssh) => Ok(Self::Ssh(ssh::SshExecutor::connect(ssh.as_ref(), secrets)?)),
-        }
-    }
-}
+pub use self::command::{CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
+pub use self::path::{
+    DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
+    WriteOpts,
+};
+pub use self::result::{ChangeKind, ChangeResult};
 
-pub struct FactCache {
-    pub os: Option<String>,
-    pub arch: Option<String>,
-    pub hostname: Option<String>,
-    pub identities: BTreeMap<ExecIdentityKey, IdentityFacts>,
-    pub which: BTreeMap<(ExecIdentityKey, String), Option<TargetPath>>,
-}
+pub use self::local::LocalExecutor;
+pub use self::ssh::SshExecutor;
 
-pub struct IdentityFacts {
-    pub uid: u32,
-    pub gid: u32,
-    pub gids: Vec<u32>,
-
-    pub user: String,
-    pub group: String,
-    pub groups: Vec<String>,
-}
-
-pub enum ExecIdentityKey {
-    Base,
-    RunAs(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct TargetPath(String);
-
-impl TargetPath {
-    pub fn new(path: impl Into<String>) -> Self {
-        Self(path.into())
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for TargetPath {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl AsRef<str> for TargetPath {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<String> for TargetPath {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for TargetPath {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandStatus {
-    Exited(i32),
-    Signaled(String),
-    Unknown,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandStreams {
-    Split { stdout: Vec<u8>, stderr: Vec<u8> },
-    Combined(Vec<u8>),
-}
-
-#[derive(Debug, Clone)]
-pub struct CommandOutput {
-    pub status: CommandStatus,
-    pub streams: CommandStreams,
-}
-
-impl CommandOutput {
-    #[must_use]
-    pub fn success(&self) -> bool {
-        matches!(self.status, CommandStatus::Exited(0))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChangeKind {
-    Unchanged,
-    Created,
-    Updated,
-    Removed,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChangeResult {
-    pub kind: ChangeKind,
-}
-
-impl ChangeResult {
-    pub const UNCHANGED: Self = Self {
-        kind: ChangeKind::Unchanged,
-    };
-
-    pub const CREATED: Self = Self {
-        kind: ChangeKind::Created,
-    };
-
-    pub const UPDATED: Self = Self {
-        kind: ChangeKind::Updated,
-    };
-
-    pub const REMOVED: Self = Self {
-        kind: ChangeKind::Removed,
-    };
-
-    #[must_use]
-    pub fn changed(self) -> bool {
-        !matches!(self.kind, ChangeKind::Unchanged)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FsPathKind {
-    File,
-    Dir,
-    Symlink,
-    Other,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FileMode(u32);
-
-impl FileMode {
-    #[must_use]
-    pub fn new(bits: u32) -> Self {
-        Self(bits)
-    }
-
-    #[must_use]
-    pub fn bits(self) -> u32 {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Metadata {
-    pub kind: FsPathKind,
-    pub size: u64,
-
-    // optional because availability varies by platform/backend
-    pub created_at: Option<SystemTime>,
-    pub modified_at: Option<SystemTime>,
-    pub accessed_at: Option<SystemTime>,
-    pub changed_at: Option<SystemTime>,
-
-    // POSIX-oriented
-    pub uid: u32,
-    pub gid: u32,
-    pub mode: FileMode,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DirEntry {
-    pub name: String,
-    pub kind: FsPathKind,
-}
-
-#[derive(Debug, Clone)]
-pub struct WriteOpts {
-    pub create_parents: bool,
-    pub mode: Option<FileMode>,
-    pub owner: Option<Owner>,
-    pub replace: bool,
-}
-
-impl Default for WriteOpts {
-    fn default() -> Self {
-        Self {
-            create_parents: false,
-            mode: None,
-            owner: None,
-            replace: true,
-        }
-    }
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct DirOpts {
-    pub recursive: bool,
-    pub mode: Option<FileMode>,
-    pub owner: Option<Owner>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct RemoveDirOpts {
-    pub recursive: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RenameOpts {
-    pub replace: bool,
-}
-
-impl Default for RenameOpts {
-    fn default() -> Self {
-        Self { replace: true }
-    }
-}
-
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MktempKind {
-    #[default]
-    File,
-    Dir,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct MktempOpts {
-    pub kind: MktempKind,
-    pub parent_dir: Option<TargetPath>,
-    pub prefix: Option<String>,
-}
-
-pub struct CommandRequest {
-    pub kind: CommandKind,
-    pub opts: CommandOpts,
-}
-
-pub enum CommandKind {
-    Exec { program: String, args: Vec<String> },
-    Shell { script: String },
-}
+mod backend;
+pub use backend::Backend;
 
 #[derive(Debug, Clone)]
 pub struct BoundRunAs {
     pub spec: RunAs,
     pub password: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct CommandOpts {
-    pub cwd: Option<TargetPath>,
-    pub env: Vec<(String, String)>,
-    pub stdin: Option<Vec<u8>>,
-    pub timeout: Option<Duration>,
-    pub pty: PtyMode,
 }
 
 pub trait Facts {
@@ -283,8 +37,12 @@ pub trait Facts {
     fn env(&self, key: &str) -> Result<Option<String>, Self::Error>;
     fn uid(&self) -> Result<u32, Self::Error>;
     fn gid(&self) -> Result<u32, Self::Error>;
+    fn gids(&self) -> Result<Vec<u32>, Self::Error>;
+
     fn user(&self) -> Result<String, Self::Error>;
     fn group(&self) -> Result<String, Self::Error>;
+    fn groups(&self) -> Result<Vec<String>, Self::Error>;
+
     fn which(&self, command: &str) -> Result<Option<TargetPath>, Self::Error>;
 }
 
@@ -324,7 +82,7 @@ pub trait Fs {
     /// create a temporary file or directory
     /// # Errors
     /// returns an error if mktemp fails
-    fn mktemp(&self, opts: MktempOpts) -> Result<TargetPath, Self::Error>;
+    fn mktemp(&self, opts: MkTempOpts) -> Result<TargetPath, Self::Error>;
 
     /// list the contents of a directory
     /// # Errors
@@ -404,7 +162,6 @@ pub trait PathSemantics {
     fn join(&self, base: &TargetPath, child: &str) -> TargetPath;
     fn normalize(&self, path: &TargetPath) -> TargetPath;
     fn parent(&self, path: &TargetPath) -> Option<TargetPath>;
-    fn temp_dir(&self) -> TargetPath;
 }
 
 pub trait Executor:
