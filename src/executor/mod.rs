@@ -2,8 +2,31 @@ use std::fmt;
 use std::process::ExitStatus;
 use std::time::{Duration, SystemTime};
 
+use crate::launcher::secrets::SecretVault;
+use crate::manifest::host::HostTransport;
+
 mod local;
 mod ssh;
+
+pub enum Backend {
+    Local(local::LocalExecutor),
+    Ssh(ssh::SshExecutor),
+}
+impl Backend {
+    pub fn connect(
+        transport: &HostTransport,
+        secrets: &SecretVault,
+    ) -> crate::Result<Self> {
+        match transport {
+            HostTransport::Local => {
+                Ok(Self::Local(local::LocalExecutor::connect()?))
+            }
+            HostTransport::Ssh(ssh) => {
+                Ok(Self::Ssh(ssh::SshExecutor::connect(ssh.as_ref(), secrets)?))
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TargetPath(String);

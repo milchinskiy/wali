@@ -10,18 +10,18 @@ use super::secrets;
 pub struct Worker {
     lua: crate::lua::LuaRuntime,
     modules: BTreeMap<String, crate::lua::module::Module>,
-    host_plan: HostPlan,
+    plan: HostPlan,
     secrets: Arc<secrets::SecretVault>,
 }
 
 impl Worker {
-    pub fn new(host_plan: HostPlan, secrets: Arc<secrets::SecretVault>) -> crate::Result<Self> {
+    pub fn new(plan: HostPlan, secrets: Arc<secrets::SecretVault>) -> crate::Result<Self> {
         let lua = crate::lua::LuaRuntime::with_modules_flow()?;
-        for path in &host_plan.modules_paths {
+        for path in &plan.modules_paths {
             lua.add_include_path(path)?;
         }
 
-        let modules = host_plan
+        let modules = plan
             .tasks
             .iter()
             .map(|task| -> crate::Result<_> {
@@ -34,7 +34,7 @@ impl Worker {
         Ok(Self {
             lua,
             modules,
-            host_plan,
+            plan,
             secrets,
         })
     }

@@ -6,8 +6,6 @@ use crate::report::{Reporter, apply::ApplyLayout};
 pub mod secrets;
 pub use secrets::SecretKey;
 
-pub mod connector;
-
 mod worker;
 pub use worker::Worker;
 
