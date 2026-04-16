@@ -1,63 +1,22 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::spec::host::Transport;
+use crate::spec::runas::RunAs;
+
 pub type HostId = String;
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunAsVia {
-    Sudo,
-    Doas,
-    Su,
-}
-
-impl std::fmt::Display for RunAsVia {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                RunAsVia::Sudo => "sudo",
-                RunAsVia::Doas => "doas",
-                RunAsVia::Su => "su",
-            }
-        )
-    }
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunAsEnv {
-    Preserve,
-    Keep(BTreeSet<String>),
-    Clear,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct RunAsRef {
-    pub id: String,
-    pub user: String,
-    pub via: RunAsVia,
-    pub env_policy: RunAsEnv,
-    #[serde(default = "Vec::new")]
-    pub extra_flags: Vec<String>,
-    #[serde(default = "Vec::new")]
-    pub l10n_prompts: Vec<String>,
-}
 
 #[derive(Default, Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Host {
     pub id: HostId,
-    pub transport: HostTransport,
+    pub transport: Transport,
     #[serde(default = "BTreeSet::new")]
     pub tags: BTreeSet<super::Tag>,
     #[serde(default = "BTreeMap::new")]
     pub vars: BTreeMap<String, String>,
     #[serde(default = "Vec::new")]
-    pub run_as: Vec<RunAsRef>,
+    pub run_as: Vec<RunAs>,
 
     #[serde(default, with = "serde_ext_duration::opt::human")]
     pub command_timeout: Option<Duration>,
@@ -78,70 +37,10 @@ impl Host {
 impl std::fmt::Display for Host {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.transport {
-            HostTransport::Local => write!(f, "{} (local)", self.id),
-            HostTransport::Ssh(ssh) => write!(f, "{} ({}@{}:{})", self.id, ssh.user, ssh.host, ssh.port),
+            Transport::Local => write!(f, "{} (local)", self.id),
+            Transport::Ssh(ssh) => write!(f, "{} ({}@{}:{})", self.id, ssh.user, ssh.host, ssh.port),
         }
     }
-}
-
-#[derive(Default, Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HostTransport {
-    #[default]
-    Local,
-    Ssh(Box<HostSshConnection>),
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SshHostKeyPolicy {
-    Ignore,
-    AllowAdd {
-        #[serde(default = "default_host_key_path")]
-        path: PathBuf,
-    },
-    Strict {
-        #[serde(default = "default_host_key_path")]
-        path: PathBuf,
-    },
-}
-
-impl Default for SshHostKeyPolicy {
-    fn default() -> Self {
-        SshHostKeyPolicy::Strict {
-            path: default_host_key_path(),
-        }
-    }
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SshAuth {
-    #[default]
-    Agent,
-    KeyFile {
-        private_key: PathBuf,
-        public_key: Option<PathBuf>,
-    },
-    Password,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct HostSshConnection {
-    pub user: String,
-    pub host: String,
-    #[serde(default = "default_ssh_port")]
-    pub port: u16,
-    #[serde(default = "SshHostKeyPolicy::default")]
-    pub host_key_policy: SshHostKeyPolicy,
-    #[serde(default = "SshAuth::default")]
-    pub auth: SshAuth,
-
-    #[serde(default, with = "serde_ext_duration::opt::human")]
-    pub connect_timeout: Option<Duration>,
-    #[serde(default, with = "serde_ext_duration::opt::human")]
-    pub keepalive_interval: Option<Duration>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -159,14 +58,6 @@ impl HostSelector {
     pub fn matches(&self, host: &Host) -> bool {
         host.matches(self)
     }
-}
-
-fn default_ssh_port() -> u16 {
-    22
-}
-
-fn default_host_key_path() -> PathBuf {
-    crate::utils::path::home().join(".ssh").join("known_hosts")
 }
 
 #[cfg(test)]

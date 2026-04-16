@@ -65,7 +65,6 @@ impl StateHost {
 #[derive(serde::Serialize)]
 enum StateTaskStatus {
     Scheduled,
-    Running,
     Success,
     Skipped(Option<String>),
     Fail(String),
@@ -161,7 +160,7 @@ impl ApplyLayout {
     }
 }
 
-impl super::Layout for ApplyLayout {
+impl Layout for ApplyLayout {
     type Event = Event;
 
     fn handle(&mut self, event: Self::Event) -> crate::Result {

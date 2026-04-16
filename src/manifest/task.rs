@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use crate::spec::predicate::When;
+
 pub type TaskId = String;
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -13,24 +15,4 @@ pub struct Task {
     pub run_as: Option<String>,
     pub module: String,
     pub args: serde_json::Value,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum When {
-    All(Vec<Self>),
-    Any(Vec<Self>),
-    Not(Box<Self>),
-
-    Os(String),
-    Arch(String),
-    Hostname(String),
-    Env(String, String),
-    EnvSet(String),
-    PathExist(String),
-    Uid(u32),
-    Gid(u32),
-    User(String),
-    Group(String),
-    CommandExist(String),
 }

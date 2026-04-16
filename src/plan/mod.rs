@@ -1,6 +1,8 @@
 use crate::launcher::secrets;
-use crate::manifest::host::{HostTransport, SshAuth};
 use crate::manifest::{Manifest, host, task};
+use crate::spec::host::Transport;
+use crate::spec::host::ssh::Auth;
+use crate::spec::{predicate, runas};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -15,9 +17,9 @@ pub struct Plan {
 #[derive(Debug, Clone)]
 pub struct HostPlan {
     pub id: String,
-    pub run_as_defs: BTreeMap<String, host::RunAsRef>,
+    pub run_as_defs: BTreeMap<String, runas::RunAs>,
     pub vars: BTreeMap<String, String>,
-    pub transport: host::HostTransport,
+    pub transport: Transport,
     pub modules_paths: Vec<PathBuf>,
     pub tasks: Vec<TaskInstance>,
 }
@@ -25,16 +27,16 @@ pub struct HostPlan {
 impl HostPlan {
     pub fn secret_requests(&self) -> Vec<secrets::SecretRequest> {
         let mut requests = Vec::new();
-        if let HostTransport::Ssh(ssh) = &self.transport {
+        if let Transport::Ssh(ssh) = &self.transport {
             match &ssh.auth {
-                SshAuth::Password => requests.push(secrets::SecretRequest {
+                Auth::Password => requests.push(secrets::SecretRequest {
                     key: secrets::SecretKey::SshPassword {
                         host_id: self.id.clone(),
                         user: ssh.user.clone(),
                     },
                     prompt: format!("{}@{} asks for password", ssh.user, self.id),
                 }),
-                SshAuth::KeyFile { private_key, .. } => requests.push(secrets::SecretRequest {
+                Auth::KeyFile { private_key, .. } => requests.push(secrets::SecretRequest {
                     key: secrets::SecretKey::SshKeyPhrase {
                         host_id: self.id.clone(),
                         private_key_path: private_key.clone(),
@@ -66,7 +68,7 @@ pub struct TaskInstance {
     pub id: String,
     pub tags: BTreeSet<String>,
     pub depends_on: BTreeSet<String>,
-    pub when: Option<task::When>,
+    pub when: Option<predicate::When>,
     pub run_as: Option<String>,
     pub module: String,
     pub args: serde_json::Value,

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::manifest::host::RunAsVia;
+use crate::spec::runas::RunAsVia;
 
 #[derive(Debug, Clone)]
 pub enum SecretValue {
