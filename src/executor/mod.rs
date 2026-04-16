@@ -258,13 +258,10 @@ pub enum CommandKind {
     Shell { script: String },
 }
 
-pub struct ExecContext<'a> {
-    pub run_as: Option<RunAsContext<'a>>,
-}
-
-pub struct RunAsContext<'a> {
-    pub spec: &'a RunAs,
-    pub password: Option<&'a str>,
+#[derive(Debug, Clone)]
+pub struct BoundRunAs {
+    pub spec: RunAs,
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -279,16 +276,16 @@ pub struct CommandOpts {
 pub trait Facts {
     type Error;
 
-    fn os(&mut self) -> Result<String, Self::Error>;
-    fn arch(&mut self) -> Result<String, Self::Error>;
-    fn hostname(&mut self) -> Result<String, Self::Error>;
+    fn os(&self) -> Result<String, Self::Error>;
+    fn arch(&self) -> Result<String, Self::Error>;
+    fn hostname(&self) -> Result<String, Self::Error>;
 
-    fn env(&mut self, key: &str, ctx: &ExecContext<'_>) -> Result<Option<String>, Self::Error>;
-    fn uid(&mut self, ctx: &ExecContext<'_>) -> Result<u32, Self::Error>;
-    fn gid(&mut self, ctx: &ExecContext<'_>) -> Result<u32, Self::Error>;
-    fn user(&mut self, ctx: &ExecContext<'_>) -> Result<String, Self::Error>;
-    fn group(&mut self, ctx: &ExecContext<'_>) -> Result<String, Self::Error>;
-    fn which(&mut self, command: &str, ctx: &ExecContext<'_>) -> Result<Option<TargetPath>, Self::Error>;
+    fn env(&self, key: &str) -> Result<Option<String>, Self::Error>;
+    fn uid(&self) -> Result<u32, Self::Error>;
+    fn gid(&self) -> Result<u32, Self::Error>;
+    fn user(&self) -> Result<String, Self::Error>;
+    fn group(&self) -> Result<String, Self::Error>;
+    fn which(&self, command: &str) -> Result<Option<TargetPath>, Self::Error>;
 }
 
 pub trait Fs {
@@ -297,117 +294,89 @@ pub trait Fs {
     /// `lstat` behavior: inspect the path itself and do not follow symlinks
     /// # Errors
     /// returns an error if an error occurs during the lookup
-    fn stat(&mut self, path: &TargetPath, ctx: &ExecContext<'_>) -> Result<Option<Metadata>, Self::Error>;
+    fn stat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error>;
 
     /// read the contents of a file
     /// # Errors
     /// returns an error if an error occurs during the read
-    fn read(&mut self, path: &TargetPath, ctx: &ExecContext<'_>) -> Result<Vec<u8>, Self::Error>;
+    fn read(&self, path: &TargetPath) -> Result<Vec<u8>, Self::Error>;
 
     /// write the contents to the file
     /// # Errors
     /// returns an error if write fails
-    fn write(
-        &mut self,
-        path: &TargetPath,
-        content: &[u8],
-        opts: WriteOpts,
-        ctx: &ExecContext<'_>,
-    ) -> Result<ChangeResult, Self::Error>;
+    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ChangeResult, Self::Error>;
 
     /// create a directory
     /// # Errors
     /// returns an error if dir creation fails
-    fn create_dir(
-        &mut self,
-        path: &TargetPath,
-        opts: DirOpts,
-        ctx: &ExecContext<'_>,
-    ) -> Result<ChangeResult, Self::Error>;
+    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ChangeResult, Self::Error>;
 
     /// remove a file
     /// # Errors
     /// returns an error if removal fails
-    fn remove_file(&mut self, path: &TargetPath, ctx: &ExecContext<'_>) -> Result<ChangeResult, Self::Error>;
+    fn remove_file(&self, path: &TargetPath) -> Result<ChangeResult, Self::Error>;
 
     /// remove a directory
     /// # Errors
     /// returns an error if removal fails
-    fn remove_dir(
-        &mut self,
-        path: &TargetPath,
-        opts: RemoveDirOpts,
-        ctx: &ExecContext<'_>,
-    ) -> Result<ChangeResult, Self::Error>;
+    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ChangeResult, Self::Error>;
 
     /// create a temporary file or directory
     /// # Errors
     /// returns an error if mktemp fails
-    fn mktemp(&mut self, opts: MktempOpts, ctx: &ExecContext<'_>) -> Result<TargetPath, Self::Error>;
+    fn mktemp(&self, opts: MktempOpts) -> Result<TargetPath, Self::Error>;
 
     /// list the contents of a directory
     /// # Errors
     /// returns an error if listing fails
-    fn list_dir(&mut self, path: &TargetPath, ctx: &ExecContext<'_>) -> Result<Vec<DirEntry>, Self::Error>;
+    fn list_dir(&self, path: &TargetPath) -> Result<Vec<DirEntry>, Self::Error>;
 
     /// change the permissions of a file or directory
     /// # Errors
     /// returns an error if chmod fails
-    fn chmod(&mut self, path: &TargetPath, mode: FileMode, ctx: &ExecContext<'_>) -> Result<ChangeResult, Self::Error>;
+    fn chmod(&self, path: &TargetPath, mode: FileMode) -> Result<ChangeResult, Self::Error>;
 
     /// change the owner of a file or directory
     /// # Errors
     /// returns an error if chown fails
-    fn chown(&mut self, path: &TargetPath, owner: Owner, ctx: &ExecContext<'_>) -> Result<ChangeResult, Self::Error>;
+    fn chown(&self, path: &TargetPath, owner: Owner) -> Result<ChangeResult, Self::Error>;
 
     /// rename a file or directory
     /// # Errors
     /// returns an error if rename fails
-    fn rename(
-        &mut self,
-        from: &TargetPath,
-        to: &TargetPath,
-        opts: RenameOpts,
-        ctx: &ExecContext<'_>,
-    ) -> Result<ChangeResult, Self::Error>;
+    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ChangeResult, Self::Error>;
 
     /// create a symlink
     /// # Errors
     /// returns an error if symlink fails
-    fn symlink(
-        &mut self,
-        target: &TargetPath,
-        link: &TargetPath,
-        ctx: &ExecContext<'_>,
-    ) -> Result<ChangeResult, Self::Error>;
+    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> Result<ChangeResult, Self::Error>;
 
     /// read a symlink
     /// # Errors
     /// returns an error if readlink fails
-    fn read_link(&mut self, path: &TargetPath, ctx: &ExecContext<'_>) -> Result<TargetPath, Self::Error>;
+    fn read_link(&self, path: &TargetPath) -> Result<TargetPath, Self::Error>;
 
     /// check if a path exists
     /// # Errors
     /// returns an error if stat fails
-    fn exists(&mut self, path: &TargetPath, ctx: &ExecContext<'_>) -> Result<bool, Self::Error> {
-        Ok(self.stat(path, ctx)?.is_some())
+    fn exists(&self, path: &TargetPath) -> Result<bool, Self::Error> {
+        Ok(self.stat(path)?.is_some())
     }
 }
 
 pub trait CommandExec {
     type Error;
 
-    fn exec(&mut self, req: &CommandRequest, ctx: &ExecContext<'_>) -> Result<CommandOutput, Self::Error>;
+    fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error>;
 
     /// execute a command
     /// # Errors
     /// returns an error if the command cannot be executed
     fn run(
-        &mut self,
+        &self,
         program: impl Into<String>,
         args: impl IntoIterator<Item = impl Into<String>>,
         opts: CommandOpts,
-        ctx: &ExecContext<'_>,
     ) -> Result<CommandOutput, Self::Error> {
         let req = CommandRequest {
             kind: CommandKind::Exec {
@@ -416,31 +385,26 @@ pub trait CommandExec {
             },
             opts,
         };
-        self.exec(&req, ctx)
+        self.exec(&req)
     }
 
     /// execute a shell
     /// # Errors
     /// returns an error if the shell cannot be executed
-    fn shell(
-        &mut self,
-        script: impl Into<String>,
-        opts: CommandOpts,
-        ctx: &ExecContext<'_>,
-    ) -> Result<CommandOutput, Self::Error> {
+    fn shell(&self, script: impl Into<String>, opts: CommandOpts) -> Result<CommandOutput, Self::Error> {
         let req = CommandRequest {
             kind: CommandKind::Shell { script: script.into() },
             opts,
         };
-        self.exec(&req, ctx)
+        self.exec(&req)
     }
 }
 
 pub trait PathSemantics {
-    fn join(&mut self, base: &TargetPath, child: &str) -> TargetPath;
-    fn normalize(&mut self, path: &TargetPath) -> TargetPath;
-    fn parent(&mut self, path: &TargetPath) -> Option<TargetPath>;
-    fn temp_dir(&mut self) -> TargetPath;
+    fn join(&self, base: &TargetPath, child: &str) -> TargetPath;
+    fn normalize(&self, path: &TargetPath) -> TargetPath;
+    fn parent(&self, path: &TargetPath) -> Option<TargetPath>;
+    fn temp_dir(&self) -> TargetPath;
 }
 
 pub trait Executor:
