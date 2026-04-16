@@ -1,37 +1,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::plan::{HostPlan, Plan};
+use crate::plan::HostPlan;
+use crate::report::ReportSender;
+use crate::report::apply::Event;
 
-pub mod secrets;
-pub use secrets::SecretKey;
-
-pub mod connector;
-
-pub struct Engine {
-    workers: Vec<Worker>,
-    secrets: Arc<secrets::SecretVault>,
-}
-
-impl Engine {
-    pub fn prepare(plan: &Plan) -> crate::Result<Self> {
-        let requests = plan
-            .hosts
-            .iter()
-            .flat_map(|host| host.secret_requests())
-            .collect::<Vec<_>>();
-        let mut collector = secrets::SecretCollector::new(secrets::TtySecretPrompter);
-        let secrets = Arc::new(collector.collect(&requests)?);
-
-        let workers = plan
-            .hosts
-            .iter()
-            .map(|host| Worker::new(host.clone(), Arc::clone(&secrets)))
-            .collect::<crate::Result<Vec<_>>>()?;
-
-        Ok(Self { workers, secrets })
-    }
-}
+use super::secrets;
 
 pub struct Worker {
     lua: crate::lua::LuaRuntime,
@@ -64,4 +38,13 @@ impl Worker {
             secrets,
         })
     }
+
+    pub fn validate(&self) -> crate::Result {
+        todo!();
+    }
+
+    pub fn apply(&self, sender: ReportSender<Event>) -> crate::Result {
+        todo!();
+    }
 }
+

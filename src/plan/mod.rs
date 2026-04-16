@@ -1,4 +1,4 @@
-use crate::engine::secrets;
+use crate::launcher::secrets;
 use crate::manifest::host::{HostTransport, SshAuth};
 use crate::manifest::{Manifest, host, task};
 use std::collections::{BTreeMap, BTreeSet};

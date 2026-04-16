@@ -22,7 +22,7 @@ fn test_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
     let plan = wali::plan::compile(manifest)?;
     dbg!(&plan);
 
-    let _ = wali::engine::Engine::prepare(&plan).unwrap();
+    let _ = wali::launcher::Launcher::prepare(&plan).unwrap();
 
     Ok(())
 }

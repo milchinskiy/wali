@@ -5,7 +5,7 @@ pub mod lua;
 pub mod manifest;
 pub mod executor;
 pub mod plan;
-pub mod engine;
+pub mod launcher;
 
 pub mod utils;
 
