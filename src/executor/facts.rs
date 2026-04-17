@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use super::path::TargetPath;
 
-struct FactCache {
+pub(super) struct FactCache {
     os: Option<String>,
     arch: Option<String>,
     hostname: Option<String>,
@@ -10,7 +10,7 @@ struct FactCache {
     which: BTreeMap<(ExecIdentityKey, String), Option<TargetPath>>,
 }
 
-struct IdentityFacts {
+pub(super) struct IdentityFacts {
     uid: u32,
     gid: u32,
     gids: Vec<u32>,
@@ -20,7 +20,7 @@ struct IdentityFacts {
     groups: Vec<String>,
 }
 
-enum ExecIdentityKey {
+pub(super) enum ExecIdentityKey {
     Base,
     RunAs(String),
 }

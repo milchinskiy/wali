@@ -5,6 +5,7 @@ use crate::spec::host::ssh::Connection;
 use crate::spec::runas::RunAs;
 
 use super::ExecutorBinder;
+use super::facts::FactCache;
 
 #[derive(Clone)]
 pub struct SshExecutor {
@@ -15,6 +16,8 @@ pub struct SshExecutor {
 struct SharedState {
     id: String,
     secrets: Arc<SecretVault>,
+    session: std::sync::Mutex<ssh2::Session>,
+    facts: std::sync::Mutex<FactCache>,
 }
 
 impl SshExecutor {

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::launcher::secrets::SecretVault;
 use crate::spec::runas::RunAs;
 
+use super::facts::FactCache;
 use super::{ExecutorBinder};
 
 #[derive(Clone)]
@@ -14,6 +15,7 @@ pub struct LocalExecutor {
 struct SharedState {
     id: String,
     secrets: Arc<SecretVault>,
+    facts: std::sync::Mutex<FactCache>,
 }
 
 impl LocalExecutor {
