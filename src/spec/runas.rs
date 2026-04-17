@@ -30,7 +30,7 @@ pub enum RunAsEnv {
     Clear,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub enum PtyMode {
     Never,
     #[default]

@@ -45,13 +45,17 @@ impl Worker {
     }
 
     pub fn validate(&self) -> crate::Result {
-        let _backend = Backend::connect(&self.plan.transport, &self.secrets)?;
+        let _backend = self.connect()?;
         todo!();
     }
 
     pub fn apply(&self, sender: ReportSender<Event>) -> crate::Result {
         let _ = sender;
-        let _backend = Backend::connect(&self.plan.transport, &self.secrets)?;
+        let _backend = self.connect()?;
         todo!();
+    }
+
+    fn connect(&self) -> crate::Result<Backend> {
+        Backend::connect(self.plan.id.clone(), Arc::clone(&self.secrets), &self.plan.transport)
     }
 }

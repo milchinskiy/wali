@@ -2,7 +2,8 @@ use crate::launcher::secrets;
 use crate::manifest::{Manifest, host, task};
 use crate::spec::host::Transport;
 use crate::spec::host::ssh::Auth;
-use crate::spec::{predicate, runas};
+use crate::spec::predicate;
+use crate::spec::runas::RunAs;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -17,8 +18,6 @@ pub struct Plan {
 #[derive(Debug, Clone)]
 pub struct HostPlan {
     pub id: String,
-    pub run_as_defs: BTreeMap<String, runas::RunAs>,
-    pub vars: BTreeMap<String, String>,
     pub transport: Transport,
     pub modules_paths: Vec<PathBuf>,
     pub tasks: Vec<TaskInstance>,
@@ -34,28 +33,40 @@ impl HostPlan {
                         host_id: self.id.clone(),
                         user: ssh.user.clone(),
                     },
-                    prompt: format!("{}@{} asks for password", ssh.user, self.id),
+                    prompt: crate::ui::prompt::ssh_password(&ssh.user, &self.id),
                 }),
                 Auth::KeyFile { private_key, .. } => requests.push(secrets::SecretRequest {
                     key: secrets::SecretKey::SshKeyPhrase {
                         host_id: self.id.clone(),
                         private_key_path: private_key.clone(),
                     },
-                    prompt: format!("{}@{} asks for key phrase", ssh.user, self.id),
+                    prompt: crate::ui::prompt::ssh_key_phrase(&ssh.user, &self.id),
                 }),
                 _ => {}
             }
         }
 
-        for runas in self.run_as_defs.values() {
-            requests.push(secrets::SecretRequest {
-                key: secrets::SecretKey::RunAsPassword {
+        let run_as_skeys = self
+            .tasks
+            .iter()
+            .flat_map(|task| {
+                let run_as = task.run_as.as_ref()?;
+                Some(secrets::SecretKey::RunAsPassword {
                     host_id: self.id.clone(),
-                    run_as_id: runas.id.clone(),
-                    user: runas.user.clone(),
-                    via: runas.via.clone(),
-                },
-                prompt: format!("{}@{} asks for '{}' password", runas.user, self.id, runas.via),
+                    run_as_id: run_as.id.clone(),
+                    user: run_as.user.clone(),
+                    via: run_as.via.clone(),
+                })
+            })
+            .collect::<BTreeSet<_>>();
+
+        for key in run_as_skeys {
+            let secrets::SecretKey::RunAsPassword { user, via, .. } = &key else {
+                unreachable!()
+            };
+            requests.push(secrets::SecretRequest {
+                key: key.clone(),
+                prompt: crate::ui::prompt::password_via(user, &self.id, via.to_string().as_str()),
             })
         }
 
@@ -67,9 +78,10 @@ impl HostPlan {
 pub struct TaskInstance {
     pub id: String,
     pub tags: BTreeSet<String>,
+    pub vars: BTreeMap<String, String>,
     pub depends_on: BTreeSet<String>,
     pub when: Option<predicate::When>,
-    pub run_as: Option<String>,
+    pub run_as: Option<RunAs>,
     pub module: String,
     pub args: serde_json::Value,
 }
@@ -89,23 +101,32 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                 .tasks
                 .iter()
                 .filter(|task| task_matches_host(task, host))
-                .map(|task| TaskInstance {
-                    id: task.id.clone(),
-                    tags: task.tags.clone().unwrap_or_default(),
-                    depends_on: task.depends_on.clone().unwrap_or_default().into_iter().collect(),
-                    when: task.when.clone(),
-                    run_as: task.run_as.clone(),
-                    module: task.module.clone(),
-                    args: task.args.clone(),
+                .map(|task| -> crate::Result<_> {
+                    Ok(TaskInstance {
+                        id: task.id.clone(),
+                        tags: task.tags.clone().unwrap_or_default(),
+                        vars: host.vars.clone(),
+                        depends_on: task.depends_on.clone().unwrap_or_default().into_iter().collect(),
+                        when: task.when.clone(),
+                        run_as: match &task.run_as {
+                            None => None,
+                            Some(id) => Some(host.run_as.iter().find(|r| r.id == *id).cloned().ok_or(
+                                crate::Error::InvalidManifest(format!(
+                                    "run_as '{}' not found in host '{}'",
+                                    id, host.id
+                                )),
+                            )?),
+                        },
+                        module: task.module.clone(),
+                        args: task.args.clone(),
+                    })
                 })
-                .collect::<Vec<_>>();
+                .collect::<crate::Result<Vec<_>>>()?;
             let tasks = order_tasks(tasks)?;
 
             Ok(HostPlan {
                 id: host.id.clone(),
                 modules_paths: module_paths.clone(),
-                run_as_defs: host.run_as.iter().map(|r| (r.id.clone(), r.clone())).collect(),
-                vars: host.vars.clone(),
                 transport: host.transport.clone(),
                 tasks,
             })

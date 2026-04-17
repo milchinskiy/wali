@@ -19,6 +19,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_ext_duration = "0.2.0"
 serde_json = "1.0.149"
 ssh2 = "0.9.5"
+supports-unicode = "3.0.0"
 
 [lints.clippy]
 cargo = "warn"

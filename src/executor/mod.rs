@@ -21,14 +21,8 @@ pub use self::ssh::SshExecutor;
 mod backend;
 pub use backend::Backend;
 
-#[derive(Debug, Clone)]
-pub struct BoundRunAs {
-    pub spec: RunAs,
-    pub password: Option<String>,
-}
-
 pub trait ExecutorBinder {
-    fn bind(&self, run_as: Option<BoundRunAs>) -> Self;
+    fn bind(&self, run_as: Option<RunAs>) -> Self;
 }
 
 pub trait Facts {

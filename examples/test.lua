@@ -7,6 +7,14 @@ return {
 			transport = "local",
 			tags = { "local" },
 			vars = { user = "test-user" },
+            run_as = {
+				{
+					id = "doas-test",
+					user = "test2",
+					via = "doas",
+					env_policy = { keep = { "PATH", "HOME" } },
+				},
+			},
 		},
 		{
 			id = "ssh-test",
@@ -53,6 +61,7 @@ return {
         {
             id = "task #2",
             module = "test_module",
+            run_as = "doas-test",
             args = {},
         }
 	},
