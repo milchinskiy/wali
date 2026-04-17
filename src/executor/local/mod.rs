@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::BoundRunAs;
+use super::{BoundRunAs, ExecutorBinder};
 
 #[derive(Clone)]
 pub struct LocalExecutor {
@@ -19,16 +19,16 @@ impl LocalExecutor {
     }
 
     #[must_use]
-    pub fn bind(&self, run_as: Option<BoundRunAs>) -> Self {
-        Self {
-            state: Arc::clone(&self.state),
-            run_as,
-        }
-    }
-
-    #[must_use]
     pub fn run_as(&self) -> Option<&BoundRunAs> {
         self.run_as.as_ref()
     }
 }
 
+impl ExecutorBinder for LocalExecutor {
+    fn bind(&self, run_as: Option<BoundRunAs>) -> Self {
+        Self {
+            state: Arc::clone(&self.state),
+            run_as,
+        }
+    }
+}

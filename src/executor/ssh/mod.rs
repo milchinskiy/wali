@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::launcher::secrets::SecretVault;
 use crate::spec::host::ssh::Connection;
 
-use super::BoundRunAs;
+use super::{BoundRunAs, ExecutorBinder};
 
 #[derive(Clone)]
 pub struct SshExecutor {
@@ -24,16 +24,16 @@ impl SshExecutor {
     }
 
     #[must_use]
-    pub fn bind(&self, run_as: Option<BoundRunAs>) -> Self {
-        Self {
-            state: Arc::clone(&self.state),
-            run_as,
-        }
-    }
-
-    #[must_use]
     pub fn run_as(&self) -> Option<&BoundRunAs> {
         self.run_as.as_ref()
     }
 }
 
+impl ExecutorBinder for SshExecutor {
+    fn bind(&self, run_as: Option<BoundRunAs>) -> Self {
+        Self {
+            state: Arc::clone(&self.state),
+            run_as,
+        }
+    }
+}

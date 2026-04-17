@@ -27,6 +27,10 @@ pub struct BoundRunAs {
     pub password: Option<String>,
 }
 
+pub trait ExecutorBinder {
+    fn bind(&self, run_as: Option<BoundRunAs>) -> Self;
+}
+
 pub trait Facts {
     type Error;
 
