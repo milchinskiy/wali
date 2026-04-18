@@ -10,6 +10,8 @@ pub enum Error {
     MissingSecret(SecretKey),
     SshProtocol(String),
     FactProbe(String),
+    CommandExec(String),
+    CommandTimeout(String),
     Reporter(String),
 }
 
@@ -38,6 +40,8 @@ impl std::fmt::Display for Error {
             },
             Self::SshProtocol(e) => write!(f, "SSH protocol error: {e}"),
             Self::FactProbe(e) => write!(f, "Fact probe error: {e}"),
+            Self::CommandExec(e) => write!(f, "Command execution error: {e}"),
+            Self::CommandTimeout(e) => write!(f, "Command timeout: {e}"),
             Self::Reporter(e) => write!(f, "Reporter error: {e}"),
         }
     }
@@ -56,6 +60,8 @@ impl std::error::Error for Error {
             Self::MissingSecret { .. } => None,
             Self::SshProtocol(_) => None,
             Self::FactProbe(_) => None,
+            Self::CommandExec(_) => None,
+            Self::CommandTimeout(_) => None,
             Self::Reporter(_) => None,
         }
     }
@@ -112,6 +118,8 @@ impl From<Error> for ap::Error {
             Error::MissingSecret(..) => 31,
             Error::SshProtocol(..) => 33,
             Error::FactProbe(..) => 34,
+            Error::CommandExec(..) => 35,
+            Error::CommandTimeout(..) => 36,
             Error::Reporter(..) => 71,
         };
 

@@ -105,7 +105,9 @@ impl LocalExecutor {
 
     fn store_which(&self, command: &str, resolved: Option<TargetPath>) {
         let identity = self.current_identity_key();
-        self.facts_guard().which.insert((identity, command.to_owned()), resolved);
+        self.facts_guard()
+            .which
+            .insert((identity, command.to_owned()), resolved);
     }
 }
 

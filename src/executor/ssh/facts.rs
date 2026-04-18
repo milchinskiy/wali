@@ -24,6 +24,7 @@ impl Facts for SshExecutor {
             return Err(crate::Error::FactProbe(format!("invalid environment variable name {key:?}")));
         }
 
+        let _guard = self.command_guard();
         let script = format!("if [ \"${{{key}+x}}\" = x ]; then printf '%s' \"${key}\"; else exit 7; fi");
         exec_optional_stdout(&self.state.session, &script, 7)
     }
@@ -57,6 +58,7 @@ impl Facts for SshExecutor {
             return Ok(cached);
         }
 
+        let _guard = self.command_guard();
         let script = format!(
             "if command -v {command} >/dev/null 2>&1; then command -v {command}; else exit 7; fi",
             command = shell_escape(command),
@@ -90,6 +92,8 @@ impl SshExecutor {
 
     fn store_which(&self, command: &str, resolved: Option<TargetPath>) {
         let identity = self.current_identity_key();
-        self.facts_guard().which.insert((identity, command.to_owned()), resolved);
+        self.facts_guard()
+            .which
+            .insert((identity, command.to_owned()), resolved);
     }
 }

@@ -7,6 +7,7 @@ use crate::spec::runas::RunAs;
 use super::ExecutorBinder;
 use super::facts::{FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
 
+mod command;
 mod facts;
 
 #[derive(Clone)]

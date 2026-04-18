@@ -49,6 +49,7 @@ impl super::SshExecutor {
                 secrets,
                 session,
                 facts: std::sync::Mutex::new(facts),
+                command_lock: std::sync::Mutex::new(()),
             }),
             run_as: None,
         })

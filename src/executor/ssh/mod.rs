@@ -6,6 +6,7 @@ use crate::spec::runas::RunAs;
 use super::ExecutorBinder;
 use super::facts::FactCache;
 
+mod command;
 mod connect;
 mod facts;
 
@@ -20,6 +21,7 @@ struct SharedState {
     secrets: Arc<SecretVault>,
     session: ssh2::Session,
     facts: std::sync::Mutex<FactCache>,
+    command_lock: std::sync::Mutex<()>,
 }
 
 impl ExecutorBinder for SshExecutor {
@@ -28,5 +30,14 @@ impl ExecutorBinder for SshExecutor {
             state: Arc::clone(&self.state),
             run_as,
         }
+    }
+}
+
+impl SshExecutor {
+    fn command_guard(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.state
+            .command_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
