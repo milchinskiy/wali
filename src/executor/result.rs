@@ -33,4 +33,3 @@ impl ChangeResult {
         !matches!(self.kind, ChangeKind::Unchanged)
     }
 }
-

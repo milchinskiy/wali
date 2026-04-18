@@ -4,9 +4,11 @@ pub enum Error {
     ParseInt(std::num::ParseIntError),
     Utf8(std::str::Utf8Error),
     Lua(mlua::Error),
+    Ssh(ssh2::Error),
     InvalidManifest(String),
     ModuleSchema { path: String, message: String },
     MissingSecret(SecretKey),
+    SshProtocol(String),
     Reporter(String),
 }
 
@@ -17,6 +19,7 @@ impl std::fmt::Display for Error {
             Self::ParseInt(e) => write!(f, "ParseInt error: {e}"),
             Self::Utf8(e) => write!(f, "Utf8 error: {e}"),
             Self::Lua(e) => write!(f, "Lua error: {e}"),
+            Self::Ssh(e) => write!(f, "SSH error: {e}"),
             Self::InvalidManifest(e) => write!(f, "Invalid manifest: {e}"),
             Self::ModuleSchema { path, message } => write!(f, "Invalid module input data: {path}: {message}"),
             Self::MissingSecret(key) => match key {
@@ -32,6 +35,7 @@ impl std::fmt::Display for Error {
                     via,
                 } => write!(f, "Missing run-as password for {host_id}/{run_as_id}/{user} via {via}"),
             },
+            Self::SshProtocol(e) => write!(f, "SSH protocol error: {e}"),
             Self::Reporter(e) => write!(f, "Reporter error: {e}"),
         }
     }
@@ -44,9 +48,11 @@ impl std::error::Error for Error {
             Self::ParseInt(e) => Some(e),
             Self::Utf8(e) => Some(e),
             Self::Lua(e) => Some(e),
+            Self::Ssh(e) => Some(e),
             Self::InvalidManifest(_) => None,
             Self::ModuleSchema { .. } => None,
             Self::MissingSecret { .. } => None,
+            Self::SshProtocol(_) => None,
             Self::Reporter(_) => None,
         }
     }
@@ -76,6 +82,12 @@ impl From<mlua::Error> for Error {
     }
 }
 
+impl From<ssh2::Error> for Error {
+    fn from(e: ssh2::Error) -> Self {
+        Error::Ssh(e)
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(value: serde_json::Error) -> Self {
         Error::Reporter(format!("JSON error: {value}"))
@@ -91,9 +103,11 @@ impl From<Error> for ap::Error {
             Error::ParseInt(..) => 13,
             Error::Utf8(..) => 12,
             Error::Lua(..) => 25,
+            Error::Ssh(..) => 32,
             Error::InvalidManifest(..) => 21,
             Error::ModuleSchema { .. } => 26,
             Error::MissingSecret(..) => 31,
+            Error::SshProtocol(..) => 33,
             Error::Reporter(..) => 71,
         };
 

@@ -26,7 +26,8 @@ impl ModuleGit {
     }
 
     pub fn name(&self) -> Option<String> {
-        let repo = self.url
+        let repo = self
+            .url
             .trim()
             .trim_end_matches('/')
             .rsplit('/')

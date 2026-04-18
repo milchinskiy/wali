@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::launcher::secrets::SecretVault;
 use crate::spec::runas::RunAs;
 
+use super::ExecutorBinder;
 use super::facts::FactCache;
-use super::{ExecutorBinder};
 
 #[derive(Clone)]
 pub struct LocalExecutor {

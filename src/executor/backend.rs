@@ -127,7 +127,12 @@ impl Fs for Backend {
         }
     }
 
-    fn write(&self, path: &super::TargetPath, content: &[u8], opts: super::WriteOpts) -> Result<super::ChangeResult, Self::Error> {
+    fn write(
+        &self,
+        path: &super::TargetPath,
+        content: &[u8],
+        opts: super::WriteOpts,
+    ) -> Result<super::ChangeResult, Self::Error> {
         match self {
             Self::Local(x) => x.write(path, content, opts),
             Self::Ssh(x) => x.write(path, content, opts),
@@ -148,7 +153,11 @@ impl Fs for Backend {
         }
     }
 
-    fn remove_dir(&self, path: &super::TargetPath, opts: super::RemoveDirOpts) -> Result<super::ChangeResult, Self::Error> {
+    fn remove_dir(
+        &self,
+        path: &super::TargetPath,
+        opts: super::RemoveDirOpts,
+    ) -> Result<super::ChangeResult, Self::Error> {
         match self {
             Self::Local(x) => x.remove_dir(path, opts),
             Self::Ssh(x) => x.remove_dir(path, opts),
@@ -176,21 +185,34 @@ impl Fs for Backend {
         }
     }
 
-    fn chown(&self, path: &super::TargetPath, owner: crate::spec::account::Owner) -> Result<super::ChangeResult, Self::Error> {
+    fn chown(
+        &self,
+        path: &super::TargetPath,
+        owner: crate::spec::account::Owner,
+    ) -> Result<super::ChangeResult, Self::Error> {
         match self {
             Self::Local(x) => x.chown(path, owner),
             Self::Ssh(x) => x.chown(path, owner),
         }
     }
 
-    fn rename(&self, from: &super::TargetPath, to: &super::TargetPath, opts: super::RenameOpts) -> Result<super::ChangeResult, Self::Error> {
+    fn rename(
+        &self,
+        from: &super::TargetPath,
+        to: &super::TargetPath,
+        opts: super::RenameOpts,
+    ) -> Result<super::ChangeResult, Self::Error> {
         match self {
             Self::Local(x) => x.rename(from, to, opts),
             Self::Ssh(x) => x.rename(from, to, opts),
         }
     }
 
-    fn symlink(&self, target: &super::TargetPath, link: &super::TargetPath) -> Result<super::ChangeResult, Self::Error> {
+    fn symlink(
+        &self,
+        target: &super::TargetPath,
+        link: &super::TargetPath,
+    ) -> Result<super::ChangeResult, Self::Error> {
         match self {
             Self::Local(x) => x.symlink(target, link),
             Self::Ssh(x) => x.symlink(target, link),

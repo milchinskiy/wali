@@ -25,3 +25,14 @@ pub(super) enum ExecIdentityKey {
     RunAs(String),
 }
 
+impl FactCache {
+    pub(super) fn with_base(os: String, arch: String, hostname: String) -> Self {
+        Self {
+            os: Some(os),
+            arch: Some(arch),
+            hostname: Some(hostname),
+            identities: BTreeMap::new(),
+            which: BTreeMap::new(),
+        }
+    }
+}
