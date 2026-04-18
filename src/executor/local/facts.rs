@@ -1,6 +1,5 @@
-use std::process::Command;
-
-use crate::executor::shared::{identity_key_for, shell_escape, trim_trailing_newlines, valid_env_key};
+use crate::executor::facts::{IDENTITY_FACTS_SCRIPT, IdentityFacts, parse_identity_facts};
+use crate::executor::shared::{identity_key_for, shell_escape, shell_optional_text, shell_required_text, valid_env_key};
 use crate::executor::{Facts, TargetPath};
 
 use super::LocalExecutor;
@@ -25,31 +24,32 @@ impl Facts for LocalExecutor {
             return Err(crate::Error::FactProbe(format!("invalid environment variable name {key:?}")));
         }
 
-        Ok(std::env::var(key).ok())
+        let script = format!("if [ \"${{{key}+x}}\" = x ]; then printf '%s' \"${key}\"; else exit 7; fi");
+        shell_optional_text(self, script, 7, &format!("environment probe for {key:?}"))
     }
 
     fn uid(&self) -> Result<u32, Self::Error> {
-        Ok(self.facts_guard().base_identity()?.uid)
+        Ok(self.identity_facts()?.uid)
     }
 
     fn gid(&self) -> Result<u32, Self::Error> {
-        Ok(self.facts_guard().base_identity()?.gid)
+        Ok(self.identity_facts()?.gid)
     }
 
     fn gids(&self) -> Result<Vec<u32>, Self::Error> {
-        Ok(self.facts_guard().base_identity()?.gids.clone())
+        Ok(self.identity_facts()?.gids)
     }
 
     fn user(&self) -> Result<String, Self::Error> {
-        Ok(self.facts_guard().base_identity()?.user.clone())
+        Ok(self.identity_facts()?.user)
     }
 
     fn group(&self) -> Result<String, Self::Error> {
-        Ok(self.facts_guard().base_identity()?.group.clone())
+        Ok(self.identity_facts()?.group)
     }
 
     fn groups(&self) -> Result<Vec<String>, Self::Error> {
-        Ok(self.facts_guard().base_identity()?.groups.clone())
+        Ok(self.identity_facts()?.groups)
     }
 
     fn which(&self, command: &str) -> Result<Option<TargetPath>, Self::Error> {
@@ -58,25 +58,11 @@ impl Facts for LocalExecutor {
         }
 
         let script = format!(
-            "if command -v {} >/dev/null 2>&1; then command -v {}; else exit 7; fi",
-            shell_escape(command),
-            shell_escape(command)
+            "if command -v {command} >/dev/null 2>&1; then command -v {command}; else exit 7; fi",
+            command = shell_escape(command),
         );
-        let output = Command::new("sh").args(["-c", &script]).output()?;
-
-        let resolved = match output.status.code() {
-            Some(0) => Some(TargetPath::new(trim_trailing_newlines(&String::from_utf8_lossy(&output.stdout)))),
-            Some(7) => None,
-            _ => {
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-                let detail = if stderr.is_empty() {
-                    format!("exit status {:?}", output.status.code())
-                } else {
-                    format!("exit status {:?}: {stderr}", output.status.code())
-                };
-                return Err(crate::Error::FactProbe(format!("local which probe failed for {command:?}: {detail}")));
-            }
-        };
+        let resolved =
+            shell_optional_text(self, script, 7, &format!("which probe for {command:?}"))?.map(TargetPath::new);
 
         self.store_which(command, resolved.clone());
         Ok(resolved)
@@ -91,6 +77,21 @@ impl LocalExecutor {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    fn identity_facts(&self) -> crate::Result<IdentityFacts> {
+        let identity = identity_key_for(self.run_as());
+        if let Some(facts) = self.facts_guard().identity(&identity).cloned() {
+            return Ok(facts);
+        }
+
+        let facts = probe_identity_facts(self)?;
+        let mut guard = self.facts_guard();
+        if let Some(cached) = guard.identity(&identity).cloned() {
+            return Ok(cached);
+        }
+        guard.store_identity(identity, facts.clone());
+        Ok(facts)
+    }
+
     fn cached_which(&self, command: &str) -> Option<Option<TargetPath>> {
         let identity = identity_key_for(self.run_as());
         self.facts_guard().cached_which(&identity, command)
@@ -100,4 +101,8 @@ impl LocalExecutor {
         let identity = identity_key_for(self.run_as());
         self.facts_guard().store_which(identity, command, resolved);
     }
+}
+
+fn probe_identity_facts(executor: &LocalExecutor) -> crate::Result<IdentityFacts> {
+    parse_identity_facts(&shell_required_text(executor, IDENTITY_FACTS_SCRIPT, "identity fact probe")?)
 }

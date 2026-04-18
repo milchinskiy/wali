@@ -9,6 +9,8 @@ use super::facts::{FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
 
 mod command;
 mod facts;
+mod fs;
+mod path;
 
 #[derive(Clone)]
 pub struct LocalExecutor {

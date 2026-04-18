@@ -3,8 +3,10 @@ use crate::spec::runas::RunAs;
 
 mod command;
 mod facts;
+mod fs;
 mod local;
 mod path;
+mod path_semantics;
 mod result;
 mod run_as;
 mod shared;

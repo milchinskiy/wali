@@ -15,11 +15,7 @@ impl CommandExec for SshExecutor {
 
     fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error> {
         let _command_guard = self.command_guard();
-        let session_mode = SessionModeGuard::enter(&self.state.session);
-        let _session_mode = match session_mode {
-            Ok(guard) => guard,
-            Err(err) => return Err(err),
-        };
+        let _session_mode = SessionModeGuard::enter(&self.state.session)?;
 
         match self.run_as() {
             Some(run_as) => exec_ssh_run_as(self, run_as, req),
@@ -356,7 +352,7 @@ where
         match op() {
             Ok(value) => return Ok(value),
             Err(err) if is_ssh_would_block(&err) => {
-                check_deadline(deadline, || message())?;
+                check_deadline(deadline, &message)?;
                 sleep_ssh_backoff();
             }
             Err(err) => return Err(err.into()),

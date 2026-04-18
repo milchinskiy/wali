@@ -2,6 +2,13 @@ use std::collections::BTreeMap;
 
 use super::path::TargetPath;
 
+pub const IDENTITY_FACTS_SCRIPT: &str = "command id -u
+command id -g
+command id -G
+command id -un
+command id -gn
+command id -Gn";
+
 pub const INITIAL_FACTS_SCRIPT: &str = "command uname -s
 command uname -m
 command uname -n
@@ -69,10 +76,12 @@ impl FactCache {
             .ok_or_else(|| crate::Error::FactProbe("hostname fact is not initialized".to_owned()))
     }
 
-    pub fn base_identity(&self) -> crate::Result<&IdentityFacts> {
-        self.identities
-            .get(&ExecIdentityKey::Base)
-            .ok_or_else(|| crate::Error::FactProbe("base identity facts are not initialized".to_owned()))
+    pub fn identity(&self, key: &ExecIdentityKey) -> Option<&IdentityFacts> {
+        self.identities.get(key)
+    }
+
+    pub fn store_identity(&mut self, key: ExecIdentityKey, identity: IdentityFacts) {
+        self.identities.insert(key, identity);
     }
 
     pub fn cached_which(&self, identity: &ExecIdentityKey, command: &str) -> Option<Option<TargetPath>> {
@@ -90,33 +99,47 @@ pub fn parse_initial_facts(output: &str) -> crate::Result<FactCache> {
     let os = next_fact_line(&mut lines, "os")?;
     let arch = next_fact_line(&mut lines, "arch")?;
     let hostname = next_fact_line(&mut lines, "hostname")?;
-    let uid = next_fact_line(&mut lines, "uid")?.parse()?;
-    let gid = next_fact_line(&mut lines, "gid")?.parse()?;
-    let gids = parse_u32_words(&next_fact_line(&mut lines, "gids")?, "gids")?;
-    let user = next_fact_line(&mut lines, "user")?;
-    let group = next_fact_line(&mut lines, "group")?;
-    let groups = next_fact_line(&mut lines, "groups")?
-        .split_whitespace()
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
+    let identity = parse_identity_facts_lines(&mut lines)?;
 
     if let Some(extra) = lines.find(|line| !line.trim().is_empty()) {
         return Err(crate::Error::FactProbe(format!("unexpected extra line in fact probe output: {extra:?}")));
     }
 
-    Ok(FactCache::with_initial(
-        os,
-        arch,
-        hostname,
-        IdentityFacts {
-            uid,
-            gid,
-            gids,
-            user,
-            group,
-            groups,
-        },
-    ))
+    Ok(FactCache::with_initial(os, arch, hostname, identity))
+}
+
+pub fn parse_identity_facts(output: &str) -> crate::Result<IdentityFacts> {
+    let mut lines = output.lines();
+    let identity = parse_identity_facts_lines(&mut lines)?;
+
+    if let Some(extra) = lines.find(|line| !line.trim().is_empty()) {
+        return Err(crate::Error::FactProbe(format!(
+            "unexpected extra line in identity fact probe output: {extra:?}"
+        )));
+    }
+
+    Ok(identity)
+}
+
+fn parse_identity_facts_lines(lines: &mut std::str::Lines<'_>) -> crate::Result<IdentityFacts> {
+    let uid = next_fact_line(lines, "uid")?.parse()?;
+    let gid = next_fact_line(lines, "gid")?.parse()?;
+    let gids = parse_u32_words(&next_fact_line(lines, "gids")?, "gids")?;
+    let user = next_fact_line(lines, "user")?;
+    let group = next_fact_line(lines, "group")?;
+    let groups = next_fact_line(lines, "groups")?
+        .split_whitespace()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
+    Ok(IdentityFacts {
+        uid,
+        gid,
+        gids,
+        user,
+        group,
+        groups,
+    })
 }
 
 fn next_fact_line(lines: &mut std::str::Lines<'_>, name: &str) -> crate::Result<String> {

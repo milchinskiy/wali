@@ -88,41 +88,6 @@ pub(super) fn exec_stdout(session: &ssh2::Session, command: &str) -> crate::Resu
     Ok(trim_trailing_newlines(&String::from_utf8_lossy(&stdout)))
 }
 
-pub(super) fn exec_optional_stdout(
-    session: &ssh2::Session,
-    command: &str,
-    not_found_status: i32,
-) -> crate::Result<Option<String>> {
-    let mut channel = session.channel_session()?;
-    channel.exec(command)?;
-
-    let mut stdout = Vec::new();
-    channel.read_to_end(&mut stdout)?;
-
-    let mut stderr = Vec::new();
-    channel.stderr().read_to_end(&mut stderr)?;
-
-    channel.wait_close()?;
-    let exit_status = channel.exit_status()?;
-
-    if exit_status == 0 {
-        return Ok(Some(trim_trailing_newlines(&String::from_utf8_lossy(&stdout))));
-    }
-
-    if exit_status == not_found_status {
-        return Ok(None);
-    }
-
-    let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
-    let detail = if stderr.is_empty() {
-        format!("exit status {exit_status}")
-    } else {
-        format!("exit status {exit_status}: {stderr}")
-    };
-
-    Err(crate::Error::SshProtocol(format!("SSH command failed: `{command}`: {detail}")))
-}
-
 fn connect_tcp(ssh: &Connection) -> crate::Result<TcpStream> {
     let addr = format!("{}:{}", ssh.host, ssh.port);
     let addrs = addr.to_socket_addrs()?.collect::<Vec<_>>();

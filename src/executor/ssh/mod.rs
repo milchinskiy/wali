@@ -9,6 +9,8 @@ use super::facts::FactCache;
 mod command;
 mod connect;
 mod facts;
+mod fs;
+mod path;
 
 #[derive(Clone)]
 pub struct SshExecutor {

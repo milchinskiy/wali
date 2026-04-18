@@ -24,7 +24,6 @@ portable-pty = "0.9.0"
 supports-unicode = "3.0.0"
 
 [lints.clippy]
-cargo = "warn"
 complexity = "warn"
 perf = "deny"
 style = "deny"

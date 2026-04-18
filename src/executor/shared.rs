@@ -1,7 +1,7 @@
 use crate::spec::runas::{PtyMode, RunAs};
 
 use super::facts::ExecIdentityKey;
-use super::{CommandKind, CommandRequest};
+use super::{CommandExec, CommandKind, CommandOpts, CommandRequest, CommandStatus, CommandStreams};
 
 pub enum EffectivePty {
     Disabled,
@@ -108,4 +108,74 @@ pub(crate) fn render_request_script(req: &CommandRequest, start_marker: Option<&
 
 pub(crate) fn render_shell_command(req: &CommandRequest) -> crate::Result<String> {
     Ok(format!("sh -lc {}", shell_escape(&render_request_script(req, None)?)))
+}
+
+pub(crate) fn shell_required_text<E>(exec: &E, script: impl Into<String>, context: &str) -> crate::Result<String>
+where
+    E: CommandExec<Error = crate::Error>,
+{
+    let output = exec.shell(
+        script.into(),
+        CommandOpts {
+            pty: PtyMode::Auto,
+            ..CommandOpts::default()
+        },
+    )?;
+
+    match &output.status {
+        CommandStatus::Exited(0) => Ok(trim_trailing_newlines(&String::from_utf8_lossy(stdout_bytes(&output)))),
+        CommandStatus::Exited(code) => Err(crate::Error::FactProbe(format!(
+            "{context} failed with exit status {code}: {}",
+            trim_trailing_newlines(&String::from_utf8_lossy(stderr_bytes(&output)))
+        ))),
+        CommandStatus::Signaled(signal) => {
+            Err(crate::Error::FactProbe(format!("{context} terminated by signal {signal}")))
+        }
+        CommandStatus::Unknown => Err(crate::Error::FactProbe(format!("{context} finished with unknown status"))),
+    }
+}
+
+pub(crate) fn shell_optional_text<E>(
+    exec: &E,
+    script: impl Into<String>,
+    missing_status: i32,
+    context: &str,
+) -> crate::Result<Option<String>>
+where
+    E: CommandExec<Error = crate::Error>,
+{
+    let output = exec.shell(
+        script.into(),
+        CommandOpts {
+            pty: PtyMode::Auto,
+            ..CommandOpts::default()
+        },
+    )?;
+
+    match &output.status {
+        CommandStatus::Exited(0) => Ok(Some(trim_trailing_newlines(&String::from_utf8_lossy(stdout_bytes(&output))))),
+        CommandStatus::Exited(code) if *code == missing_status => Ok(None),
+        CommandStatus::Exited(code) => Err(crate::Error::FactProbe(format!(
+            "{context} failed with exit status {code}: {}",
+            trim_trailing_newlines(&String::from_utf8_lossy(stderr_bytes(&output)))
+        ))),
+        CommandStatus::Signaled(signal) => {
+            Err(crate::Error::FactProbe(format!("{context} terminated by signal {signal}")))
+        }
+        CommandStatus::Unknown => Err(crate::Error::FactProbe(format!("{context} finished with unknown status"))),
+    }
+}
+
+fn stdout_bytes(output: &super::CommandOutput) -> &[u8] {
+    match &output.streams {
+        CommandStreams::Split { stdout, .. } => stdout,
+        CommandStreams::Combined(bytes) => bytes,
+    }
+}
+
+fn stderr_bytes(output: &super::CommandOutput) -> &[u8] {
+    match &output.streams {
+        CommandStreams::Split { stderr, .. } => stderr,
+        CommandStreams::Combined(bytes) => bytes,
+    }
 }
