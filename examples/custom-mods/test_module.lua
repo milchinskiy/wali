@@ -12,10 +12,12 @@ return {
 	},
 
 	validate = function(ctx, args)
+        print("arch", ctx.host.facts.arch())
 		return true
 	end,
 
 	apply = function(ctx, args)
+        print("os", ctx.host.facts.os())
 		return true
 	end,
 }

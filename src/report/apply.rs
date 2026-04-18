@@ -6,6 +6,10 @@ pub enum Event {
         host_id: String,
         tasks_count: u32,
     },
+    HostConnect {
+        host_id: String,
+        error: Option<String>,
+    },
     HostComplete {
         host_id: String,
     },
@@ -29,12 +33,12 @@ pub enum Event {
     },
 }
 
-#[derive(Default, serde::Serialize)]
+#[derive(Default, Debug, serde::Serialize)]
 struct State {
     hosts: std::collections::BTreeMap<String, StateHost>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 struct StateHost {
     tasks: Vec<StateTask>,
 }
@@ -62,7 +66,7 @@ impl StateHost {
     }
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 enum StateTaskStatus {
     Scheduled,
     Success,
@@ -70,7 +74,7 @@ enum StateTaskStatus {
     Fail(String),
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 struct StateTask {
     id: String,
     status: StateTaskStatus,
@@ -167,6 +171,10 @@ impl Layout for ApplyLayout {
         self.state.apply(&event)?;
         self.render.handle(&event, &mut self.state)
     }
+
+    fn end(&mut self) -> crate::Result {
+        self.render.end(&self.state)
+    }
 }
 
 struct HumanRender;
@@ -180,7 +188,8 @@ impl super::Renderer for HumanRender {
     }
 
     fn end(&mut self, state: &Self::State) -> crate::Result {
-        todo!();
+        println!("{state:#?}");
+        Ok(())
     }
 }
 

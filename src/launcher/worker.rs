@@ -75,11 +75,27 @@ impl Worker {
     }
 
     pub fn apply(&self, sender: ReportSender<Event>) -> crate::Result {
-        let backend = self.connect()?;
         sender.send(Event::HostSchedule {
             host_id: self.plan.id.clone(),
             tasks_count: self.plan.tasks.len() as u32,
         })?;
+
+        let backend = match self.connect() {
+            Ok(backend) => {
+                sender.send(Event::HostConnect {
+                    host_id: self.plan.id.clone(),
+                    error: None,
+                })?;
+                backend
+            }
+            Err(error) => {
+                sender.send(Event::HostConnect {
+                    host_id: self.plan.id.clone(),
+                    error: Some(error.to_string()),
+                })?;
+                return Err(error);
+            }
+        };
 
         for task in &self.plan.tasks {
             sender.send(Event::TaskSchedule {

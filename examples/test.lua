@@ -7,7 +7,7 @@ return {
 			transport = "local",
 			tags = { "local" },
 			vars = { user = "test-user" },
-            run_as = {
+			run_as = {
 				{
 					id = "doas-test",
 					user = "test2",
@@ -20,7 +20,7 @@ return {
 			id = "ssh-test",
 			transport = {
 				ssh = {
-					host = "1.2.3.4",
+					host = "127.0.0.2",
 					user = "test-user",
 				},
 			},
@@ -54,15 +54,15 @@ return {
 					{ env_set = "DISPLAY" },
 				},
 			},
-            depends_on = { "task #2" },
+			depends_on = { "task #2" },
 			module = "test_module",
-			args = { path1 = "test", path2 = "../examples" },
+			args = { source = "test", target = "../examples" },
 		},
-        {
-            id = "task #2",
-            module = "test_module",
-            run_as = "doas-test",
-            args = {},
-        }
+		{
+			id = "task #2",
+			module = "test_module",
+			run_as = "doas-test",
+			args = { target = "some/path" },
+		},
 	},
 }
