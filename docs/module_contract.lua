@@ -40,10 +40,10 @@ return {
 	---business logic can be added here to validate input arguments
 	---in context to actual host state
 	---@param ctx table
-	---@param schema any
+	---@param args any
 	---@return boolean result true if input arguments are valid
 	---@error string error message
-	validate = function(ctx, schema)
+	validate = function(ctx, args)
 		return true
 		-- or
 		-- error("error message")
@@ -51,9 +51,9 @@ return {
 
 	---Apply changes
 	---@param ctx table
-	---@param schema any
+	---@param args any
 	---@return boolean result true if changes were applied
-	apply = function(ctx, schema)
+	apply = function(ctx, args)
 		-- do something
 		return true
 		-- or

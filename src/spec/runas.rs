@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
+use serde::ser::SerializeStruct;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunAsVia {
     Sudo,
@@ -30,7 +32,30 @@ pub enum RunAsEnv {
     Clear,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+impl serde::Serialize for RunAsEnv {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let fields = match self {
+            Self::Keep(..) => 2,
+            _ => 1,
+        };
+        let mut state = serializer.serialize_struct("RunAsEnv", fields)?;
+        match self {
+            Self::Preserve => state.serialize_field("policy", "preserve")?,
+            Self::Keep(keys) => {
+                state.serialize_field("policy", "keep")?;
+                state.serialize_field("keys", keys)?;
+            }
+            Self::Clear => state.serialize_field("policy", "clear")?,
+        }
+        state.end()
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PtyMode {
     Never,
     #[default]
@@ -38,12 +63,13 @@ pub enum PtyMode {
     Require,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RunAs {
     pub id: String,
     pub user: String,
     pub via: RunAsVia,
+    #[serde(rename = "env", alias = "env_policy")]
     pub env_policy: RunAsEnv,
     #[serde(default = "Vec::new")]
     pub extra_flags: Vec<String>,

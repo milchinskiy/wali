@@ -113,9 +113,7 @@ pub fn parse_identity_facts(output: &str) -> crate::Result<IdentityFacts> {
     let identity = parse_identity_facts_lines(&mut lines)?;
 
     if let Some(extra) = lines.find(|line| !line.trim().is_empty()) {
-        return Err(crate::Error::FactProbe(format!(
-            "unexpected extra line in identity fact probe output: {extra:?}"
-        )));
+        return Err(crate::Error::FactProbe(format!("unexpected extra line in identity fact probe output: {extra:?}")));
     }
 
     Ok(identity)

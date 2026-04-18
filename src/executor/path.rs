@@ -3,7 +3,8 @@ use std::time::SystemTime;
 
 use crate::spec::account::Owner;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct TargetPath(String);
 
 impl TargetPath {
@@ -41,7 +42,8 @@ impl From<&str> for TargetPath {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FsPathKind {
     File,
     Dir,
@@ -49,7 +51,8 @@ pub enum FsPathKind {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct FileMode(u32);
 
 impl FileMode {
@@ -64,15 +67,19 @@ impl FileMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Metadata {
     pub kind: FsPathKind,
     pub size: u64,
 
     // optional because availability varies by platform/backend
+    #[serde(serialize_with = "serialize_optional_system_time_secs")]
     pub created_at: Option<SystemTime>,
+    #[serde(serialize_with = "serialize_optional_system_time_secs")]
     pub modified_at: Option<SystemTime>,
+    #[serde(serialize_with = "serialize_optional_system_time_secs")]
     pub accessed_at: Option<SystemTime>,
+    #[serde(serialize_with = "serialize_optional_system_time_secs")]
     pub changed_at: Option<SystemTime>,
 
     // POSIX-oriented
@@ -81,13 +88,14 @@ pub struct Metadata {
     pub mode: FileMode,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct DirEntry {
     pub name: String,
     pub kind: FsPathKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
 pub struct WriteOpts {
     pub create_parents: bool,
     pub mode: Option<FileMode>,
@@ -106,19 +114,22 @@ impl Default for WriteOpts {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, serde::Deserialize)]
+#[serde(default)]
 pub struct DirOpts {
     pub recursive: bool,
     pub mode: Option<FileMode>,
     pub owner: Option<Owner>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
 pub struct RemoveDirOpts {
     pub recursive: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
 pub struct RenameOpts {
     pub replace: bool,
 }
@@ -129,16 +140,35 @@ impl Default for RenameOpts {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum MkTempKind {
     #[default]
     File,
     Dir,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
 pub struct MkTempOpts {
     pub kind: MkTempKind,
     pub parent_dir: Option<TargetPath>,
     pub prefix: Option<String>,
+}
+
+fn serialize_optional_system_time_secs<S>(value: &Option<SystemTime>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match value.and_then(system_time_to_unix_secs) {
+        Some(value) => serializer.serialize_some(&value),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn system_time_to_unix_secs(value: SystemTime) -> Option<f64> {
+    value
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs_f64())
 }

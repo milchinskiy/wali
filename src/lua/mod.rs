@@ -1,5 +1,6 @@
 use mlua::LuaSerdeExt;
 
+pub mod api;
 pub mod module;
 
 pub struct LuaRuntime {
@@ -110,6 +111,6 @@ impl LuaRuntime {
         N: AsRef<str>,
     {
         let module: mlua::Table = self.require(name.as_ref())?;
-        Ok(module::Module::new(module))
+        module::Module::new(&self.lua, module)
     }
 }

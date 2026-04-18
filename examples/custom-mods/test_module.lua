@@ -11,11 +11,11 @@ return {
 		},
 	},
 
-	validate = function()
+	validate = function(ctx, args)
 		return true
 	end,
 
-	apply = function()
+	apply = function(ctx, args)
 		return true
 	end,
 }

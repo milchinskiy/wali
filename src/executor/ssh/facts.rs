@@ -1,5 +1,7 @@
 use crate::executor::facts::{IDENTITY_FACTS_SCRIPT, IdentityFacts, parse_identity_facts};
-use crate::executor::shared::{identity_key_for, shell_escape, shell_optional_text, shell_required_text, valid_env_key};
+use crate::executor::shared::{
+    identity_key_for, shell_escape, shell_optional_text, shell_required_text, valid_env_key,
+};
 use crate::executor::{Facts, TargetPath};
 
 use super::SshExecutor;

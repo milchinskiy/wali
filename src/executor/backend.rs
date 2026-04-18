@@ -6,6 +6,7 @@ use crate::spec::runas::RunAs;
 
 use super::{CommandExec, ExecutorBinder, Facts, Fs, LocalExecutor, PathSemantics, SshExecutor};
 
+#[derive(Clone)]
 pub enum Backend {
     Local(LocalExecutor),
     Ssh(SshExecutor),

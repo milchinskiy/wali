@@ -1,4 +1,5 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ChangeKind {
     Unchanged,
     Created,
@@ -31,5 +32,19 @@ impl ChangeResult {
     #[must_use]
     pub fn changed(self) -> bool {
         !matches!(self.kind, ChangeKind::Unchanged)
+    }
+}
+
+impl serde::Serialize for ChangeResult {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("ChangeResult", 2)?;
+        state.serialize_field("kind", &self.kind)?;
+        state.serialize_field("changed", &self.changed())?;
+        state.end()
     }
 }
