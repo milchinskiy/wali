@@ -1,15 +1,17 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
+use crate::executor::run_as::{StreamProcessor, build_run_as_plan};
 use crate::executor::{
-    CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams,
+    CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams, EffectivePty,
+    effective_pty,
 };
-use crate::spec::runas::PtyMode;
 
 use super::LocalExecutor;
 
@@ -17,7 +19,9 @@ impl CommandExec for LocalExecutor {
     type Error = crate::Error;
 
     fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error> {
-        self.ensure_run_as_supported()?;
+        if let Some(run_as) = self.run_as() {
+            return exec_local_run_as(self, run_as, req);
+        }
 
         match effective_pty(req.opts.pty.clone()) {
             EffectivePty::Disabled => exec_local_piped(req),
@@ -26,28 +30,182 @@ impl CommandExec for LocalExecutor {
     }
 }
 
-impl LocalExecutor {
-    fn ensure_run_as_supported(&self) -> crate::Result {
-        if let Some(run_as) = self.run_as() {
-            return Err(crate::Error::CommandExec(format!(
-                "run_as command execution is not implemented yet for local backend on host {} (run_as id: {})",
-                self.state.id, run_as.id
-            )));
+fn exec_local_run_as(
+    executor: &LocalExecutor,
+    run_as: &crate::spec::runas::RunAs,
+    req: &CommandRequest,
+) -> crate::Result<CommandOutput> {
+    let plan = build_run_as_plan(&executor.state.id, run_as, req)?;
+    let desc = describe_request(req);
+
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|err| crate::Error::CommandExec(format!("failed to allocate local PTY for run_as {}: {err}", desc)))?;
+
+    let mut builder = CommandBuilder::new(&plan.argv[0]);
+    builder.args(&plan.argv[1..]);
+    builder.set_controlling_tty(true);
+
+    let mut child = pair.slave.spawn_command(builder).map_err(|err| {
+        crate::Error::CommandExec(format!("failed to spawn local run_as command for {}: {err}", desc))
+    })?;
+
+    let reader = pair.master.try_clone_reader().map_err(|err| {
+        crate::Error::CommandExec(format!("failed to clone local PTY reader for run_as {}: {err}", desc))
+    })?;
+    let writer = pair.master.take_writer().map_err(|err| {
+        crate::Error::CommandExec(format!("failed to take local PTY writer for run_as {}: {err}", desc))
+    })?;
+
+    let (tx, rx) = mpsc::channel();
+    let reader_desc = desc.clone();
+    let reader_handle = thread::spawn(move || run_pty_reader(reader, tx, reader_desc));
+
+    let deadline = req.opts.timeout.map(|timeout| Instant::now() + timeout);
+    let mut processor = StreamProcessor::new(plan.start_marker, plan.prompt_markers);
+    let mut writer = Some(writer);
+    let mut password_sent = false;
+    let mut stdin_sent = false;
+    let mut eof_sent = false;
+    let mut saw_eof = false;
+    let mut final_status = None;
+
+    loop {
+        if final_status.is_none() {
+            let timed_out = deadline.is_some_and(|deadline| Instant::now() >= deadline);
+            match child.try_wait()? {
+                Some(status) => final_status = Some(CommandStatus::Exited(status.exit_code() as i32)),
+                None if timed_out => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(crate::Error::CommandTimeout(format!("local run_as command timed out: {desc}")));
+                }
+                None => {}
+            }
         }
 
-        Ok(())
+        match rx.recv_timeout(Duration::from_millis(10)) {
+            Ok(LocalPtyEvent::Data(chunk)) => {
+                let events = processor.push(&chunk);
+
+                if events.prompt_requested {
+                    if password_sent {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(crate::Error::CommandExec(format!(
+                            "local run_as authentication prompt repeated for {}",
+                            desc
+                        )));
+                    }
+
+                    let password = executor.state.secrets.require_text(&plan.password_key)?;
+                    write_pty_input(writer.as_mut(), format!("{password}\n").as_bytes(), &desc, "run_as password")?;
+                    password_sent = true;
+                }
+
+                if events.command_started && !stdin_sent {
+                    if let Some(stdin) = &req.opts.stdin {
+                        write_pty_input(writer.as_mut(), stdin, &desc, "command stdin")?;
+                    }
+                    stdin_sent = true;
+                }
+
+                if processor.started() && !eof_sent && (stdin_sent || req.opts.stdin.is_none()) {
+                    writer.take();
+                    eof_sent = true;
+                }
+            }
+            Ok(LocalPtyEvent::Eof) => saw_eof = true,
+            Ok(LocalPtyEvent::Error(err)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(crate::Error::CommandExec(format!(
+                    "failed to read local run_as PTY output for {}: {err}",
+                    desc
+                )));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => saw_eof = true,
+        }
+
+        if final_status.is_some() && saw_eof {
+            break;
+        }
+    }
+
+    match reader_handle.join() {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            return Err(crate::Error::CommandExec(format!("local run_as PTY reader failed for {}: {err}", desc)));
+        }
+        Err(_) => {
+            return Err(crate::Error::CommandExec(format!("local run_as PTY reader thread panicked for {}", desc)));
+        }
+    }
+
+    Ok(CommandOutput {
+        status: final_status.unwrap_or(CommandStatus::Unknown),
+        streams: CommandStreams::Combined(processor.finish()),
+    })
+}
+
+fn run_pty_reader(
+    mut reader: Box<dyn Read + Send>,
+    tx: mpsc::Sender<LocalPtyEvent>,
+    _desc: String,
+) -> std::io::Result<()> {
+    let mut buf = [0_u8; 8192];
+
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => {
+                let _ = tx.send(LocalPtyEvent::Eof);
+                return Ok(());
+            }
+            Ok(count) => {
+                if tx.send(LocalPtyEvent::Data(buf[..count].to_vec())).is_err() {
+                    return Ok(());
+                }
+            }
+            Err(err) => {
+                let _ = tx.send(LocalPtyEvent::Error(err));
+                return Ok(());
+            }
+        }
     }
 }
 
-enum EffectivePty {
-    Disabled,
-    Enabled,
+enum LocalPtyEvent {
+    Data(Vec<u8>),
+    Eof,
+    Error(std::io::Error),
 }
 
-fn effective_pty(mode: PtyMode) -> EffectivePty {
-    match mode {
-        PtyMode::Never | PtyMode::Auto => EffectivePty::Disabled,
-        PtyMode::Require => EffectivePty::Enabled,
+fn write_pty_input(writer: Option<&mut Box<dyn Write + Send>>, bytes: &[u8], desc: &str, what: &str) -> crate::Result {
+    let Some(writer) = writer else {
+        return Err(crate::Error::CommandExec(format!(
+            "local run_as PTY writer is not available while sending {what} for {desc}"
+        )));
+    };
+
+    match writer.write_all(bytes) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => return Ok(()),
+        Err(err) => {
+            return Err(crate::Error::CommandExec(format!("failed to write local run_as {what} for {desc}: {err}")));
+        }
+    }
+
+    match writer.flush() {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Err(err) => Err(crate::Error::CommandExec(format!("failed to flush local run_as {what} for {desc}: {err}"))),
     }
 }
 
@@ -267,7 +425,7 @@ where
 }
 
 fn wait_for_child(child: &mut Child, timeout: Option<Duration>, desc: String) -> crate::Result<CommandStatus> {
-    wait_loop(timeout, desc.clone(), |timed_out| match child.try_wait()? {
+    wait_loop(timeout, |timed_out| match child.try_wait()? {
         Some(status) => Ok(Some(command_status_from_exit_status(status))),
         None if timed_out => {
             let _ = child.kill();
@@ -283,7 +441,7 @@ fn wait_for_portable_child(
     timeout: Option<Duration>,
     desc: String,
 ) -> crate::Result<CommandStatus> {
-    wait_loop(timeout, desc.clone(), |timed_out| match child.try_wait()? {
+    wait_loop(timeout, |timed_out| match child.try_wait()? {
         Some(status) => Ok(Some(CommandStatus::Exited(status.exit_code() as i32))),
         None if timed_out => {
             let _ = child.kill();
@@ -294,7 +452,7 @@ fn wait_for_portable_child(
     })
 }
 
-fn wait_loop<F>(timeout: Option<Duration>, _desc: String, mut step: F) -> crate::Result<CommandStatus>
+fn wait_loop<F>(timeout: Option<Duration>, mut step: F) -> crate::Result<CommandStatus>
 where
     F: FnMut(bool) -> crate::Result<Option<CommandStatus>>,
 {

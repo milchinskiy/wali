@@ -1,13 +1,14 @@
 use std::io::{self, Read, Write};
-use std::thread;
 use std::time::{Duration, Instant};
 
 use libssh2_sys::LIBSSH2_ERROR_EAGAIN;
 use ssh2::{Channel, ErrorCode, ExtendedData};
 
 use crate::executor::facts::{shell_escape, valid_env_key};
-use crate::executor::{CommandExec, CommandKind, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
-use crate::spec::runas::PtyMode;
+use crate::executor::run_as::{StreamProcessor, build_run_as_plan, render_argv_shell};
+use crate::executor::{
+    CommandExec, CommandKind, CommandOutput, CommandRequest, CommandStatus, CommandStreams, EffectivePty, effective_pty,
+};
 
 use super::SshExecutor;
 
@@ -15,8 +16,6 @@ impl CommandExec for SshExecutor {
     type Error = crate::Error;
 
     fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error> {
-        self.ensure_run_as_supported()?;
-
         let _command_guard = self.command_guard();
         let session_mode = SessionModeGuard::enter(&self.state.session);
         let _session_mode = match session_mode {
@@ -24,20 +23,10 @@ impl CommandExec for SshExecutor {
             Err(err) => return Err(err),
         };
 
-        exec_ssh_request(&self.state.session, req)
-    }
-}
-
-impl SshExecutor {
-    fn ensure_run_as_supported(&self) -> crate::Result {
-        if let Some(run_as) = self.run_as() {
-            return Err(crate::Error::CommandExec(format!(
-                "run_as command execution is not implemented yet for SSH backend on host {} (run_as id: {})",
-                self.state.id, run_as.id
-            )));
+        match self.run_as() {
+            Some(run_as) => exec_ssh_run_as(self, run_as, req),
+            None => exec_ssh_request(&self.state.session, req),
         }
-
-        Ok(())
     }
 }
 
@@ -67,16 +56,119 @@ impl Drop for SessionModeGuard<'_> {
     }
 }
 
-enum EffectivePty {
-    Disabled,
-    Enabled,
-}
+fn exec_ssh_run_as(
+    executor: &SshExecutor,
+    run_as: &crate::spec::runas::RunAs,
+    req: &CommandRequest,
+) -> crate::Result<CommandOutput> {
+    let plan = build_run_as_plan(&executor.state.id, run_as, req)?;
+    let desc = describe_request(req);
+    let deadline = req.opts.timeout.map(|timeout| Instant::now() + timeout);
 
-fn effective_pty(mode: PtyMode) -> EffectivePty {
-    match mode {
-        PtyMode::Never | PtyMode::Auto => EffectivePty::Disabled,
-        PtyMode::Require => EffectivePty::Enabled,
+    let mut channel = retry_ssh(
+        deadline,
+        || executor.state.session.channel_session(),
+        || format!("failed to open SSH session channel for run_as {}", desc),
+    )?;
+
+    retry_ssh(
+        deadline,
+        || channel.request_pty("xterm", None, Some((80, 24, 0, 0))),
+        || format!("failed to request SSH PTY for run_as {}", desc),
+    )?;
+    retry_ssh(
+        deadline,
+        || channel.handle_extended_data(ExtendedData::Merge),
+        || format!("failed to configure SSH PTY stream handling for run_as {}", desc),
+    )?;
+
+    let remote_command = render_argv_shell(&plan.argv);
+    retry_ssh(
+        deadline,
+        || channel.exec(&remote_command),
+        || format!("failed to start SSH run_as command for {}", desc),
+    )?;
+
+    let mut processor = StreamProcessor::new(plan.start_marker, plan.prompt_markers);
+    let mut password_sent = false;
+    let mut stdin_sent = false;
+    let mut eof_sent = false;
+    let mut buf = [0_u8; 8192];
+
+    loop {
+        check_deadline_close_channel(deadline, &mut channel, || {
+            format!("SSH run_as command timed out while waiting for output: {desc}")
+        })?;
+
+        let mut progressed = false;
+        match channel.read(&mut buf) {
+            Ok(0) => {}
+            Ok(count) => {
+                progressed = true;
+                let events = processor.push(&buf[..count]);
+
+                if events.prompt_requested {
+                    if password_sent {
+                        let _ = channel.close();
+                        let _ = channel.wait_close();
+                        return Err(crate::Error::CommandExec(format!(
+                            "SSH run_as authentication prompt repeated for {}",
+                            desc
+                        )));
+                    }
+
+                    let password = executor.state.secrets.require_text(&plan.password_key)?;
+                    write_ssh_bytes(
+                        &mut channel,
+                        format!("{password}\n").as_bytes(),
+                        deadline,
+                        format!("SSH run_as password for {desc}"),
+                    )?;
+                    password_sent = true;
+                }
+
+                if events.command_started && !stdin_sent {
+                    if let Some(stdin) = &req.opts.stdin {
+                        write_ssh_bytes(&mut channel, stdin, deadline, format!("SSH run_as stdin for {desc}"))?;
+                    }
+                    stdin_sent = true;
+                }
+
+                if processor.started() && !eof_sent && (stdin_sent || req.opts.stdin.is_none()) {
+                    retry_ssh(
+                        deadline,
+                        || channel.send_eof(),
+                        || format!("failed to close SSH run_as stdin for {}", desc),
+                    )?;
+                    eof_sent = true;
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+            Err(err) => {
+                return Err(crate::Error::CommandExec(format!("failed to read SSH run_as output for {desc}: {err}")));
+            }
+        }
+
+        if channel.eof() && !progressed {
+            break;
+        }
+
+        if !progressed {
+            sleep_ssh_backoff();
+        }
     }
+
+    retry_ssh(
+        deadline,
+        || channel.wait_close(),
+        || format!("failed while waiting for SSH run_as command to close for {}", desc),
+    )?;
+
+    let status = command_status_from_ssh_channel(&channel)?;
+    Ok(CommandOutput {
+        status,
+        streams: CommandStreams::Combined(processor.finish()),
+    })
 }
 
 fn exec_ssh_request(session: &ssh2::Session, req: &CommandRequest) -> crate::Result<CommandOutput> {
@@ -118,7 +210,7 @@ fn exec_ssh_request(session: &ssh2::Session, req: &CommandRequest) -> crate::Res
     )?;
 
     if let Some(stdin) = &req.opts.stdin {
-        write_ssh_stdin(&mut channel, stdin, deadline, describe_request(req))?;
+        write_ssh_bytes(&mut channel, stdin, deadline, format!("SSH stdin for {}", describe_request(req)))?;
     }
     retry_ssh(deadline, || channel.send_eof(), || format!("failed to close SSH stdin for {}", describe_request(req)))?;
 
@@ -183,13 +275,11 @@ fn render_remote_command(req: &CommandRequest) -> crate::Result<String> {
     Ok(format!("sh -lc {}", shell_escape(&script)))
 }
 
-fn write_ssh_stdin(channel: &mut Channel, stdin: &[u8], deadline: Option<Instant>, desc: String) -> crate::Result {
+fn write_ssh_bytes(channel: &mut Channel, stdin: &[u8], deadline: Option<Instant>, desc: String) -> crate::Result {
     let mut written = 0;
 
     while written < stdin.len() {
-        check_deadline_close_channel(deadline, channel, || {
-            format!("SSH command timed out while writing stdin: {desc}")
-        })?;
+        check_deadline_close_channel(deadline, channel, || format!("{desc} timed out"))?;
 
         match channel.write(&stdin[written..]) {
             Ok(0) => sleep_ssh_backoff(),
@@ -197,7 +287,7 @@ fn write_ssh_stdin(channel: &mut Channel, stdin: &[u8], deadline: Option<Instant
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => sleep_ssh_backoff(),
             Err(err) if err.kind() == io::ErrorKind::BrokenPipe => break,
             Err(err) => {
-                return Err(crate::Error::CommandExec(format!("failed to write SSH stdin for {desc}: {err}")));
+                return Err(crate::Error::CommandExec(format!("failed while writing {desc}: {err}")));
             }
         }
     }
@@ -345,7 +435,7 @@ fn is_ssh_would_block(err: &ssh2::Error) -> bool {
 }
 
 fn sleep_ssh_backoff() {
-    thread::sleep(Duration::from_millis(10));
+    std::thread::sleep(Duration::from_millis(10));
 }
 
 fn describe_request(req: &CommandRequest) -> String {
