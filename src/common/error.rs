@@ -9,6 +9,7 @@ pub enum Error {
     ModuleSchema { path: String, message: String },
     MissingSecret(SecretKey),
     SshProtocol(String),
+    FactProbe(String),
     Reporter(String),
 }
 
@@ -36,6 +37,7 @@ impl std::fmt::Display for Error {
                 } => write!(f, "Missing run-as password for {host_id}/{run_as_id}/{user} via {via}"),
             },
             Self::SshProtocol(e) => write!(f, "SSH protocol error: {e}"),
+            Self::FactProbe(e) => write!(f, "Fact probe error: {e}"),
             Self::Reporter(e) => write!(f, "Reporter error: {e}"),
         }
     }
@@ -53,6 +55,7 @@ impl std::error::Error for Error {
             Self::ModuleSchema { .. } => None,
             Self::MissingSecret { .. } => None,
             Self::SshProtocol(_) => None,
+            Self::FactProbe(_) => None,
             Self::Reporter(_) => None,
         }
     }
@@ -108,6 +111,7 @@ impl From<Error> for ap::Error {
             Error::ModuleSchema { .. } => 26,
             Error::MissingSecret(..) => 31,
             Error::SshProtocol(..) => 33,
+            Error::FactProbe(..) => 34,
             Error::Reporter(..) => 71,
         };
 

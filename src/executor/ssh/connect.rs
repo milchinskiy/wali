@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::executor::facts::FactCache;
+use crate::executor::facts::{FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
 use crate::launcher::SecretKey;
 use crate::launcher::secrets::SecretVault;
 use crate::spec::host::ssh::{Auth, Connection, HostKeyPolicy};
@@ -39,7 +39,7 @@ impl super::SshExecutor {
             session.set_keepalive(false, duration_to_keepalive_secs(interval));
         }
 
-        let facts = probe_base_facts(&session)?;
+        let facts = probe_initial_facts(&session)?;
 
         session.set_timeout(0);
 
@@ -58,6 +58,73 @@ impl super::SshExecutor {
     pub fn run_as(&self) -> Option<&RunAs> {
         self.run_as.as_ref()
     }
+}
+
+pub(super) fn exec_stdout(session: &ssh2::Session, command: &str) -> crate::Result<String> {
+    let mut channel = session.channel_session()?;
+    channel.exec(command)?;
+
+    let mut stdout = Vec::new();
+    channel.read_to_end(&mut stdout)?;
+
+    let mut stderr = Vec::new();
+    channel.stderr().read_to_end(&mut stderr)?;
+
+    channel.wait_close()?;
+    let exit_status = channel.exit_status()?;
+
+    if exit_status != 0 {
+        let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
+        let detail = if stderr.is_empty() {
+            format!("exit status {exit_status}")
+        } else {
+            format!("exit status {exit_status}: {stderr}")
+        };
+        return Err(crate::Error::SshProtocol(format!("SSH command failed: `{command}`: {detail}")));
+    }
+
+    Ok(String::from_utf8_lossy(&stdout)
+        .trim_end_matches(['\r', '\n'])
+        .to_owned())
+}
+
+pub(super) fn exec_optional_stdout(
+    session: &ssh2::Session,
+    command: &str,
+    not_found_status: i32,
+) -> crate::Result<Option<String>> {
+    let mut channel = session.channel_session()?;
+    channel.exec(command)?;
+
+    let mut stdout = Vec::new();
+    channel.read_to_end(&mut stdout)?;
+
+    let mut stderr = Vec::new();
+    channel.stderr().read_to_end(&mut stderr)?;
+
+    channel.wait_close()?;
+    let exit_status = channel.exit_status()?;
+
+    if exit_status == 0 {
+        return Ok(Some(
+            String::from_utf8_lossy(&stdout)
+                .trim_end_matches(['\r', '\n'])
+                .to_owned(),
+        ));
+    }
+
+    if exit_status == not_found_status {
+        return Ok(None);
+    }
+
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
+    let detail = if stderr.is_empty() {
+        format!("exit status {exit_status}")
+    } else {
+        format!("exit status {exit_status}: {stderr}")
+    };
+
+    Err(crate::Error::SshProtocol(format!("SSH command failed: `{command}`: {detail}")))
 }
 
 fn connect_tcp(ssh: &Connection) -> crate::Result<TcpStream> {
@@ -231,39 +298,8 @@ impl ssh2::KeyboardInteractivePrompt for StaticPasswordPrompt<'_> {
     }
 }
 
-fn probe_base_facts(session: &ssh2::Session) -> crate::Result<FactCache> {
-    let os = exec_probe(session, "uname -s")?;
-    let arch = exec_probe(session, "uname -m")?;
-    let hostname = exec_probe(session, "uname -n")?;
-
-    Ok(FactCache::with_base(os, arch, hostname))
-}
-
-fn exec_probe(session: &ssh2::Session, command: &str) -> crate::Result<String> {
-    let mut channel = session.channel_session()?;
-    channel.exec(command)?;
-
-    let mut stdout = Vec::new();
-    channel.read_to_end(&mut stdout)?;
-
-    let mut stderr = Vec::new();
-    channel.stderr().read_to_end(&mut stderr)?;
-
-    channel.wait_close()?;
-    let exit_status = channel.exit_status()?;
-
-    if exit_status != 0 {
-        let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
-        let detail = if stderr.is_empty() {
-            format!("exit status {exit_status}")
-        } else {
-            format!("exit status {exit_status}: {stderr}")
-        };
-        return Err(crate::Error::SshProtocol(format!("SSH probe command failed: `{command}`: {detail}")));
-    }
-
-    let stdout = String::from_utf8_lossy(&stdout);
-    Ok(stdout.trim_end_matches(['\r', '\n']).to_owned())
+fn probe_initial_facts(session: &ssh2::Session) -> crate::Result<FactCache> {
+    parse_initial_facts(&exec_stdout(session, INITIAL_FACTS_SCRIPT)?)
 }
 
 fn duration_to_timeout_ms(duration: Duration) -> u32 {

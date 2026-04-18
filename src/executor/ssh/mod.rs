@@ -7,6 +7,7 @@ use super::ExecutorBinder;
 use super::facts::FactCache;
 
 mod connect;
+mod facts;
 
 #[derive(Clone)]
 pub struct SshExecutor {

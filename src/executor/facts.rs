@@ -2,37 +2,142 @@ use std::collections::BTreeMap;
 
 use super::path::TargetPath;
 
-pub(super) struct FactCache {
-    os: Option<String>,
-    arch: Option<String>,
-    hostname: Option<String>,
-    identities: BTreeMap<ExecIdentityKey, IdentityFacts>,
-    which: BTreeMap<(ExecIdentityKey, String), Option<TargetPath>>,
+pub const INITIAL_FACTS_SCRIPT: &str = "command uname -s
+command uname -m
+command uname -n
+command id -u
+command id -g
+command id -G
+command id -un
+command id -gn
+command id -Gn";
+
+pub struct FactCache {
+    pub os: Option<String>,
+    pub arch: Option<String>,
+    pub hostname: Option<String>,
+    pub identities: BTreeMap<ExecIdentityKey, IdentityFacts>,
+    pub which: BTreeMap<(ExecIdentityKey, String), Option<TargetPath>>,
 }
 
-pub(super) struct IdentityFacts {
-    uid: u32,
-    gid: u32,
-    gids: Vec<u32>,
+#[derive(Debug, Clone)]
+pub struct IdentityFacts {
+    pub uid: u32,
+    pub gid: u32,
+    pub gids: Vec<u32>,
 
-    user: String,
-    group: String,
-    groups: Vec<String>,
+    pub user: String,
+    pub group: String,
+    pub groups: Vec<String>,
 }
 
-pub(super) enum ExecIdentityKey {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExecIdentityKey {
     Base,
     RunAs(String),
 }
 
 impl FactCache {
-    pub(super) fn with_base(os: String, arch: String, hostname: String) -> Self {
+    pub fn with_initial(os: String, arch: String, hostname: String, identity: IdentityFacts) -> Self {
+        let mut identities = BTreeMap::new();
+        identities.insert(ExecIdentityKey::Base, identity);
+
         Self {
             os: Some(os),
             arch: Some(arch),
             hostname: Some(hostname),
-            identities: BTreeMap::new(),
+            identities,
             which: BTreeMap::new(),
         }
     }
+
+    pub fn os(&self) -> crate::Result<&str> {
+        self.os
+            .as_deref()
+            .ok_or_else(|| crate::Error::FactProbe("os fact is not initialized".to_owned()))
+    }
+
+    pub fn arch(&self) -> crate::Result<&str> {
+        self.arch
+            .as_deref()
+            .ok_or_else(|| crate::Error::FactProbe("arch fact is not initialized".to_owned()))
+    }
+
+    pub fn hostname(&self) -> crate::Result<&str> {
+        self.hostname
+            .as_deref()
+            .ok_or_else(|| crate::Error::FactProbe("hostname fact is not initialized".to_owned()))
+    }
+
+    pub fn base_identity(&self) -> crate::Result<&IdentityFacts> {
+        self.identities
+            .get(&ExecIdentityKey::Base)
+            .ok_or_else(|| crate::Error::FactProbe("base identity facts are not initialized".to_owned()))
+    }
+}
+
+pub fn parse_initial_facts(output: &str) -> crate::Result<FactCache> {
+    let mut lines = output.lines();
+
+    let os = next_fact_line(&mut lines, "os")?;
+    let arch = next_fact_line(&mut lines, "arch")?;
+    let hostname = next_fact_line(&mut lines, "hostname")?;
+    let uid = next_fact_line(&mut lines, "uid")?.parse()?;
+    let gid = next_fact_line(&mut lines, "gid")?.parse()?;
+    let gids = parse_u32_words(&next_fact_line(&mut lines, "gids")?, "gids")?;
+    let user = next_fact_line(&mut lines, "user")?;
+    let group = next_fact_line(&mut lines, "group")?;
+    let groups = next_fact_line(&mut lines, "groups")?
+        .split_whitespace()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
+    if let Some(extra) = lines.find(|line| !line.trim().is_empty()) {
+        return Err(crate::Error::FactProbe(format!("unexpected extra line in fact probe output: {extra:?}")));
+    }
+
+    Ok(FactCache::with_initial(
+        os,
+        arch,
+        hostname,
+        IdentityFacts {
+            uid,
+            gid,
+            gids,
+            user,
+            group,
+            groups,
+        },
+    ))
+}
+
+pub fn shell_escape(value: &str) -> String {
+    let escaped = value.replace('\'', "'\"'\"'");
+    format!("'{escaped}'")
+}
+
+pub fn valid_env_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    match chars.next() {
+        Some(c) if c == '_' || c.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+
+    chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
+fn next_fact_line(lines: &mut std::str::Lines<'_>, name: &str) -> crate::Result<String> {
+    lines
+        .next()
+        .map(|line| line.trim().to_owned())
+        .ok_or_else(|| crate::Error::FactProbe(format!("missing {name} in fact probe output")))
+}
+
+fn parse_u32_words(line: &str, name: &str) -> crate::Result<Vec<u32>> {
+    line.split_whitespace()
+        .map(|part| {
+            part.parse()
+                .map_err(|err| crate::Error::FactProbe(format!("invalid {name} value {part:?}: {err}")))
+        })
+        .collect()
 }
