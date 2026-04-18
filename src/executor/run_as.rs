@@ -2,11 +2,10 @@ use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::executor::facts::{shell_escape, valid_env_key};
+use crate::executor::shared::{describe_request, render_request_script, shell_escape, valid_env_key};
 use crate::launcher::SecretKey;
 use crate::spec::runas::{PtyMode, RunAs, RunAsEnv, RunAsVia};
 
-use super::CommandKind;
 use super::command::CommandRequest;
 
 static MARKER_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -24,7 +23,7 @@ pub(crate) fn build_run_as_plan(host_id: &str, run_as: &RunAs, req: &CommandRequ
 
     let marker_id = next_marker_id();
     let start_marker = format!("__WALI_RUN_AS_START_{marker_id}__");
-    let inner_script = render_inner_script(req, Some(&start_marker))?;
+    let inner_script = render_request_script(req, Some(&start_marker))?;
 
     let (argv, prompt_markers) = match run_as.via {
         RunAsVia::Sudo => build_sudo_argv(run_as, &inner_script, &marker_id)?,
@@ -272,71 +271,6 @@ fn prompt_markers_for(run_as: &RunAs, defaults: &[&str]) -> Vec<Vec<u8>> {
     }
 
     markers
-}
-
-fn render_inner_script(req: &CommandRequest, start_marker: Option<&str>) -> crate::Result<String> {
-    let mut script = String::new();
-
-    if let Some(start_marker) = start_marker {
-        script.push_str("printf '%s\\n' ");
-        script.push_str(&shell_escape(start_marker));
-        script.push('\n');
-    }
-
-    if let Some(cwd) = &req.opts.cwd {
-        script.push_str("cd -- ");
-        script.push_str(&shell_escape(cwd.as_str()));
-        script.push_str(" || exit 200\n");
-    }
-
-    for (key, value) in &req.opts.env {
-        if !valid_env_key(key) {
-            return Err(crate::Error::CommandExec(format!(
-                "invalid environment variable name {key:?} for {}",
-                describe_request(req)
-            )));
-        }
-
-        script.push_str(key);
-        script.push('=');
-        script.push_str(&shell_escape(value));
-        script.push_str("; export ");
-        script.push_str(key);
-        script.push('\n');
-    }
-
-    match &req.kind {
-        CommandKind::Exec { program, args } => {
-            script.push_str("exec ");
-            script.push_str(&shell_escape(program));
-            for arg in args {
-                script.push(' ');
-                script.push_str(&shell_escape(arg));
-            }
-        }
-        CommandKind::Shell { script: body } => script.push_str(body),
-    }
-
-    Ok(script)
-}
-
-fn describe_request(req: &CommandRequest) -> String {
-    match &req.kind {
-        CommandKind::Exec { program, args } => {
-            let mut parts = Vec::with_capacity(args.len() + 1);
-            parts.push(program.as_str());
-            parts.extend(args.iter().map(String::as_str));
-            parts.join(" ")
-        }
-        CommandKind::Shell { script } => {
-            let trimmed = script.trim();
-            if trimmed.chars().count() <= 80 {
-                format!("sh -lc {}", trimmed)
-            } else {
-                format!("sh -lc {}…", trimmed.chars().take(80).collect::<String>())
-            }
-        }
-    }
 }
 
 fn validate_pty_modes(run_as: &RunAs, req: &CommandRequest) -> crate::Result {

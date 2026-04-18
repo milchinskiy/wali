@@ -1,5 +1,5 @@
 use crate::spec::account::Owner;
-use crate::spec::runas::{PtyMode, RunAs};
+use crate::spec::runas::RunAs;
 
 mod command;
 mod facts;
@@ -7,6 +7,7 @@ mod local;
 mod path;
 mod result;
 mod run_as;
+mod shared;
 mod ssh;
 
 pub use self::command::{CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
@@ -21,18 +22,6 @@ pub use self::ssh::SshExecutor;
 
 mod backend;
 pub use backend::Backend;
-
-enum EffectivePty {
-    Disabled,
-    Enabled,
-}
-
-fn effective_pty(mode: PtyMode) -> EffectivePty {
-    match mode {
-        PtyMode::Never | PtyMode::Auto => EffectivePty::Disabled,
-        PtyMode::Require => EffectivePty::Enabled,
-    }
-}
 
 pub trait ExecutorBinder {
     fn bind(&self, run_as: Option<RunAs>) -> Self;

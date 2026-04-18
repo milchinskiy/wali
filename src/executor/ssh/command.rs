@@ -4,11 +4,9 @@ use std::time::{Duration, Instant};
 use libssh2_sys::LIBSSH2_ERROR_EAGAIN;
 use ssh2::{Channel, ErrorCode, ExtendedData};
 
-use crate::executor::facts::{shell_escape, valid_env_key};
 use crate::executor::run_as::{StreamProcessor, build_run_as_plan, render_argv_shell};
-use crate::executor::{
-    CommandExec, CommandKind, CommandOutput, CommandRequest, CommandStatus, CommandStreams, EffectivePty, effective_pty,
-};
+use crate::executor::shared::{EffectivePty, describe_request, effective_pty, render_shell_command};
+use crate::executor::{CommandExec, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
 
 use super::SshExecutor;
 
@@ -202,7 +200,7 @@ fn exec_ssh_request(session: &ssh2::Session, req: &CommandRequest) -> crate::Res
         }
     }
 
-    let remote_command = render_remote_command(req)?;
+    let remote_command = render_shell_command(req)?;
     retry_ssh(
         deadline,
         || channel.exec(&remote_command),
@@ -233,46 +231,6 @@ fn exec_ssh_request(session: &ssh2::Session, req: &CommandRequest) -> crate::Res
     let status = command_status_from_ssh_channel(&channel)?;
 
     Ok(CommandOutput { status, streams })
-}
-
-fn render_remote_command(req: &CommandRequest) -> crate::Result<String> {
-    let mut script = String::new();
-
-    if let Some(cwd) = &req.opts.cwd {
-        script.push_str("cd -- ");
-        script.push_str(&shell_escape(cwd.as_str()));
-        script.push_str(" || exit 200\n");
-    }
-
-    for (key, value) in &req.opts.env {
-        if !valid_env_key(key) {
-            return Err(crate::Error::CommandExec(format!(
-                "invalid environment variable name {key:?} for {}",
-                describe_request(req)
-            )));
-        }
-
-        script.push_str(key);
-        script.push('=');
-        script.push_str(&shell_escape(value));
-        script.push_str("; export ");
-        script.push_str(key);
-        script.push('\n');
-    }
-
-    match &req.kind {
-        CommandKind::Exec { program, args } => {
-            script.push_str("exec ");
-            script.push_str(&shell_escape(program));
-            for arg in args {
-                script.push(' ');
-                script.push_str(&shell_escape(arg));
-            }
-        }
-        CommandKind::Shell { script: body } => script.push_str(body),
-    }
-
-    Ok(format!("sh -lc {}", shell_escape(&script)))
 }
 
 fn write_ssh_bytes(channel: &mut Channel, stdin: &[u8], deadline: Option<Instant>, desc: String) -> crate::Result {
@@ -436,27 +394,4 @@ fn is_ssh_would_block(err: &ssh2::Error) -> bool {
 
 fn sleep_ssh_backoff() {
     std::thread::sleep(Duration::from_millis(10));
-}
-
-fn describe_request(req: &CommandRequest) -> String {
-    match &req.kind {
-        CommandKind::Exec { program, args } => {
-            let mut parts = Vec::with_capacity(args.len() + 1);
-            parts.push(program.as_str());
-            parts.extend(args.iter().map(String::as_str));
-            parts.join(" ")
-        }
-        CommandKind::Shell { script } => {
-            let trimmed = script.trim();
-            if trimmed.chars().count() <= 80 {
-                format!("sh -lc {}", trimmed)
-            } else {
-                format!("sh -lc {}…", truncate_chars(trimmed, 80))
-            }
-        }
-    }
-}
-
-fn truncate_chars(value: &str, max_chars: usize) -> String {
-    value.chars().take(max_chars).collect()
 }

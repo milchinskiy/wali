@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::executor::facts::{FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
+use crate::executor::shared::trim_trailing_newlines;
 use crate::launcher::SecretKey;
 use crate::launcher::secrets::SecretVault;
 use crate::spec::host::ssh::{Auth, Connection, HostKeyPolicy};
@@ -84,9 +85,7 @@ pub(super) fn exec_stdout(session: &ssh2::Session, command: &str) -> crate::Resu
         return Err(crate::Error::SshProtocol(format!("SSH command failed: `{command}`: {detail}")));
     }
 
-    Ok(String::from_utf8_lossy(&stdout)
-        .trim_end_matches(['\r', '\n'])
-        .to_owned())
+    Ok(trim_trailing_newlines(&String::from_utf8_lossy(&stdout)))
 }
 
 pub(super) fn exec_optional_stdout(
@@ -107,11 +106,7 @@ pub(super) fn exec_optional_stdout(
     let exit_status = channel.exit_status()?;
 
     if exit_status == 0 {
-        return Ok(Some(
-            String::from_utf8_lossy(&stdout)
-                .trim_end_matches(['\r', '\n'])
-                .to_owned(),
-        ));
+        return Ok(Some(trim_trailing_newlines(&String::from_utf8_lossy(&stdout))));
     }
 
     if exit_status == not_found_status {

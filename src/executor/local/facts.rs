@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use crate::executor::facts::{ExecIdentityKey, shell_escape, valid_env_key};
+use crate::executor::shared::{identity_key_for, shell_escape, trim_trailing_newlines, valid_env_key};
 use crate::executor::{Facts, TargetPath};
 
 use super::LocalExecutor;
@@ -91,26 +91,13 @@ impl LocalExecutor {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn current_identity_key(&self) -> ExecIdentityKey {
-        match self.run_as() {
-            Some(run_as) => ExecIdentityKey::RunAs(run_as.id.clone()),
-            None => ExecIdentityKey::Base,
-        }
-    }
-
     fn cached_which(&self, command: &str) -> Option<Option<TargetPath>> {
-        let identity = self.current_identity_key();
-        self.facts_guard().which.get(&(identity, command.to_owned())).cloned()
+        let identity = identity_key_for(self.run_as());
+        self.facts_guard().cached_which(&identity, command)
     }
 
     fn store_which(&self, command: &str, resolved: Option<TargetPath>) {
-        let identity = self.current_identity_key();
-        self.facts_guard()
-            .which
-            .insert((identity, command.to_owned()), resolved);
+        let identity = identity_key_for(self.run_as());
+        self.facts_guard().store_which(identity, command, resolved);
     }
-}
-
-fn trim_trailing_newlines(value: &str) -> String {
-    value.trim_end_matches(['\r', '\n']).to_owned()
 }

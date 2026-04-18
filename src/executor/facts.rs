@@ -74,6 +74,14 @@ impl FactCache {
             .get(&ExecIdentityKey::Base)
             .ok_or_else(|| crate::Error::FactProbe("base identity facts are not initialized".to_owned()))
     }
+
+    pub fn cached_which(&self, identity: &ExecIdentityKey, command: &str) -> Option<Option<TargetPath>> {
+        self.which.get(&(identity.clone(), command.to_owned())).cloned()
+    }
+
+    pub fn store_which(&mut self, identity: ExecIdentityKey, command: &str, resolved: Option<TargetPath>) {
+        self.which.insert((identity, command.to_owned()), resolved);
+    }
 }
 
 pub fn parse_initial_facts(output: &str) -> crate::Result<FactCache> {
@@ -109,21 +117,6 @@ pub fn parse_initial_facts(output: &str) -> crate::Result<FactCache> {
             groups,
         },
     ))
-}
-
-pub fn shell_escape(value: &str) -> String {
-    let escaped = value.replace('\'', "'\"'\"'");
-    format!("'{escaped}'")
-}
-
-pub fn valid_env_key(key: &str) -> bool {
-    let mut chars = key.chars();
-    match chars.next() {
-        Some(c) if c == '_' || c.is_ascii_alphabetic() => {}
-        _ => return false,
-    }
-
-    chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
 fn next_fact_line(lines: &mut std::str::Lines<'_>, name: &str) -> crate::Result<String> {

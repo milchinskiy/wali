@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
 use crate::executor::run_as::{StreamProcessor, build_run_as_plan};
+use crate::executor::shared::{EffectivePty, describe_request, effective_pty};
 use crate::executor::{
-    CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams, EffectivePty,
-    effective_pty,
+    CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams,
 };
 
 use super::LocalExecutor;
@@ -505,27 +505,4 @@ fn command_status_from_exit_status(status: std::process::ExitStatus) -> CommandS
 #[cfg(not(unix))]
 fn command_status_from_exit_status(status: std::process::ExitStatus) -> CommandStatus {
     CommandStatus::Exited(status.code().unwrap_or_else(|| if status.success() { 0 } else { 1 }))
-}
-
-fn describe_request(req: &CommandRequest) -> String {
-    match &req.kind {
-        CommandKind::Exec { program, args } => {
-            let mut parts = Vec::with_capacity(args.len() + 1);
-            parts.push(program.as_str());
-            parts.extend(args.iter().map(String::as_str));
-            parts.join(" ")
-        }
-        CommandKind::Shell { script } => {
-            let trimmed = script.trim();
-            if trimmed.chars().count() <= 80 {
-                format!("sh -lc {}", trimmed)
-            } else {
-                format!("sh -lc {}…", truncate_chars(trimmed, 80))
-            }
-        }
-    }
-}
-
-fn truncate_chars(value: &str, max_chars: usize) -> String {
-    value.chars().take(max_chars).collect()
 }
