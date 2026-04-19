@@ -7,8 +7,8 @@ pub enum Error {
     Ssh(ssh2::Error),
     InvalidManifest(String),
     ModuleSchema { path: String, message: String },
-    ModuleValidation(String),
-    ModuleApply(String),
+    ModuleValidation { id: String, message: String },
+    ModuleApply { id: String, message: String },
     MissingSecret(SecretKey),
     SshProtocol(String),
     FactProbe(String),
@@ -27,8 +27,8 @@ impl std::fmt::Display for Error {
             Self::Ssh(e) => write!(f, "SSH error: {e}"),
             Self::InvalidManifest(e) => write!(f, "Invalid manifest: {e}"),
             Self::ModuleSchema { path, message } => write!(f, "Invalid module input data: {path}: {message}"),
-            Self::ModuleValidation(e) => write!(f, "Module validation error: {e}"),
-            Self::ModuleApply(e) => write!(f, "Module apply error: {e}"),
+            Self::ModuleValidation { id, message } => write!(f, "{id} validation: {message}"),
+            Self::ModuleApply { id, message } => write!(f, "{id} apply: {message}"),
             Self::MissingSecret(key) => match key {
                 SecretKey::SshPassword { host_id, user } => write!(f, "Missing ssh password for {host_id}/{user}"),
                 SecretKey::SshKeyPhrase {
@@ -61,8 +61,8 @@ impl std::error::Error for Error {
             Self::Ssh(e) => Some(e),
             Self::InvalidManifest(_) => None,
             Self::ModuleSchema { .. } => None,
-            Self::ModuleValidation(_) => None,
-            Self::ModuleApply(_) => None,
+            Self::ModuleValidation { .. } => None,
+            Self::ModuleApply { .. } => None,
             Self::MissingSecret { .. } => None,
             Self::SshProtocol(_) => None,
             Self::FactProbe(_) => None,
@@ -126,8 +126,8 @@ impl From<Error> for ap::Error {
             Error::FactProbe(..) => 34,
             Error::CommandExec(..) => 35,
             Error::CommandTimeout(..) => 36,
-            Error::ModuleValidation(..) => 41,
-            Error::ModuleApply(..) => 42,
+            Error::ModuleValidation { .. } => 41,
+            Error::ModuleApply { .. } => 42,
             Error::Reporter(..) => 71,
         };
 

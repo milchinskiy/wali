@@ -111,6 +111,6 @@ impl LuaRuntime {
         N: AsRef<str>,
     {
         let module: mlua::Table = self.require(name.as_ref())?;
-        module::Module::new(&self.lua, module)
+        module::Module::new(name.as_ref().to_string(), &self.lua, module)
     }
 }

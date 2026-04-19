@@ -1,7 +1,7 @@
 use super::context::Context;
 use rust_args_parser as ap;
 
-mod test;
+mod apply;
 
 pub fn root<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new(env!("CARGO_PKG_NAME"))
@@ -11,7 +11,7 @@ pub fn root<'a>() -> ap::CmdSpec<'a, Context> {
         .opt(opt_json())
         .opt(opt_pretty_json())
         .handler_try(|_, _| Err(ap::Error::User("not implemented".to_string())))
-        .subcmd(test::test())
+        .subcmd(apply::apply())
 }
 
 fn opt_verbosity<'a>() -> ap::OptSpec<'a, Context> {

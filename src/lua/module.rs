@@ -4,12 +4,13 @@ pub mod schema;
 
 #[derive(Clone)]
 pub struct Module {
+    name: String,
     module: mlua::Table,
     schema: Option<schema::Schema>,
 }
 
 impl Module {
-    pub fn new(lua: &mlua::Lua, module: mlua::Table) -> mlua::Result<Self> {
+    pub fn new(name: impl Into<String>, lua: &mlua::Lua, module: mlua::Table) -> mlua::Result<Self> {
         let schema = match module.get::<mlua::Value>("schema")? {
             mlua::Value::Nil => None,
             value => Some(schema::Schema::from_lua(lua, value)?),
@@ -17,7 +18,7 @@ impl Module {
 
         let _: mlua::Function = module.get("apply")?;
 
-        Ok(Self { module, schema })
+        Ok(Self { name: name.into(), module, schema })
     }
 
     pub fn normalize_args(&self, lua: &mlua::Lua, raw_args: &serde_json::Value) -> crate::Result<mlua::Value> {
@@ -32,8 +33,14 @@ impl Module {
         if self.module.contains_key("validate")? {
             match self.module.get::<mlua::Function>("validate")?.call((ctx, args)) {
                 Ok((true, _)) => Ok(()),
-                Ok((false, None)) => Err(crate::Error::ModuleValidation("validation failed".to_string())),
-                Ok((false, Some(reason))) => Err(crate::Error::ModuleValidation(reason)),
+                Ok((false, None)) => Err(crate::Error::ModuleValidation {
+                    id: self.name.clone(),
+                    message: "unknown error".into(),
+                }),
+                Ok((false, Some(reason))) => Err(crate::Error::ModuleValidation {
+                    id: self.name.clone(),
+                    message: reason,
+                }),
                 Err(error) => Err(error.into()),
             }
         } else {
@@ -44,8 +51,14 @@ impl Module {
     pub fn apply(&self, ctx: mlua::Table, args: mlua::Value) -> crate::Result {
         match self.module.get::<mlua::Function>("apply")?.call((ctx, args)) {
             Ok((true, _)) => Ok(()),
-            Ok((false, None)) => Err(crate::Error::ModuleApply("apply failed".to_string())),
-            Ok((false, Some(reason))) => Err(crate::Error::ModuleApply(reason)),
+            Ok((false, None)) => Err(crate::Error::ModuleApply {
+                id: self.name.clone(),
+                message: "unknown error".into(),
+            }),
+            Ok((false, Some(reason))) => Err(crate::Error::ModuleApply {
+                id: self.name.clone(),
+                message: reason,
+            }),
             Err(error) => Err(error.into()),
         }
     }

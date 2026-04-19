@@ -52,7 +52,7 @@ impl Launcher {
         }
     }
 
-    pub fn apply(self, report: Reporter<ApplyLayout>) {
+    pub fn apply(self, report: Reporter<ApplyLayout>) -> crate::Result {
         let handles = self
             .workers
             .into_iter()
@@ -62,9 +62,11 @@ impl Launcher {
             })
             .collect::<Vec<_>>();
 
-        report.join().unwrap();
-        handles.into_iter().for_each(|handle| {
-            let _ = handle.join();
-        });
+        report.join()?;
+        for handle in handles {
+            handle.join().map_err(|_| crate::Error::Reporter("thread panicked".into()))??;
+        }
+
+        Ok(())
     }
 }
