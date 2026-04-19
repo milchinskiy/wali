@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::executor::{Backend, ExecutorBinder};
@@ -9,35 +8,13 @@ use crate::report::apply::Event;
 use super::secrets;
 
 pub struct Worker {
-    lua: crate::lua::LuaRuntime,
-    modules: BTreeMap<String, crate::lua::module::Module>,
     plan: HostPlan,
     secrets: Arc<secrets::SecretVault>,
 }
 
 impl Worker {
     pub fn new(plan: HostPlan, secrets: Arc<secrets::SecretVault>) -> crate::Result<Self> {
-        let lua = crate::lua::LuaRuntime::with_modules_flow()?;
-        for path in &plan.modules_paths {
-            lua.add_include_path(path)?;
-        }
-
-        let modules = plan
-            .tasks
-            .iter()
-            .map(|task| -> crate::Result<_> {
-                let module_name = task.module.clone();
-                let module = lua.module_load_by_name(&module_name)?;
-                Ok((module_name, module))
-            })
-            .collect::<crate::Result<BTreeMap<_, _>>>()?;
-
-        Ok(Self {
-            lua,
-            modules,
-            plan,
-            secrets,
-        })
+        Ok(Self { plan, secrets })
     }
 
     pub fn id(&self) -> &str {
@@ -48,15 +25,13 @@ impl Worker {
         let backend = self.connect()?;
 
         for task in &self.plan.tasks {
-            let module = self
-                .modules
-                .get(&task.module)
-                .ok_or_else(|| crate::Error::InvalidManifest(format!("module '{}' is not loaded", task.module)))?;
+            let lua = self.task_runtime()?;
+            let module = lua.module_load_by_name(&task.module)?;
 
             let bound = backend.bind(task.run_as.clone());
-            let args = module.normalize_args(self.lua.lua(), &task.args)?;
+            let args = module.normalize_args(lua.lua(), &task.args)?;
             let ctx = crate::lua::api::build_task_ctx(
-                self.lua.lua(),
+                lua.lua(),
                 &self.plan.id,
                 transport_name(&self.plan.transport),
                 task,
@@ -92,23 +67,29 @@ impl Worker {
             }
         };
 
+        let mut runtime_error = None;
         for task in &self.plan.tasks {
             sender.send(Event::TaskSchedule {
                 host_id: self.plan.id.clone(),
                 task_id: task.id.clone(),
             })?;
+            if runtime_error.is_some() {
+                sender.send(Event::TaskSkip {
+                    host_id: self.plan.id.clone(),
+                    task_id: task.id.clone(),
+                    reason: Some("previous task failed".to_string()),
+                })?;
+                continue;
+            }
 
             let result = (|| -> crate::Result {
-                let module = self
-                    .modules
-                    .get(&task.module)
-                    .ok_or_else(|| crate::Error::InvalidManifest(format!("module '{}' is not loaded", task.module)))?;
-
+                let lua = self.task_runtime()?;
+                let module = lua.module_load_by_name(&task.module)?;
                 let bound = backend.bind(task.run_as.clone());
 
-                let validate_args = module.normalize_args(self.lua.lua(), &task.args)?;
+                let validate_args = module.normalize_args(lua.lua(), &task.args)?;
                 let validate_ctx = crate::lua::api::build_task_ctx(
-                    self.lua.lua(),
+                    lua.lua(),
                     &self.plan.id,
                     transport_name(&self.plan.transport),
                     task,
@@ -116,9 +97,9 @@ impl Worker {
                 )?;
                 module.validate(validate_ctx, validate_args)?;
 
-                let apply_args = module.normalize_args(self.lua.lua(), &task.args)?;
+                let apply_args = module.normalize_args(lua.lua(), &task.args)?;
                 let apply_ctx = crate::lua::api::build_task_ctx(
-                    self.lua.lua(),
+                    lua.lua(),
                     &self.plan.id,
                     transport_name(&self.plan.transport),
                     task,
@@ -138,7 +119,7 @@ impl Worker {
                         task_id: task.id.clone(),
                         error: error.to_string(),
                     })?;
-                    return Err(error);
+                    runtime_error = Some(error);
                 }
             }
         }
@@ -146,11 +127,22 @@ impl Worker {
         sender.send(Event::HostComplete {
             host_id: self.plan.id.clone(),
         })?;
+        if let Some(error) = runtime_error {
+            return Err(error);
+        }
         Ok(())
     }
 
     fn connect(&self) -> crate::Result<Backend> {
         Backend::connect(self.plan.id.clone(), Arc::clone(&self.secrets), &self.plan.transport)
+    }
+
+    fn task_runtime(&self) -> crate::Result<crate::lua::LuaRuntime> {
+        let lua = crate::lua::LuaRuntime::with_modules_flow()?;
+        for path in &self.plan.modules_paths {
+            lua.add_include_path(path)?;
+        }
+        Ok(lua)
     }
 }
 

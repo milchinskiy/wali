@@ -16,14 +16,18 @@ return {
 			-- 	},
 			-- },
 		},
-        {
-            id = "another host",
-            transport = "local",
-        },
-        {
-            id = "some remote host #3",
-            transport = "local",
-        }
+		{
+			id = "another host",
+			transport = "local",
+		},
+		{
+			id = "some remote host #3",
+			transport = "local",
+		},
+		{
+			id = "remote-host",
+			transport = { ssh = { host = "127.0.0.1", user = "test-user" } },
+		},
 		-- {
 		-- 	id = "ssh-test",
 		-- 	transport = {
@@ -71,17 +75,17 @@ return {
 			module = "test_module",
 			args = { target = "some/path" },
 		},
-        {
+		{
 			id = "create home dir",
 			module = "test_module",
 			args = { target = "some/path" },
 		},
-        {
+		{
 			id = "link Alacritty config",
 			module = "test_module",
 			args = { target = "some/path" },
 		},
-        {
+		{
 			id = "write git config",
 			module = "test_module",
 			args = { target = "some/path" },

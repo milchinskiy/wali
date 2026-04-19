@@ -214,12 +214,16 @@ fn authenticate(id: &str, secrets: &SecretVault, session: &ssh2::Session, ssh: &
             private_key,
             public_key,
         } => {
-            let passphrase = secrets.require_text(&SecretKey::SshKeyPhrase {
-                host_id: id.to_owned(),
-                private_key_path: private_key.clone(),
-            })?;
+            let passphrase = secrets
+                .get(&SecretKey::SshKeyPhrase {
+                    host_id: id.to_owned(),
+                    private_key_path: private_key.clone(),
+                })
+                .map(|value| match value {
+                    crate::launcher::secrets::SecretValue::Text(value) => value.as_str(),
+                });
 
-            session.userauth_pubkey_file(&ssh.user, public_key.as_deref(), private_key.as_path(), Some(passphrase))?;
+            session.userauth_pubkey_file(&ssh.user, public_key.as_deref(), private_key.as_path(), passphrase)?;
         }
         Auth::Password => {
             let password = secrets.require_text(&SecretKey::SshPassword {

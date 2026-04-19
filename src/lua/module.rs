@@ -18,7 +18,11 @@ impl Module {
 
         let _: mlua::Function = module.get("apply")?;
 
-        Ok(Self { name: name.into(), module, schema })
+        Ok(Self {
+            name: name.into(),
+            module,
+            schema,
+        })
     }
 
     pub fn normalize_args(&self, lua: &mlua::Lua, raw_args: &serde_json::Value) -> crate::Result<mlua::Value> {

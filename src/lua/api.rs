@@ -41,13 +41,45 @@ fn build_rand_table(lua: &Lua) -> mlua::Result<Table> {
 
     table.set(
         "irange",
-        lua.create_function(|_, (min, max): (u64, u64)| Ok(rand::rng().random_range(min..max)))?,
+        lua.create_function(|_, (min, max): (u64, u64)| {
+            if min > max {
+                return Err(mlua::Error::external(format!("ctx.rand.irange expects min <= max, got {min} > {max}")));
+            }
+            if min == max {
+                return Ok(min);
+            }
+            Ok(rand::rng().random_range(min..=max))
+        })?,
     )?;
-    table
-        .set("frange", lua.create_function(|_, (min, max): (f64, f64)| Ok(rand::rng().random_range(min..max)))?)?;
-    table.set("ratio", lua.create_function(|_, (numerator, denominator): (u32, u32)| {
-        Ok(rand::rng().random_ratio(numerator, denominator))
-    })?)?;
+    table.set(
+        "frange",
+        lua.create_function(|_, (min, max): (f64, f64)| {
+            if !min.is_finite() || !max.is_finite() {
+                return Err(mlua::Error::external("ctx.rand.frange expects finite min/max values"));
+            }
+            if min > max {
+                return Err(mlua::Error::external(format!("ctx.rand.frange expects min <= max, got {min} > {max}")));
+            }
+            if min == max {
+                return Ok(min);
+            }
+            Ok(rand::rng().random_range(min..max))
+        })?,
+    )?;
+    table.set(
+        "ratio",
+        lua.create_function(|_, (numerator, denominator): (u32, u32)| {
+            if denominator == 0 {
+                return Err(mlua::Error::external("ctx.rand.ratio expects denominator > 0"));
+            }
+            if numerator > denominator {
+                return Err(mlua::Error::external(format!(
+                    "ctx.rand.ratio expects numerator <= denominator, got {numerator} > {denominator}"
+                )));
+            }
+            Ok(rand::rng().random_ratio(numerator, denominator))
+        })?,
+    )?;
 
     Ok(table)
 }

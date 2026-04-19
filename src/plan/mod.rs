@@ -24,7 +24,7 @@ pub struct HostPlan {
 }
 
 impl HostPlan {
-    pub fn secret_requests(&self) -> Vec<secrets::SecretRequest> {
+    pub fn secret_requests(&self) -> crate::Result<Vec<secrets::SecretRequest>> {
         let mut requests = Vec::new();
         if let Transport::Ssh(ssh) = &self.transport {
             match &ssh.auth {
@@ -35,13 +35,17 @@ impl HostPlan {
                     },
                     prompt: crate::ui::prompt::ssh_password(&ssh.user, &self.id),
                 }),
-                Auth::KeyFile { private_key, .. } => requests.push(secrets::SecretRequest {
-                    key: secrets::SecretKey::SshKeyPhrase {
-                        host_id: self.id.clone(),
-                        private_key_path: private_key.clone(),
-                    },
-                    prompt: crate::ui::prompt::ssh_key_phrase(&ssh.user, &self.id),
-                }),
+                Auth::KeyFile { private_key, .. } => {
+                    if private_key_requires_passphrase(private_key)? {
+                        requests.push(secrets::SecretRequest {
+                            key: secrets::SecretKey::SshKeyPhrase {
+                                host_id: self.id.clone(),
+                                private_key_path: private_key.clone(),
+                            },
+                            prompt: crate::ui::prompt::ssh_key_phrase(&ssh.user, &self.id),
+                        });
+                    }
+                }
                 _ => {}
             }
         }
@@ -70,8 +74,127 @@ impl HostPlan {
             })
         }
 
-        requests
+        Ok(requests)
     }
+}
+
+fn private_key_requires_passphrase(path: &std::path::Path) -> crate::Result<bool> {
+    let pem = std::fs::read(path)?;
+
+    if pem
+        .windows(b"-----BEGIN ENCRYPTED PRIVATE KEY-----".len())
+        .any(|w| w == b"-----BEGIN ENCRYPTED PRIVATE KEY-----")
+    {
+        return Ok(true);
+    }
+
+    if pem
+        .windows(b"Proc-Type: 4,ENCRYPTED".len())
+        .any(|w| w == b"Proc-Type: 4,ENCRYPTED")
+    {
+        return Ok(true);
+    }
+
+    if pem
+        .windows(b"-----BEGIN OPENSSH PRIVATE KEY-----".len())
+        .any(|w| w == b"-----BEGIN OPENSSH PRIVATE KEY-----")
+    {
+        return openssh_private_key_requires_passphrase(&pem);
+    }
+
+    Ok(false)
+}
+
+fn openssh_private_key_requires_passphrase(pem: &[u8]) -> crate::Result<bool> {
+    let text = std::str::from_utf8(pem)?;
+    let body = text
+        .lines()
+        .filter(|line| !line.starts_with("-----BEGIN ") && !line.starts_with("-----END "))
+        .collect::<String>();
+
+    let decoded = decode_base64(body.as_bytes())?;
+    let mut cursor = decoded.as_slice();
+
+    if !cursor.starts_with(b"openssh-key-v1\0") {
+        return Err(crate::Error::SshProtocol("invalid OpenSSH private key header".into()));
+    }
+    cursor = &cursor[b"openssh-key-v1\0".len()..];
+
+    let ciphername = read_ssh_string(&mut cursor)?;
+    let kdfname = read_ssh_string(&mut cursor)?;
+
+    Ok(ciphername != b"none" || kdfname != b"none")
+}
+
+fn read_ssh_string<'a>(cursor: &mut &'a [u8]) -> crate::Result<&'a [u8]> {
+    if cursor.len() < 4 {
+        return Err(crate::Error::SshProtocol("invalid OpenSSH private key payload: truncated string length".into()));
+    }
+
+    let len = u32::from_be_bytes([cursor[0], cursor[1], cursor[2], cursor[3]]) as usize;
+    *cursor = &cursor[4..];
+
+    if cursor.len() < len {
+        return Err(crate::Error::SshProtocol("invalid OpenSSH private key payload: truncated string body".into()));
+    }
+
+    let (value, rest) = cursor.split_at(len);
+    *cursor = rest;
+    Ok(value)
+}
+
+fn decode_base64(input: &[u8]) -> crate::Result<Vec<u8>> {
+    fn sextet(byte: u8) -> Option<u8> {
+        match byte {
+            b'A'..=b'Z' => Some(byte - b'A'),
+            b'a'..=b'z' => Some(byte - b'a' + 26),
+            b'0'..=b'9' => Some(byte - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+
+    let filtered = input
+        .iter()
+        .copied()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .collect::<Vec<_>>();
+
+    if filtered.len() % 4 != 0 {
+        return Err(crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64 length".into()));
+    }
+
+    let mut out = Vec::with_capacity(filtered.len() / 4 * 3);
+    for chunk in filtered.chunks_exact(4) {
+        let a = sextet(chunk[0])
+            .ok_or_else(|| crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into()))?;
+        let b = sextet(chunk[1])
+            .ok_or_else(|| crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into()))?;
+
+        let c = match chunk[2] {
+            b'=' => None,
+            byte => Some(sextet(byte).ok_or_else(|| {
+                crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into())
+            })?),
+        };
+        let d = match chunk[3] {
+            b'=' => None,
+            byte => Some(sextet(byte).ok_or_else(|| {
+                crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into())
+            })?),
+        };
+
+        out.push((a << 2) | (b >> 4));
+        if let Some(c) = c {
+            out.push(((b & 0x0f) << 4) | (c >> 2));
+            if let Some(d) = d {
+                out.push(((c & 0x03) << 6) | d);
+            }
+        }
+    }
+
+    Ok(out)
 }
 
 #[derive(Debug, Clone)]

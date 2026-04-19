@@ -208,7 +208,7 @@ impl super::Renderer for HumanRender {
     type State = State;
     type Event = Event;
 
-    fn handle(&mut self, event: &Self::Event, _state: &mut Self::State) -> crate::Result {
+    fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result {
         let style_inp = indicatif::ProgressStyle::with_template(
             "{spinner} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}",
         )
@@ -241,16 +241,26 @@ impl super::Renderer for HumanRender {
             Event::HostConnect { host_id, error } => {
                 if let Some(error) = error {
                     self.bars.entry(host_id.clone()).and_modify(|pb| {
-                        pb.set_message(error.clone());
                         pb.set_style(style_fail.clone());
+                        pb.abandon_with_message(error.clone());
                     });
                 }
             }
             Event::HostComplete { host_id } => {
                 self.println(format!("Host {} completed the execution", host_string(host_id)).as_str())?;
                 self.bars.entry(host_id.clone()).and_modify(|pb| {
-                    pb.set_style(style_succ);
-                    pb.finish_with_message("Done");
+                    if let Some(host) = state.hosts.get(host_id)
+                        && host
+                            .tasks
+                            .iter()
+                            .any(|task| matches!(task.status, StateTaskStatus::Skipped(_) | StateTaskStatus::Fail(_)))
+                    {
+                        pb.set_style(style_fail);
+                        pb.abandon_with_message("Fail");
+                    } else {
+                        pb.set_style(style_succ);
+                        pb.finish_with_message("Done");
+                    }
                 });
             }
             Event::TaskSchedule { host_id, task_id } => {
@@ -266,11 +276,11 @@ impl super::Renderer for HumanRender {
                         "Task {} skipped on {}: {}",
                         task_string(task_id),
                         host_string(host_id),
-                        err_string(reason.clone().unwrap_or("unknown reason".to_string()))
+                        warn_string(reason.clone().unwrap_or("unknown reason".to_string()))
                     )
                     .as_str(),
                 )?;
-                self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
+                // self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
             }
             Event::TaskSuccess { host_id, task_id } => {
                 self.println(format!("Task {} succeeded on {}", succ_string(task_id), host_string(host_id)).as_str())?;
@@ -285,11 +295,7 @@ impl super::Renderer for HumanRender {
                     format!("Task {} failed on {}: {}", task_string(task_id), host_string(host_id), err_string(error))
                         .as_str(),
                 )?;
-                self.bars.entry(host_id.clone()).and_modify(|pb| {
-                    pb.inc(1);
-                    pb.set_style(style_fail);
-                    pb.abandon_with_message("Fail");
-                });
+                // self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
             }
         }
         Ok(())
@@ -346,6 +352,10 @@ impl super::Renderer for JsonReder {
 
 fn err_string(err: impl Into<String>) -> String {
     Style::new().red().apply_to(err.into()).to_string()
+}
+
+fn warn_string(warn: impl Into<String>) -> String {
+    Style::new().yellow().apply_to(warn.into()).to_string()
 }
 
 fn succ_string(succ: impl Into<String>) -> String {

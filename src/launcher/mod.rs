@@ -25,11 +25,10 @@ impl<R: Send> RunningLauncher<R> {
 
 impl Launcher {
     pub fn prepare(plan: &Plan) -> crate::Result<Self> {
-        let requests = plan
-            .hosts
-            .iter()
-            .flat_map(|host| host.secret_requests())
-            .collect::<Vec<_>>();
+        let requests = plan.hosts.iter().try_fold(Vec::new(), |mut requests, host| {
+            requests.extend(host.secret_requests()?);
+            Ok::<_, crate::Error>(requests)
+        })?;
         let mut collector = secrets::SecretCollector::new(secrets::TtySecretPrompter);
         let secrets = Arc::new(collector.collect(&requests)?);
 
@@ -64,7 +63,9 @@ impl Launcher {
 
         report.join()?;
         for handle in handles {
-            handle.join().map_err(|_| crate::Error::Reporter("thread panicked".into()))??;
+            handle
+                .join()
+                .map_err(|_| crate::Error::Reporter("thread panicked".into()))??;
         }
 
         Ok(())
