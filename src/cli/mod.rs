@@ -26,10 +26,7 @@ pub fn setup_commands() {
                 (10, Some(e.to_string()))
             }
         }
-        Err(e) => {
-            dbg!(&e);
-            (1, Some(e.to_string()))
-        }
+        Err(e) => (1, Some(e.to_string())),
     };
 
     if let Some(message) = message {

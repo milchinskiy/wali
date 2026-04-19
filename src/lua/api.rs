@@ -1,4 +1,5 @@
 use mlua::{Lua, LuaSerdeExt, String as LuaString, Table, Value as LuaValue};
+use rand::RngExt;
 
 use crate::executor::{
     Backend, CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams,
@@ -23,8 +24,32 @@ pub fn build_task_ctx(
     }
 
     ctx.set("host", build_host_table(lua, host_id, transport, backend)?)?;
+    ctx.set("rand", build_rand_table(lua)?)?;
+    ctx.set(
+        "sleep_ms",
+        lua.create_function(|_, s: u64| {
+            std::thread::sleep(std::time::Duration::from_millis(s));
+            Ok(())
+        })?,
+    )?;
 
     Ok(ctx)
+}
+
+fn build_rand_table(lua: &Lua) -> mlua::Result<Table> {
+    let table = lua.create_table()?;
+
+    table.set(
+        "irange",
+        lua.create_function(|_, (min, max): (u64, u64)| Ok(rand::rng().random_range(min..max)))?,
+    )?;
+    table
+        .set("frange", lua.create_function(|_, (min, max): (f64, f64)| Ok(rand::rng().random_range(min..max)))?)?;
+    table.set("ratio", lua.create_function(|_, (numerator, denominator): (u32, u32)| {
+        Ok(rand::rng().random_ratio(numerator, denominator))
+    })?)?;
+
+    Ok(table)
 }
 
 fn build_task_table(lua: &Lua, task: &TaskInstance) -> mlua::Result<Table> {

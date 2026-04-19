@@ -3,6 +3,10 @@ use std::thread;
 
 pub mod apply;
 
+pub const BRAILLE: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ";
+pub const BRAILLE_SUCCESS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✓";
+pub const BRAILLE_FAIL: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✗";
+
 pub enum RenderKind {
     Human,
     Json { pretty: bool },

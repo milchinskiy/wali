@@ -1,3 +1,8 @@
+use std::collections::BTreeMap;
+use std::time::Duration;
+
+use console::Style;
+
 use super::{Layout, RenderKind};
 
 #[derive(Debug)]
@@ -152,7 +157,7 @@ pub struct ApplyLayout {
 impl ApplyLayout {
     pub fn new(kind: RenderKind) -> Self {
         let render: Box<dyn super::Renderer<State = State, Event = Event>> = match kind {
-            RenderKind::Human => Box::new(HumanRender),
+            RenderKind::Human => Box::new(HumanRender::default()),
             RenderKind::Text => Box::new(TextRender),
             RenderKind::Json { pretty } => Box::new(JsonReder::new(pretty)),
         };
@@ -177,18 +182,121 @@ impl Layout for ApplyLayout {
     }
 }
 
-struct HumanRender;
+struct HumanRender {
+    multi_progress: indicatif::MultiProgress,
+    bars: BTreeMap<String, indicatif::ProgressBar>,
+}
+
+impl Default for HumanRender {
+    fn default() -> Self {
+        let multi_progress = indicatif::MultiProgress::with_draw_target(indicatif::ProgressDrawTarget::stderr());
+        multi_progress.set_alignment(indicatif::MultiProgressAlignment::Bottom);
+        Self {
+            multi_progress,
+            bars: BTreeMap::new(),
+        }
+    }
+}
+
+impl HumanRender {
+    fn println<S: AsRef<str>>(&self, msg: S) -> crate::Result {
+        Ok(self.multi_progress.println(msg)?)
+    }
+}
+
 impl super::Renderer for HumanRender {
     type State = State;
     type Event = Event;
 
-    fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result {
-        println!("{event:?}");
+    fn handle(&mut self, event: &Self::Event, _state: &mut Self::State) -> crate::Result {
+        let style_inp = indicatif::ProgressStyle::with_template(
+            "{spinner} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}",
+        )
+        .unwrap()
+        .progress_chars("#>-")
+        .tick_chars(super::BRAILLE);
+        let style_fail = indicatif::ProgressStyle::with_template(
+            "{spinner:.red.bright} {prefix:20!.bold.cyan} {bar:40.red.dim} {pos:.white.bright}/{len:.dim} {wide_msg:.red}",
+        )
+        .unwrap()
+        .progress_chars("#X-")
+        .tick_chars(super::BRAILLE_FAIL);
+        let style_succ = indicatif::ProgressStyle::with_template(
+            "{spinner:.green.bright} {prefix:20!.bold.cyan} {bar:40.green.dim} {pos:.white.bright}/{len:.dim} {wide_msg:.green}",
+        )
+        .unwrap()
+        .progress_chars("#>-")
+        .tick_chars(super::BRAILLE_SUCCESS);
+
+        match event {
+            Event::HostSchedule { host_id, tasks_count } => {
+                let pb = self.multi_progress.add(
+                    indicatif::ProgressBar::new(u64::from(*tasks_count))
+                        .with_style(style_inp)
+                        .with_prefix(host_id.clone()),
+                );
+                pb.enable_steady_tick(Duration::from_millis(90));
+                self.bars.insert(host_id.clone(), pb);
+            }
+            Event::HostConnect { host_id, error } => {
+                if let Some(error) = error {
+                    self.bars.entry(host_id.clone()).and_modify(|pb| {
+                        pb.set_message(error.clone());
+                        pb.set_style(style_fail.clone());
+                    });
+                }
+            }
+            Event::HostComplete { host_id } => {
+                self.println(format!("Host {} completed the execution", host_string(host_id)).as_str())?;
+                self.bars.entry(host_id.clone()).and_modify(|pb| {
+                    pb.set_style(style_succ);
+                    pb.finish_with_message("Done");
+                });
+            }
+            Event::TaskSchedule { host_id, task_id } => {
+                self.println(format!("Task {} scheduled on {}", task_string(task_id), host_string(host_id)).as_str())?;
+            }
+            Event::TaskSkip {
+                host_id,
+                task_id,
+                reason,
+            } => {
+                self.println(
+                    format!(
+                        "Task {} skipped on {}: {}",
+                        task_string(task_id),
+                        host_string(host_id),
+                        err_string(reason.clone().unwrap_or("unknown reason".to_string()))
+                    )
+                    .as_str(),
+                )?;
+                self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
+            }
+            Event::TaskSuccess { host_id, task_id } => {
+                self.println(format!("Task {} succeeded on {}", succ_string(task_id), host_string(host_id)).as_str())?;
+                self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
+            }
+            Event::TaskFail {
+                host_id,
+                task_id,
+                error,
+            } => {
+                self.println(
+                    format!("Task {} failed on {}: {}", task_string(task_id), host_string(host_id), err_string(error))
+                        .as_str(),
+                )?;
+                self.bars.entry(host_id.clone()).and_modify(|pb| {
+                    pb.inc(1);
+                    pb.set_style(style_fail);
+                    pb.abandon_with_message("Fail");
+                });
+            }
+        }
         Ok(())
     }
 
     fn end(&mut self, state: &Self::State) -> crate::Result {
-        println!("{state:#?}");
+        println!("final words");
         Ok(())
     }
 }
@@ -224,14 +332,30 @@ impl super::Renderer for JsonReder {
         Ok(())
     }
 
-    fn end(&mut self, _state: &Self::State) -> crate::Result {
+    fn end(&mut self, state: &Self::State) -> crate::Result {
         println!(
             "{}",
             match self.pretty {
-                true => serde_json::to_string_pretty(_state)?,
-                false => serde_json::to_string(_state)?,
+                true => serde_json::to_string_pretty(state)?,
+                false => serde_json::to_string(state)?,
             }
         );
         Ok(())
     }
+}
+
+fn err_string(err: impl Into<String>) -> String {
+    Style::new().red().apply_to(err.into()).to_string()
+}
+
+fn succ_string(succ: impl Into<String>) -> String {
+    Style::new().green().apply_to(succ.into()).to_string()
+}
+
+fn host_string(host: impl Into<String>) -> String {
+    Style::new().cyan().apply_to(host.into()).to_string()
+}
+
+fn task_string(task: impl Into<String>) -> String {
+    Style::new().yellow().apply_to(task.into()).to_string()
 }

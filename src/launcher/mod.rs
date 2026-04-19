@@ -52,16 +52,19 @@ impl Launcher {
         }
     }
 
-    pub fn apply(self, report: Reporter<ApplyLayout>) -> RunningLauncher<crate::Result> {
-        RunningLauncher {
-            handles: self
-                .workers
-                .into_iter()
-                .map(|worker| {
-                    let sender = report.sender();
-                    std::thread::spawn(move || worker.apply(sender))
-                })
-                .collect(),
-        }
+    pub fn apply(self, report: Reporter<ApplyLayout>) {
+        let handles = self
+            .workers
+            .into_iter()
+            .map(|worker| {
+                let sender = report.sender();
+                std::thread::spawn(move || worker.apply(sender))
+            })
+            .collect::<Vec<_>>();
+
+        report.join().unwrap();
+        handles.into_iter().for_each(|handle| {
+            let _ = handle.join();
+        });
     }
 }

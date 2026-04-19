@@ -28,15 +28,25 @@ impl Module {
         }
     }
 
-    pub fn validate(&self, ctx: mlua::Table, args: mlua::Value) -> crate::Result<bool> {
+    pub fn validate(&self, ctx: mlua::Table, args: mlua::Value) -> crate::Result {
         if self.module.contains_key("validate")? {
-            Ok(self.module.get::<mlua::Function>("validate")?.call((ctx, args))?)
+            match self.module.get::<mlua::Function>("validate")?.call((ctx, args)) {
+                Ok((true, _)) => Ok(()),
+                Ok((false, None)) => Err(crate::Error::ModuleValidation("validation failed".to_string())),
+                Ok((false, Some(reason))) => Err(crate::Error::ModuleValidation(reason)),
+                Err(error) => Err(error.into()),
+            }
         } else {
-            Ok(true)
+            Ok(())
         }
     }
 
-    pub fn apply(&self, ctx: mlua::Table, args: mlua::Value) -> crate::Result<bool> {
-        Ok(self.module.get::<mlua::Function>("apply")?.call((ctx, args))?)
+    pub fn apply(&self, ctx: mlua::Table, args: mlua::Value) -> crate::Result {
+        match self.module.get::<mlua::Function>("apply")?.call((ctx, args)) {
+            Ok((true, _)) => Ok(()),
+            Ok((false, None)) => Err(crate::Error::ModuleApply("apply failed".to_string())),
+            Ok((false, Some(reason))) => Err(crate::Error::ModuleApply(reason)),
+            Err(error) => Err(error.into()),
+        }
     }
 }

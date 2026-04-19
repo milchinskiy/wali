@@ -63,12 +63,7 @@ impl Worker {
                 bound,
             )?;
 
-            if !module.validate(ctx, args)? {
-                return Err(crate::Error::Lua(mlua::Error::external(format!(
-                    "module '{}' validate(ctx, args) returned false for task '{}'",
-                    task.module, task.id
-                ))));
-            }
+            module.validate(ctx, args)?;
         }
 
         Ok(())
@@ -119,12 +114,7 @@ impl Worker {
                     task,
                     bound.clone(),
                 )?;
-                if !module.validate(validate_ctx, validate_args)? {
-                    return Err(crate::Error::Lua(mlua::Error::external(format!(
-                        "module '{}' validate(ctx, args) returned false for task '{}'",
-                        task.module, task.id
-                    ))));
-                }
+                module.validate(validate_ctx, validate_args)?;
 
                 let apply_args = module.normalize_args(self.lua.lua(), &task.args)?;
                 let apply_ctx = crate::lua::api::build_task_ctx(
@@ -134,14 +124,7 @@ impl Worker {
                     task,
                     bound,
                 )?;
-                if !module.apply(apply_ctx, apply_args)? {
-                    return Err(crate::Error::Lua(mlua::Error::external(format!(
-                        "module '{}' apply(ctx, args) returned false for task '{}'",
-                        task.module, task.id
-                    ))));
-                }
-
-                Ok(())
+                module.apply(apply_ctx, apply_args)
             })();
 
             match result {

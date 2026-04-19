@@ -20,11 +20,10 @@ fn test_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
 
     let manifest = wali::manifest::load_from_file(manifest.as_path())?;
     let plan = wali::plan::compile(manifest)?;
-    dbg!(&plan);
 
     let launcher = wali::launcher::Launcher::prepare(&plan).unwrap();
     let report = wali::report::Reporter::new(wali::report::apply::ApplyLayout::new(wali::report::RenderKind::Human));
-    let _ = launcher.apply(report).join();
+    launcher.apply(report);
 
     Ok(())
 }
