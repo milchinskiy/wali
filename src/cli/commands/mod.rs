@@ -39,8 +39,8 @@ fn opt_pretty_json<'a>() -> ap::OptSpec<'a, Context> {
         ctx.json = true;
         ctx.pretty = true;
     })
-    .short('p')
-    .long("pretty")
+    .short('J')
+    .long("json-pretty")
     .help("Pretty print JSON")
     .group("json")
 }

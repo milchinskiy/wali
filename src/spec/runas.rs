@@ -1,7 +1,5 @@
 use std::collections::BTreeSet;
 
-use serde::ser::SerializeStruct;
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunAsVia {

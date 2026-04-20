@@ -80,13 +80,13 @@ pub trait Renderer: Send {
     type State;
     type Event;
 
-    fn begin(&mut self, state: &Self::State) -> crate::Result {
+    fn begin(&mut self, _state: &Self::State) -> crate::Result {
         Ok(())
     }
 
     fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result;
 
-    fn end(&mut self, state: &Self::State) -> crate::Result {
+    fn end(&mut self, _state: &Self::State) -> crate::Result {
         Ok(())
     }
 }

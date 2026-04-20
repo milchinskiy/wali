@@ -44,7 +44,17 @@ struct State {
 }
 
 #[derive(Debug, serde::Serialize)]
+enum HostStatus {
+    Ok,
+    Error(String),
+}
+
+#[derive(Debug, serde::Serialize)]
 struct StateHost {
+    scheduled_at: String,
+    connected_at: Option<String>,
+    completed_at: Option<String>,
+    status: HostStatus,
     tasks: Vec<StateTask>,
 }
 
@@ -108,9 +118,22 @@ impl State {
                 let _ = self.hosts.insert(
                     host_id.clone(),
                     StateHost {
+                        scheduled_at: chrono::Utc::now().to_rfc3339(),
+                        connected_at: None,
+                        completed_at: None,
+                        status: HostStatus::Ok,
                         tasks: Vec::with_capacity(*tasks_count as usize),
                     },
                 );
+            }
+            Event::HostConnect { host_id, error } => {
+                let host = get_host(host_id, &mut self.hosts)?;
+                host.status = error.clone().map_or(HostStatus::Ok, HostStatus::Error);
+                host.connected_at = Some(chrono::Utc::now().to_rfc3339());
+            }
+            Event::HostComplete { host_id } => {
+                let host = get_host(host_id, &mut self.hosts)?;
+                host.completed_at = Some(chrono::Utc::now().to_rfc3339());
             }
             Event::TaskSchedule { host_id, task_id } => {
                 let host = get_host(host_id, &mut self.hosts)?;
@@ -142,7 +165,6 @@ impl State {
                 let task = get_task(task_id, &mut host.tasks)?;
                 task.status = StateTaskStatus::Fail(error.clone());
             }
-            _ => (),
         }
 
         Ok(())
@@ -202,6 +224,116 @@ impl HumanRender {
     fn println<S: AsRef<str>>(&self, msg: S) -> crate::Result {
         Ok(self.multi_progress.println(msg)?)
     }
+
+    fn task_scheduled(&mut self, host_id: &str, task_id: &str) -> crate::Result {
+        self.println(format!("Task {} scheduled on {}", task_string(task_id), host_string(host_id)).as_str())?;
+        Ok(())
+    }
+
+    fn task_skipped(&mut self, host_id: &str, task_id: &str, reason: Option<String>) -> crate::Result {
+        self.bars.entry(host_id.to_string()).and_modify(|pb| pb.inc(1));
+        self.println(
+            format!(
+                "Task {} skipped on {}: {}",
+                task_string(task_id),
+                host_string(host_id),
+                warn_string(reason.unwrap_or("unknown reason".to_string()))
+            )
+            .as_str(),
+        )?;
+        Ok(())
+    }
+
+    fn task_success(&mut self, host_id: &str, task_id: &str) -> crate::Result {
+        self.bars.entry(host_id.to_string()).and_modify(|pb| pb.inc(1));
+        self.println(format!("Task {} succeeded on {}", task_string(task_id), host_string(host_id)).as_str())?;
+        Ok(())
+    }
+
+    fn task_fail(&mut self, host_id: &str, task_id: &str, error: String) -> crate::Result {
+        self.bars.entry(host_id.to_string()).and_modify(|pb| pb.inc(1));
+        self.println(
+            format!("Task {} failed on {}: {}", task_string(task_id), host_string(host_id), err_string(error)).as_str(),
+        )?;
+        Ok(())
+    }
+
+    fn host_schedule(&mut self, host_id: &str, tasks_count: u32) -> crate::Result {
+        let pb = indicatif::ProgressBar::new(u64::from(tasks_count))
+            .with_style(
+                indicatif::ProgressStyle::with_template(
+                    "{spinner} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}",
+                )
+                .map_err(|_| crate::Error::Reporter("Failed to set style".into()))?
+                .progress_chars("#>-")
+                .tick_chars(super::BRAILLE),
+            )
+            .with_prefix(host_id.to_string());
+
+        let pb = self.multi_progress.add(pb);
+        pb.enable_steady_tick(Duration::from_millis(90));
+        self.bars.insert(host_id.to_string(), pb);
+        Ok(())
+    }
+
+    fn host_connect(&mut self, host_id: &str, error: Option<String>) -> crate::Result {
+        if let Some(error) = error {
+            self.println(
+                format!("Host {} failed to connect: {}", host_string(host_id), err_string(error.clone())).as_str(),
+            )?;
+            let pb = self
+                .bars
+                .get_mut(host_id)
+                .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
+            pb.set_style(pb.style().tick_chars(super::BRAILLE_FAIL).template("{spinner:.red.bright} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}").map_err(|_| crate::Error::Reporter("Failed to create progress style".to_string()))?);
+            pb.abandon_with_message(err_string(error));
+        } else {
+            self.println(format!("Host {} connected", host_string(host_id)).as_str())?;
+            self.bars
+                .entry(host_id.to_string())
+                .and_modify(|pb| pb.set_message(succ_string("connected")));
+        }
+        Ok(())
+    }
+
+    fn host_complete(&mut self, host_id: &str, state: &State) -> crate::Result {
+        self.println(format!("Host {} complete", host_string(host_id)).as_str())?;
+        let failed = state.hosts.get(host_id).map(|host| host.failed() > 0).unwrap_or(false);
+        let pb = self
+            .bars
+            .get_mut(host_id)
+            .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
+        let style = if failed {
+            pb.style()
+                .tick_chars(super::BRAILLE_FAIL)
+                .template("{spinner:.red.bright} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}")
+                .map_err(|_| crate::Error::Reporter("Failed to set style".into()))?
+        } else {
+            pb.style()
+                .tick_chars(super::BRAILLE_SUCCESS)
+                .template("{spinner:.green.bright} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}")
+                .map_err(|_| crate::Error::Reporter("Failed to set style".into()))?
+        };
+        pb.set_style(style);
+        pb.finish();
+        Ok(())
+    }
+
+    fn update_progress(&mut self, host_id: &str, ok: usize, fail: usize, skip: usize) {
+        self.bars.entry(host_id.to_string()).and_modify(|pb| {
+            let mut result = Vec::new();
+            if fail > 0 {
+                result.push(err_string(format!("{fail} fail")));
+            }
+            if skip > 0 {
+                result.push(warn_string(format!("{skip} skip")));
+            }
+            if ok > 0 {
+                result.push(succ_string(format!("{ok} ok")));
+            }
+            pb.set_message(result.join(", "));
+        });
+    }
 }
 
 impl super::Renderer for HumanRender {
@@ -209,100 +341,52 @@ impl super::Renderer for HumanRender {
     type Event = Event;
 
     fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result {
-        let style_inp = indicatif::ProgressStyle::with_template(
-            "{spinner} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}",
-        )
-        .unwrap()
-        .progress_chars("#>-")
-        .tick_chars(super::BRAILLE);
-        let style_fail = indicatif::ProgressStyle::with_template(
-            "{spinner:.red.bright} {prefix:20!.bold.cyan} {bar:40.red.dim} {pos:.white.bright}/{len:.dim} {wide_msg:.red}",
-        )
-        .unwrap()
-        .progress_chars("#X-")
-        .tick_chars(super::BRAILLE_FAIL);
-        let style_succ = indicatif::ProgressStyle::with_template(
-            "{spinner:.green.bright} {prefix:20!.bold.cyan} {bar:40.green.dim} {pos:.white.bright}/{len:.dim} {wide_msg:.green}",
-        )
-        .unwrap()
-        .progress_chars("#>-")
-        .tick_chars(super::BRAILLE_SUCCESS);
-
         match event {
             Event::HostSchedule { host_id, tasks_count } => {
-                let pb = self.multi_progress.add(
-                    indicatif::ProgressBar::new(u64::from(*tasks_count))
-                        .with_style(style_inp)
-                        .with_prefix(host_id.clone()),
-                );
-                pb.enable_steady_tick(Duration::from_millis(90));
-                self.bars.insert(host_id.clone(), pb);
+                self.host_schedule(host_id, *tasks_count)?;
             }
             Event::HostConnect { host_id, error } => {
-                if let Some(error) = error {
-                    self.bars.entry(host_id.clone()).and_modify(|pb| {
-                        pb.set_style(style_fail.clone());
-                        pb.abandon_with_message(error.clone());
-                    });
-                }
+                self.host_connect(host_id, error.clone())?;
             }
             Event::HostComplete { host_id } => {
-                self.println(format!("Host {} completed the execution", host_string(host_id)).as_str())?;
-                self.bars.entry(host_id.clone()).and_modify(|pb| {
-                    if let Some(host) = state.hosts.get(host_id)
-                        && host
-                            .tasks
-                            .iter()
-                            .any(|task| matches!(task.status, StateTaskStatus::Skipped(_) | StateTaskStatus::Fail(_)))
-                    {
-                        pb.set_style(style_fail);
-                        pb.abandon_with_message("Fail");
-                    } else {
-                        pb.set_style(style_succ);
-                        pb.finish_with_message("Done");
-                    }
-                });
+                self.host_complete(host_id, state)?;
             }
             Event::TaskSchedule { host_id, task_id } => {
-                self.println(format!("Task {} scheduled on {}", task_string(task_id), host_string(host_id)).as_str())?;
+                self.task_scheduled(host_id, task_id)?;
             }
             Event::TaskSkip {
                 host_id,
                 task_id,
                 reason,
             } => {
-                self.println(
-                    format!(
-                        "Task {} skipped on {}: {}",
-                        task_string(task_id),
-                        host_string(host_id),
-                        warn_string(reason.clone().unwrap_or("unknown reason".to_string()))
-                    )
-                    .as_str(),
-                )?;
-                // self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
+                self.task_skipped(host_id, task_id, reason.clone())?;
+                let host = state
+                    .hosts
+                    .get_mut(host_id)
+                    .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
+                self.update_progress(host_id, host.successes(), host.failed(), host.skipped());
             }
             Event::TaskSuccess { host_id, task_id } => {
-                self.println(format!("Task {} succeeded on {}", succ_string(task_id), host_string(host_id)).as_str())?;
-                self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
+                self.task_success(host_id, task_id)?;
+                let host = state
+                    .hosts
+                    .get_mut(host_id)
+                    .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
+                self.update_progress(host_id, host.successes(), host.failed(), host.skipped());
             }
             Event::TaskFail {
                 host_id,
                 task_id,
                 error,
             } => {
-                self.println(
-                    format!("Task {} failed on {}: {}", task_string(task_id), host_string(host_id), err_string(error))
-                        .as_str(),
-                )?;
-                // self.bars.entry(host_id.clone()).and_modify(|pb| pb.inc(1));
+                self.task_fail(host_id, task_id, error.clone())?;
+                let host = state
+                    .hosts
+                    .get_mut(host_id)
+                    .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
+                self.update_progress(host_id, host.successes(), host.failed(), host.skipped());
             }
         }
-        Ok(())
-    }
-
-    fn end(&mut self, state: &Self::State) -> crate::Result {
-        println!("final words");
         Ok(())
     }
 }
@@ -312,12 +396,48 @@ impl super::Renderer for TextRender {
     type State = State;
     type Event = Event;
 
-    fn handle(&mut self, _event: &Self::Event, _state: &mut Self::State) -> crate::Result {
-        todo!();
-    }
-
-    fn end(&mut self, state: &Self::State) -> crate::Result {
-        todo!();
+    fn handle(&mut self, event: &Self::Event, _state: &mut Self::State) -> crate::Result {
+        match event {
+            Event::HostSchedule { host_id, tasks_count } => {
+                println!("Host '{}' scheduled {} task(s)", host_id, tasks_count);
+            }
+            Event::HostConnect { host_id, error } => {
+                if let Some(error) = error {
+                    println!("Host '{}' failed to connect: '{}'", host_id, error);
+                } else {
+                    println!("Host '{}' connected", host_id);
+                }
+            }
+            Event::HostComplete { host_id } => {
+                println!("Host '{}' execution complete", host_id);
+            }
+            Event::TaskSchedule { host_id, task_id } => {
+                println!("Task '{}' scheduled on '{}'", task_id, host_id);
+            }
+            Event::TaskSuccess { host_id, task_id } => {
+                println!("Task '{}' succeeded on '{}'", task_id, host_id);
+            }
+            Event::TaskSkip {
+                host_id,
+                task_id,
+                reason,
+            } => {
+                println!(
+                    "Task '{}' skipped on '{}': {}",
+                    task_id,
+                    host_id,
+                    reason.clone().unwrap_or("unknown reason".to_string())
+                );
+            }
+            Event::TaskFail {
+                host_id,
+                task_id,
+                error,
+            } => {
+                println!("Task '{}' failed on '{}': '{}'", task_id, host_id, error);
+            }
+        }
+        Ok(())
     }
 }
 

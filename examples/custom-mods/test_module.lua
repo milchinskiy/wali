@@ -12,7 +12,6 @@ return {
 	},
 
 	validate = function(ctx, args)
-		-- print("arch", ctx.host.facts.arch())
 		if ctx.rand.ratio(1, 20) then
 			return false, "some error has occured during validation"
 		end
@@ -20,7 +19,7 @@ return {
 	end,
 
 	apply = function(ctx, args)
-		ctx.sleep_ms(ctx.rand.irange(200, 5000))
+		ctx.sleep_ms(ctx.rand.irange(100, 2000))
 		if ctx.rand.ratio(1, 20) then
 			return false, "some error has occured during execution"
 		end

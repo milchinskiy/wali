@@ -1,5 +1,9 @@
+use std::io::IsTerminal;
+
 use crate::cli::context::Context;
 use rust_args_parser as ap;
+use wali::report::apply::ApplyLayout;
+use wali::report::{RenderKind, Reporter};
 
 pub fn apply<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new("apply")
@@ -25,7 +29,15 @@ fn apply_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
     let plan = wali::plan::compile(manifest)?;
 
     let launcher = wali::launcher::Launcher::prepare(&plan).unwrap();
-    let report = wali::report::Reporter::new(wali::report::apply::ApplyLayout::new(wali::report::RenderKind::Human));
+    let report_kind = if ctx.json {
+        RenderKind::Json { pretty: ctx.pretty }
+    } else if std::io::stdout().is_terminal() {
+        RenderKind::Human
+    } else {
+        RenderKind::Text
+    };
+
+    let report = Reporter::new(ApplyLayout::new(report_kind));
     launcher.apply(report)?;
 
     Ok(())
