@@ -61,11 +61,27 @@ impl Launcher {
             })
             .collect::<Vec<_>>();
 
-        report.join()?;
+        let mut worker_error = None;
         for handle in handles {
-            handle
-                .join()
-                .map_err(|_| crate::Error::Reporter("thread panicked".into()))??;
+            match handle.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    if worker_error.is_none() {
+                        worker_error = Some(error);
+                    }
+                }
+                Err(_) => {
+                    if worker_error.is_none() {
+                        worker_error = Some(crate::Error::Reporter("worker thread panicked".into()));
+                    }
+                }
+            }
+        }
+
+        report.join()?;
+
+        if let Some(error) = worker_error {
+            return Err(error);
         }
 
         Ok(())

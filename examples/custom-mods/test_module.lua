@@ -1,4 +1,5 @@
 local apply_result = require("wali.api").result.apply
+local validation_result = require("wali.api").result.validation
 
 return {
 	name = "test module",
@@ -22,7 +23,7 @@ return {
 
 	validate = function(ctx, args)
 		if ctx.rand.ratio(1, 20) then
-			return { ok = false, message = "some error has occured during validation" }
+			return validation_result():fail("some error has occured during validation"):build()
 		end
 	end,
 
@@ -30,7 +31,7 @@ return {
 		local result = apply_result()
 		ctx.sleep_ms(ctx.rand.irange(100, 1000))
 		if ctx.rand.ratio(1, 20) then
-            error("some error has occured during apply")
+			error("some error has occured during apply")
 		end
 		-- print("os", ctx.host.facts.os())
 		for _, v in ipairs({ args.source, args.target }) do

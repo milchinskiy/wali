@@ -107,14 +107,14 @@ fn get_host<'a>(
 ) -> crate::Result<&'a mut StateHost> {
     hosts
         .get_mut(id)
-        .ok_or(crate::Error::Reporter(format!("host {id} not found")))
+        .ok_or_else(|| crate::Error::Reporter(format!("host {id} not found")))
 }
 
 fn get_task<'a>(id: &'a str, tasks: &'a mut [StateTask]) -> crate::Result<&'a mut StateTask> {
     tasks
         .iter_mut()
         .find(|task| task.id == id)
-        .ok_or(crate::Error::Reporter(format!("task {id} not found")))
+        .ok_or_else(|| crate::Error::Reporter(format!("task {id} not found")))
 }
 
 impl State {
@@ -204,6 +204,10 @@ impl ApplyLayout {
 impl Layout for ApplyLayout {
     type Event = Event;
 
+    fn begin(&mut self) -> crate::Result {
+        self.render.begin(&self.state)
+    }
+
     fn handle(&mut self, event: Self::Event) -> crate::Result {
         self.state.apply(&event)?;
         self.render.handle(&event, &mut self.state)
@@ -258,13 +262,19 @@ impl HumanRender {
         self.bars.entry(host_id.to_string()).and_modify(|pb| pb.inc(1));
 
         let mut summary = String::new();
-        let _ = writeln!(&mut summary, "Task {} completed on {}", task_string(task_id), host_string(host_id));
+        let state = if result.changed() {
+            warn_string("changed")
+        } else {
+            succ_string("unchanged")
+        };
+        let _ =
+            writeln!(&mut summary, "Task {} completed on {}: {}", task_string(task_id), host_string(host_id), state);
         if let Some(msg) = &result.message
             && !msg.is_empty()
         {
             let _ = writeln!(&mut summary, "{}", msg);
         }
-        if result.changed() && !result.changes.is_empty() {
+        if !result.changes.is_empty() {
             for change in &result.changes {
                 let _ = match &change.kind {
                     ChangeKind::Unchanged => {

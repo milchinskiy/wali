@@ -28,7 +28,7 @@ fn apply_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
     let manifest = wali::manifest::load_from_file(manifest.as_path())?;
     let plan = wali::plan::compile(manifest)?;
 
-    let launcher = wali::launcher::Launcher::prepare(&plan).unwrap();
+    let launcher = wali::launcher::Launcher::prepare(&plan)?;
     let report_kind = if ctx.json {
         RenderKind::Json { pretty: ctx.pretty }
     } else if std::io::stdout().is_terminal() {
