@@ -38,7 +38,7 @@ impl Worker {
                 bound,
             )?;
 
-            module.validate(ctx, args)?;
+            module.validate(lua.lua(), ctx, args)?;
         }
 
         Ok(())
@@ -82,7 +82,7 @@ impl Worker {
                 continue;
             }
 
-            let result = (|| -> crate::Result {
+            let result = (|| -> crate::Result<crate::executor::ExecutionResult> {
                 let lua = self.task_runtime()?;
                 let module = lua.module_load_by_name(&task.module)?;
                 let bound = backend.bind(task.run_as.clone());
@@ -95,7 +95,7 @@ impl Worker {
                     task,
                     bound.clone(),
                 )?;
-                module.validate(validate_ctx, validate_args)?;
+                module.validate(lua.lua(), validate_ctx, validate_args)?;
 
                 let apply_args = module.normalize_args(lua.lua(), &task.args)?;
                 let apply_ctx = crate::lua::api::build_task_ctx(
@@ -105,13 +105,14 @@ impl Worker {
                     task,
                     bound,
                 )?;
-                module.apply(apply_ctx, apply_args)
+                module.apply(lua.lua(), apply_ctx, apply_args)
             })();
 
             match result {
-                Ok(()) => sender.send(Event::TaskSuccess {
+                Ok(execution) => sender.send(Event::TaskSuccess {
                     host_id: self.plan.id.clone(),
                     task_id: task.id.clone(),
+                    result: execution,
                 })?,
                 Err(error) => {
                     sender.send(Event::TaskFail {

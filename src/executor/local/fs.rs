@@ -6,7 +6,7 @@ use crate::executor::fs::{
     stat_via_commands, symlink_via_commands, write_via_commands,
 };
 use crate::executor::{
-    ChangeResult, DirEntry, DirOpts, FileMode, Fs, Metadata, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
+    DirEntry, DirOpts, ExecutionResult, FileMode, Fs, Metadata, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
     WriteOpts,
 };
 
@@ -23,19 +23,19 @@ impl Fs for LocalExecutor {
         read_via_commands(self, path)
     }
 
-    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ChangeResult, Self::Error> {
+    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ExecutionResult, Self::Error> {
         write_via_commands(self, path, content, opts)
     }
 
-    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ChangeResult, Self::Error> {
+    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ExecutionResult, Self::Error> {
         create_dir_via_commands(self, path, opts)
     }
 
-    fn remove_file(&self, path: &TargetPath) -> Result<ChangeResult, Self::Error> {
+    fn remove_file(&self, path: &TargetPath) -> Result<ExecutionResult, Self::Error> {
         remove_file_via_commands(self, path)
     }
 
-    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ChangeResult, Self::Error> {
+    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ExecutionResult, Self::Error> {
         remove_dir_via_commands(self, path, opts)
     }
 
@@ -47,19 +47,19 @@ impl Fs for LocalExecutor {
         list_dir_via_commands(self, path)
     }
 
-    fn chmod(&self, path: &TargetPath, mode: FileMode) -> Result<ChangeResult, Self::Error> {
+    fn chmod(&self, path: &TargetPath, mode: FileMode) -> Result<ExecutionResult, Self::Error> {
         chmod_via_commands(self, path, mode)
     }
 
-    fn chown(&self, path: &TargetPath, owner: Owner) -> Result<ChangeResult, Self::Error> {
+    fn chown(&self, path: &TargetPath, owner: Owner) -> Result<ExecutionResult, Self::Error> {
         chown_via_commands(self, path, owner)
     }
 
-    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ChangeResult, Self::Error> {
+    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ExecutionResult, Self::Error> {
         rename_via_commands(self, from, to, opts)
     }
 
-    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> Result<ChangeResult, Self::Error> {
+    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> Result<ExecutionResult, Self::Error> {
         symlink_via_commands(self, target, link)
     }
 

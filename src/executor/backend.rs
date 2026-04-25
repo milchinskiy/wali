@@ -133,21 +133,25 @@ impl Fs for Backend {
         path: &super::TargetPath,
         content: &[u8],
         opts: super::WriteOpts,
-    ) -> Result<super::ChangeResult, Self::Error> {
+    ) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.write(path, content, opts),
             Self::Ssh(x) => x.write(path, content, opts),
         }
     }
 
-    fn create_dir(&self, path: &super::TargetPath, opts: super::DirOpts) -> Result<super::ChangeResult, Self::Error> {
+    fn create_dir(
+        &self,
+        path: &super::TargetPath,
+        opts: super::DirOpts,
+    ) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.create_dir(path, opts),
             Self::Ssh(x) => x.create_dir(path, opts),
         }
     }
 
-    fn remove_file(&self, path: &super::TargetPath) -> Result<super::ChangeResult, Self::Error> {
+    fn remove_file(&self, path: &super::TargetPath) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.remove_file(path),
             Self::Ssh(x) => x.remove_file(path),
@@ -158,7 +162,7 @@ impl Fs for Backend {
         &self,
         path: &super::TargetPath,
         opts: super::RemoveDirOpts,
-    ) -> Result<super::ChangeResult, Self::Error> {
+    ) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.remove_dir(path, opts),
             Self::Ssh(x) => x.remove_dir(path, opts),
@@ -179,7 +183,7 @@ impl Fs for Backend {
         }
     }
 
-    fn chmod(&self, path: &super::TargetPath, mode: super::FileMode) -> Result<super::ChangeResult, Self::Error> {
+    fn chmod(&self, path: &super::TargetPath, mode: super::FileMode) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.chmod(path, mode),
             Self::Ssh(x) => x.chmod(path, mode),
@@ -190,7 +194,7 @@ impl Fs for Backend {
         &self,
         path: &super::TargetPath,
         owner: crate::spec::account::Owner,
-    ) -> Result<super::ChangeResult, Self::Error> {
+    ) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.chown(path, owner),
             Self::Ssh(x) => x.chown(path, owner),
@@ -202,7 +206,7 @@ impl Fs for Backend {
         from: &super::TargetPath,
         to: &super::TargetPath,
         opts: super::RenameOpts,
-    ) -> Result<super::ChangeResult, Self::Error> {
+    ) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.rename(from, to, opts),
             Self::Ssh(x) => x.rename(from, to, opts),
@@ -213,7 +217,7 @@ impl Fs for Backend {
         &self,
         target: &super::TargetPath,
         link: &super::TargetPath,
-    ) -> Result<super::ChangeResult, Self::Error> {
+    ) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.symlink(target, link),
             Self::Ssh(x) => x.symlink(target, link),

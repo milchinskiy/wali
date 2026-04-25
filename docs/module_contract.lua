@@ -36,26 +36,34 @@ return {
 		},
 	},
 
-	---Validate input arguments (optional)
-	---business logic can be added here to validate input arguments
-	---in context to actual host state
+	---Validate input arguments (optional). Return nil/{ ok = true } when valid.
 	---@param ctx table
 	---@param args any
-	---@return boolean result true if input arguments are valid
-	---@error string error message
+	---@return nil|{ ok: boolean, message: string? }
 	validate = function(ctx, args)
-		return true
+		-- nil means ok
+		return nil
 		-- or
-		-- error("error message")
+		-- return { ok = false, message = "error message" }
+		-- or
+		-- error("unexpected validation error")
 	end,
 
-	---Apply changes
+	---Apply desired state. Return an ExecutionResult-compatible table.
 	---@param ctx table
 	---@param args any
-	---@return boolean result true if changes were applied
+	---@return { changes: table[], message: string? }
 	apply = function(ctx, args)
 		-- do something
-		return true
+		return {
+			changes = {
+				{ kind = "created", subject = "fs_entry", path = "/tmp/example" },
+				{ kind = "updated", subject = "fs_entry", path = "/tmp/example.conf" },
+				{ kind = "removed", subject = "fs_entry", path = "/tmp/old-example" },
+				{ kind = "unchanged", subject = "fs_entry", path = "/tmp/already-ok" },
+			},
+			message = "optional human summary",
+		}
 		-- or
 		-- error("error message")
 	end,

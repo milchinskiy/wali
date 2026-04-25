@@ -5,8 +5,9 @@ use crate::spec::runas::PtyMode;
 
 use super::shared::{shell_escape, trim_trailing_newlines};
 use super::{
-    ChangeResult, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, DirEntry, DirOpts, FileMode,
-    FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath, WriteOpts,
+    ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, DirEntry, DirOpts,
+    ExecutionResult, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
+    WriteOpts,
 };
 
 const STATUS_NOT_FOUND: i32 = 7;
@@ -82,16 +83,18 @@ pub(crate) fn write_via_commands<E>(
     path: &TargetPath,
     content: &[u8],
     opts: WriteOpts,
-) -> crate::Result<ChangeResult>
+) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
     let parent = parent_path_string(path);
     let owner = render_owner_spec(&opts.owner)?;
     let mode = opts.mode.map(|value| format!("{:o}", value.bits()));
+    let result_prelude = result_shell_prelude(path)?;
 
     let script = format!(
         "set -eu
+{result_prelude}
 path={path}
 parent={parent}
 if [ {create_parents} -eq 1 ]; then
@@ -118,11 +121,11 @@ else
             chown -- {owner} \"$path\"
             result=updated
         fi
-        printf '%s\\n' \"$result\"
+        emit_result \"$result\"
         exit 0
     fi
     if [ {replace} -ne 1 ]; then
-        printf '%s\\n' 'unchanged'
+        emit_result unchanged
         exit 0
     fi
     result=updated
@@ -138,7 +141,7 @@ if [ -n {owner} ]; then
 fi
 mv -f -- \"$tmp\" \"$path\"
 trap - EXIT HUP INT TERM
-printf '%s\\n' \"$result\"\n",
+emit_result \"$result\"\n",
         path = operand_shell(path),
         parent = shell_escape(&parent),
         create_parents = i32::from(opts.create_parents),
@@ -151,20 +154,22 @@ printf '%s\\n' \"$result\"\n",
     let stdin = encode_base64(content).into_bytes();
     let output = run_shell(exec, script, Some(stdin))?;
     match exit_code(&output) {
-        Some(0) => parse_change_result(stdout_bytes(&output), "write"),
+        Some(0) => decode_execution_result(stdout_bytes(&output), "write"),
         _ => Err(command_error("write", path.as_str(), &output)),
     }
 }
 
-pub(crate) fn create_dir_via_commands<E>(exec: &E, path: &TargetPath, opts: DirOpts) -> crate::Result<ChangeResult>
+pub(crate) fn create_dir_via_commands<E>(exec: &E, path: &TargetPath, opts: DirOpts) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
     let owner = render_owner_spec(&opts.owner)?;
     let mode = opts.mode.map(|value| format!("{:o}", value.bits()));
+    let result_prelude = result_shell_prelude(path)?;
 
     let script = format!(
         "set -eu
+{result_prelude}
 path={path}
 if [ -e \"$path\" ] || [ -L \"$path\" ]; then
     if [ ! -d \"$path\" ]; then
@@ -180,7 +185,7 @@ if [ -e \"$path\" ] || [ -L \"$path\" ]; then
         chown -- {owner} \"$path\"
         result=updated
     fi
-    printf '%s\\n' \"$result\"
+    emit_result \"$result\"
     exit 0
 fi
 if [ {recursive} -eq 1 ]; then
@@ -194,7 +199,7 @@ fi
 if [ -n {owner} ]; then
     chown -- {owner} \"$path\"
 fi
-printf '%s\\n' 'created'\n",
+emit_result created\n",
         path = operand_shell(path),
         invalid = STATUS_INVALID_TARGET,
         mode = shell_optional(mode.as_deref()),
@@ -204,19 +209,22 @@ printf '%s\\n' 'created'\n",
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => parse_change_result(stdout_bytes(&output), "create_dir"),
+        Some(0) => decode_execution_result(stdout_bytes(&output), "create_dir"),
         _ => Err(command_error("create_dir", path.as_str(), &output)),
     }
 }
 
-pub(crate) fn remove_file_via_commands<E>(exec: &E, path: &TargetPath) -> crate::Result<ChangeResult>
+pub(crate) fn remove_file_via_commands<E>(exec: &E, path: &TargetPath) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
+    let result_prelude = result_shell_prelude(path)?;
+
     let script = format!(
-        "path={path}
+        "{result_prelude}
+path={path}
 if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
-    printf '%s\\n' 'unchanged'
+    emit_result unchanged
     exit 0
 fi
 if [ -d \"$path\" ] && [ ! -L \"$path\" ]; then
@@ -224,14 +232,14 @@ if [ -d \"$path\" ] && [ ! -L \"$path\" ]; then
     exit {invalid}
 fi
 rm -f -- \"$path\"
-printf '%s\\n' 'removed'\n",
+emit_result removed\n",
         path = operand_shell(path),
         invalid = STATUS_INVALID_TARGET,
     );
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => parse_change_result(stdout_bytes(&output), "remove_file"),
+        Some(0) => decode_execution_result(stdout_bytes(&output), "remove_file"),
         _ => Err(command_error("remove_file", path.as_str(), &output)),
     }
 }
@@ -240,12 +248,15 @@ pub(crate) fn remove_dir_via_commands<E>(
     exec: &E,
     path: &TargetPath,
     opts: RemoveDirOpts,
-) -> crate::Result<ChangeResult>
+) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
+    let result_prelude = result_shell_prelude(path)?;
+
     let script = format!(
-        "path={path}
+        "{result_prelude}
+path={path}
 case \"$path\" in
     ''|'/')
         echo 'refusing to remove empty path or root directory' >&2
@@ -253,7 +264,7 @@ case \"$path\" in
         ;;
 esac
 if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
-    printf '%s\\n' 'unchanged'
+    emit_result unchanged
     exit 0
 fi
 if [ ! -d \"$path\" ] || [ -L \"$path\" ]; then
@@ -265,7 +276,7 @@ if [ {recursive} -eq 1 ]; then
 else
     rmdir -- \"$path\"
 fi
-printf '%s\\n' 'removed'\n",
+emit_result removed\n",
         path = operand_shell(path),
         invalid = STATUS_INVALID_TARGET,
         recursive = i32::from(opts.recursive),
@@ -273,7 +284,7 @@ printf '%s\\n' 'removed'\n",
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => parse_change_result(stdout_bytes(&output), "remove_dir"),
+        Some(0) => decode_execution_result(stdout_bytes(&output), "remove_dir"),
         _ => Err(command_error("remove_dir", path.as_str(), &output)),
     }
 }
@@ -356,14 +367,14 @@ done
     }
 }
 
-pub(crate) fn chmod_via_commands<E>(exec: &E, path: &TargetPath, mode: FileMode) -> crate::Result<ChangeResult>
+pub(crate) fn chmod_via_commands<E>(exec: &E, path: &TargetPath, mode: FileMode) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
     let before = stat_via_commands(exec, path)?
         .ok_or_else(|| crate::Error::CommandExec(format!("chmod target does not exist: {}", path.as_str())))?;
     if before.mode.bits() == mode.bits() {
-        return Ok(ChangeResult::UNCHANGED);
+        return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, path.clone()));
     }
 
     let script = format!(
@@ -379,18 +390,18 @@ chmod -- {mode} \"$path\"\n",
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => Ok(ChangeResult::UPDATED),
+        Some(0) => Ok(ExecutionResult::fs_entry(ChangeKind::Updated, path.clone())),
         _ => Err(command_error("chmod", path.as_str(), &output)),
     }
 }
 
-pub(crate) fn chown_via_commands<E>(exec: &E, path: &TargetPath, owner: Owner) -> crate::Result<ChangeResult>
+pub(crate) fn chown_via_commands<E>(exec: &E, path: &TargetPath, owner: Owner) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
     let spec = render_owner_spec(&Some(owner.clone()))?;
     let Some(spec) = spec else {
-        return Ok(ChangeResult::UNCHANGED);
+        return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, path.clone()));
     };
 
     let before = stat_via_commands(exec, path)?
@@ -414,9 +425,9 @@ chown -- {owner} \"$path\"\n",
                 crate::Error::CommandExec(format!("chown target disappeared after command: {}", path.as_str()))
             })?;
             if before.uid == after.uid && before.gid == after.gid {
-                Ok(ChangeResult::UNCHANGED)
+                Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, path.clone()))
             } else {
-                Ok(ChangeResult::UPDATED)
+                Ok(ExecutionResult::fs_entry(ChangeKind::Updated, path.clone()))
             }
         }
         _ => Err(command_error("chown", path.as_str(), &output)),
@@ -428,28 +439,31 @@ pub(crate) fn rename_via_commands<E>(
     from: &TargetPath,
     to: &TargetPath,
     opts: RenameOpts,
-) -> crate::Result<ChangeResult>
+) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
     if from == to {
-        return Ok(ChangeResult::UNCHANGED);
+        return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, from.clone()));
     }
 
+    let result_prelude = result_shell_prelude(to)?;
+
     let script = format!(
-        "from={from}
+        "{result_prelude}
+from={from}
 to={to}
 if [ ! -e \"$from\" ] && [ ! -L \"$from\" ]; then
     exit {not_found}
 fi
 if [ -e \"$to\" ] || [ -L \"$to\" ]; then
     if [ {replace} -ne 1 ]; then
-        printf '%s\\n' 'unchanged'
+        emit_result unchanged
         exit 0
     fi
 fi
 mv -f -- \"$from\" \"$to\"
-printf '%s\\n' 'updated'\n",
+emit_result updated\n",
         from = operand_shell(from),
         to = operand_shell(to),
         not_found = STATUS_NOT_FOUND,
@@ -458,7 +472,7 @@ printf '%s\\n' 'updated'\n",
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => parse_change_result(stdout_bytes(&output), "rename"),
+        Some(0) => decode_execution_result(stdout_bytes(&output), "rename"),
         Some(STATUS_NOT_FOUND) => {
             Err(crate::Error::CommandExec(format!("rename source does not exist: {}", from.as_str())))
         }
@@ -466,13 +480,17 @@ printf '%s\\n' 'updated'\n",
     }
 }
 
-pub(crate) fn symlink_via_commands<E>(exec: &E, target: &TargetPath, link: &TargetPath) -> crate::Result<ChangeResult>
+pub(crate) fn symlink_via_commands<E>(
+    exec: &E,
+    target: &TargetPath,
+    link: &TargetPath,
+) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
 {
     if let Ok(existing) = read_link_via_commands(exec, link) {
         if existing == *target {
-            return Ok(ChangeResult::UNCHANGED);
+            return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, link.clone()));
         }
 
         return Err(crate::Error::CommandExec(format!(
@@ -483,15 +501,18 @@ where
         )));
     }
 
+    let result_prelude = result_shell_prelude(link)?;
+
     let script = format!(
-        "target={target}
+        "{result_prelude}
+target={target}
 link={link}
 if [ -e \"$link\" ] || [ -L \"$link\" ]; then
     echo 'link path already exists' >&2
     exit {invalid}
 fi
 ln -s -- \"$target\" \"$link\"
-printf '%s\\n' 'created'\n",
+emit_result created\n",
         target = operand_shell(target),
         link = operand_shell(link),
         invalid = STATUS_INVALID_TARGET,
@@ -499,7 +520,7 @@ printf '%s\\n' 'created'\n",
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => parse_change_result(stdout_bytes(&output), "symlink"),
+        Some(0) => decode_execution_result(stdout_bytes(&output), "symlink"),
         _ => Err(command_error("symlink", link.as_str(), &output)),
     }
 }
@@ -578,7 +599,7 @@ fn parse_stat_output(stdout: &[u8]) -> crate::Result<Option<Metadata>> {
     let text = trim_trailing_newlines(&String::from_utf8_lossy(stdout));
     let mut lines = text.lines();
 
-    let kind = parse_kind(next_line(&mut lines, "kind")?)?;
+    let kind = decode_fs_path_kind(next_line(&mut lines, "kind")?)?;
     let size = next_line(&mut lines, "size")?
         .parse::<u64>()
         .map_err(|err| crate::Error::FactProbe(format!("invalid stat size: {err}")))?;
@@ -637,24 +658,25 @@ fn next_line<'a>(lines: &mut std::str::Lines<'a>, field: &str) -> crate::Result<
         .ok_or_else(|| crate::Error::FactProbe(format!("missing {field} in command output")))
 }
 
-fn parse_kind(value: &str) -> crate::Result<FsPathKind> {
-    match value {
-        "file" => Ok(FsPathKind::File),
-        "dir" => Ok(FsPathKind::Dir),
-        "symlink" => Ok(FsPathKind::Symlink),
-        "other" => Ok(FsPathKind::Other),
-        _ => Err(crate::Error::FactProbe(format!("invalid filesystem kind {value:?}"))),
-    }
+fn result_shell_prelude(path: &TargetPath) -> crate::Result<String> {
+    let path_json = serde_json::to_string(path.as_str())
+        .map_err(|err| crate::Error::CommandExec(format!("failed to encode result path: {err}")))?;
+    Ok(format!(
+        "result_path={}\nemit_result() {{ printf '{{\"changes\":[{{\"kind\":\"%s\",\"subject\":\"fs_entry\",\"path\":%s}}]}}\\n' \"$1\" \"$result_path\"; }}",
+        shell_escape(&path_json)
+    ))
 }
 
-fn parse_change_result(stdout: &[u8], action: &str) -> crate::Result<ChangeResult> {
-    match trim_trailing_newlines(&String::from_utf8_lossy(stdout)).as_str() {
-        "created" => Ok(ChangeResult::CREATED),
-        "updated" => Ok(ChangeResult::UPDATED),
-        "removed" => Ok(ChangeResult::REMOVED),
-        "unchanged" => Ok(ChangeResult::UNCHANGED),
-        other => Err(crate::Error::CommandExec(format!("{action} produced invalid change result marker {other:?}"))),
-    }
+fn decode_fs_path_kind(value: &str) -> crate::Result<FsPathKind> {
+    serde_json::from_value(serde_json::Value::String(value.to_owned()))
+        .map_err(|err| crate::Error::FactProbe(format!("invalid filesystem kind {value:?}: {err}")))
+}
+
+fn decode_execution_result(stdout: &[u8], action: &str) -> crate::Result<ExecutionResult> {
+    let text = trim_trailing_newlines(&String::from_utf8_lossy(stdout));
+    serde_json::from_str(&text).map_err(|err| {
+        crate::Error::CommandExec(format!("{action} produced invalid execution result: {err}: {text:?}"))
+    })
 }
 
 fn parse_list_dir(stdout: &[u8]) -> crate::Result<Vec<DirEntry>> {
@@ -676,7 +698,7 @@ fn parse_list_dir(stdout: &[u8]) -> crate::Result<Vec<DirEntry>> {
     let mut entries = Vec::with_capacity(fields.len() / 2);
     for chunk in fields.chunks_exact(2) {
         let name = String::from_utf8_lossy(chunk[0]).into_owned();
-        let kind = parse_kind(&String::from_utf8_lossy(chunk[1]))?;
+        let kind = decode_fs_path_kind(&String::from_utf8_lossy(chunk[1]))?;
         entries.push(DirEntry { name, kind });
     }
 

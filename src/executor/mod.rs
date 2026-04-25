@@ -17,7 +17,7 @@ pub use self::path::{
     DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
     WriteOpts,
 };
-pub use self::result::{ChangeKind, ChangeResult};
+pub use self::result::{ChangeKind, ChangeSubject, ExecutionChange, ExecutionResult, ValidationResult};
 
 pub use self::local::LocalExecutor;
 pub use self::ssh::SshExecutor;
@@ -64,22 +64,22 @@ pub trait Fs {
     /// write the contents to the file
     /// # Errors
     /// returns an error if write fails
-    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ChangeResult, Self::Error>;
+    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ExecutionResult, Self::Error>;
 
     /// create a directory
     /// # Errors
     /// returns an error if dir creation fails
-    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ChangeResult, Self::Error>;
+    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ExecutionResult, Self::Error>;
 
     /// remove a file
     /// # Errors
     /// returns an error if removal fails
-    fn remove_file(&self, path: &TargetPath) -> Result<ChangeResult, Self::Error>;
+    fn remove_file(&self, path: &TargetPath) -> Result<ExecutionResult, Self::Error>;
 
     /// remove a directory
     /// # Errors
     /// returns an error if removal fails
-    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ChangeResult, Self::Error>;
+    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ExecutionResult, Self::Error>;
 
     /// create a temporary file or directory
     /// # Errors
@@ -94,22 +94,22 @@ pub trait Fs {
     /// change the permissions of a file or directory
     /// # Errors
     /// returns an error if chmod fails
-    fn chmod(&self, path: &TargetPath, mode: FileMode) -> Result<ChangeResult, Self::Error>;
+    fn chmod(&self, path: &TargetPath, mode: FileMode) -> Result<ExecutionResult, Self::Error>;
 
     /// change the owner of a file or directory
     /// # Errors
     /// returns an error if chown fails
-    fn chown(&self, path: &TargetPath, owner: Owner) -> Result<ChangeResult, Self::Error>;
+    fn chown(&self, path: &TargetPath, owner: Owner) -> Result<ExecutionResult, Self::Error>;
 
     /// rename a file or directory
     /// # Errors
     /// returns an error if rename fails
-    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ChangeResult, Self::Error>;
+    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ExecutionResult, Self::Error>;
 
     /// create a symlink
     /// # Errors
     /// returns an error if symlink fails
-    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> Result<ChangeResult, Self::Error>;
+    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> Result<ExecutionResult, Self::Error>;
 
     /// read a symlink
     /// # Errors

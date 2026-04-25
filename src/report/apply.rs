@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::time::Duration;
 
 use console::Style;
+
+use crate::executor::{ChangeKind, ExecutionResult, TargetPath};
 
 use super::{Layout, RenderKind};
 
@@ -25,6 +28,7 @@ pub enum Event {
     TaskSuccess {
         host_id: String,
         task_id: String,
+        result: ExecutionResult,
     },
     TaskSkip {
         host_id: String,
@@ -44,6 +48,7 @@ struct State {
 }
 
 #[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 enum HostStatus {
     Ok,
     Error(String),
@@ -62,7 +67,7 @@ impl StateHost {
     fn successes(&self) -> usize {
         self.tasks
             .iter()
-            .filter(|task| matches!(task.status, StateTaskStatus::Success))
+            .filter(|task| matches!(task.status, StateTaskStatus::Success(_)))
             .count()
     }
 
@@ -82,9 +87,10 @@ impl StateHost {
 }
 
 #[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 enum StateTaskStatus {
     Scheduled,
-    Success,
+    Success(ExecutionResult),
     Skipped(Option<String>),
     Fail(String),
 }
@@ -142,10 +148,14 @@ impl State {
                     status: StateTaskStatus::Scheduled,
                 });
             }
-            Event::TaskSuccess { host_id, task_id } => {
+            Event::TaskSuccess {
+                host_id,
+                task_id,
+                result,
+            } => {
                 let host = get_host(host_id, &mut self.hosts)?;
                 let task = get_task(task_id, &mut host.tasks)?;
-                task.status = StateTaskStatus::Success;
+                task.status = StateTaskStatus::Success(result.clone());
             }
             Event::TaskSkip {
                 host_id,
@@ -181,7 +191,7 @@ impl ApplyLayout {
         let render: Box<dyn super::Renderer<State = State, Event = Event>> = match kind {
             RenderKind::Human => Box::new(HumanRender::default()),
             RenderKind::Text => Box::new(TextRender),
-            RenderKind::Json { pretty } => Box::new(JsonReder::new(pretty)),
+            RenderKind::Json { pretty } => Box::new(JsonRender::new(pretty)),
         };
 
         Self {
@@ -244,9 +254,45 @@ impl HumanRender {
         Ok(())
     }
 
-    fn task_success(&mut self, host_id: &str, task_id: &str) -> crate::Result {
+    fn task_success(&mut self, host_id: &str, task_id: &str, result: &ExecutionResult) -> crate::Result {
         self.bars.entry(host_id.to_string()).and_modify(|pb| pb.inc(1));
-        self.println(format!("Task {} succeeded on {}", task_string(task_id), host_string(host_id)).as_str())?;
+
+        let mut summary = String::new();
+        let _ = writeln!(&mut summary, "Task {} completed on {}", task_string(task_id), host_string(host_id));
+        if let Some(msg) = &result.message
+            && !msg.is_empty()
+        {
+            let _ = writeln!(&mut summary, "{}", msg);
+        }
+        if result.changed() && !result.changes.is_empty() {
+            for change in &result.changes {
+                let _ = match &change.kind {
+                    ChangeKind::Unchanged => {
+                        writeln!(&mut summary, "= {}", change.path.as_ref().unwrap_or(&TargetPath::new(".")))
+                    }
+                    ChangeKind::Updated => writeln!(
+                        &mut summary,
+                        "{} {}",
+                        warn_string("~"),
+                        change.path.as_ref().unwrap_or(&TargetPath::new(".")).as_str()
+                    ),
+                    ChangeKind::Created => writeln!(
+                        &mut summary,
+                        "{} {}",
+                        succ_string("+"),
+                        change.path.as_ref().unwrap_or(&TargetPath::new(".")).as_str()
+                    ),
+                    ChangeKind::Removed => writeln!(
+                        &mut summary,
+                        "{} {}",
+                        err_string("-"),
+                        change.path.as_ref().unwrap_or(&TargetPath::new(".")).as_str()
+                    ),
+                };
+            }
+        }
+
+        self.println(summary)?;
         Ok(())
     }
 
@@ -366,8 +412,12 @@ impl super::Renderer for HumanRender {
                     .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
                 self.update_progress(host_id, host.successes(), host.failed(), host.skipped());
             }
-            Event::TaskSuccess { host_id, task_id } => {
-                self.task_success(host_id, task_id)?;
+            Event::TaskSuccess {
+                host_id,
+                task_id,
+                result,
+            } => {
+                self.task_success(host_id, task_id, result)?;
                 let host = state
                     .hosts
                     .get_mut(host_id)
@@ -414,8 +464,17 @@ impl super::Renderer for TextRender {
             Event::TaskSchedule { host_id, task_id } => {
                 println!("Task '{}' scheduled on '{}'", task_id, host_id);
             }
-            Event::TaskSuccess { host_id, task_id } => {
-                println!("Task '{}' succeeded on '{}'", task_id, host_id);
+            Event::TaskSuccess {
+                host_id,
+                task_id,
+                result,
+            } => {
+                let change = if result.changed() { "changed" } else { "unchanged" };
+                if let Some(message) = &result.message {
+                    println!("Task '{}' succeeded on '{}': {}: {}", task_id, host_id, change, message);
+                } else {
+                    println!("Task '{}' succeeded on '{}': {}", task_id, host_id, change);
+                }
             }
             Event::TaskSkip {
                 host_id,
@@ -441,16 +500,16 @@ impl super::Renderer for TextRender {
     }
 }
 
-struct JsonReder {
+struct JsonRender {
     pretty: bool,
 }
-impl JsonReder {
+impl JsonRender {
     fn new(pretty: bool) -> Self {
         Self { pretty }
     }
 }
 
-impl super::Renderer for JsonReder {
+impl super::Renderer for JsonRender {
     type State = State;
     type Event = Event;
 

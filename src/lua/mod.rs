@@ -39,7 +39,7 @@ impl LuaRuntime {
         let runtime = Self::new()?;
 
         #[allow(clippy::single_element_loop)]
-        for (name, content) in &[("api", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/api.lua")))] {
+        for (name, content) in &[("wali.api", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/api.lua")))] {
             runtime.register_module_content(name, content)?;
         }
 

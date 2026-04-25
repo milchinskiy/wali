@@ -1,5 +1,7 @@
 use mlua::LuaSerdeExt;
 
+use crate::executor::ExecutionResult;
+
 pub mod schema;
 
 #[derive(Clone)]
@@ -33,37 +35,51 @@ impl Module {
         }
     }
 
-    pub fn validate(&self, ctx: mlua::Table, args: mlua::Value) -> crate::Result {
-        if self.module.contains_key("validate")? {
-            match self.module.get::<mlua::Function>("validate")?.call((ctx, args)) {
-                Ok((true, _)) => Ok(()),
-                Ok((false, None)) => Err(crate::Error::ModuleValidation {
-                    id: self.name.clone(),
-                    message: "unknown error".into(),
-                }),
-                Ok((false, Some(reason))) => Err(crate::Error::ModuleValidation {
-                    id: self.name.clone(),
-                    message: reason,
-                }),
-                Err(error) => Err(error.into()),
-            }
-        } else {
+    pub fn validate(&self, lua: &mlua::Lua, ctx: mlua::Table, args: mlua::Value) -> crate::Result {
+        if !self.module.contains_key("validate")? {
+            return Ok(());
+        }
+
+        let value = self
+            .module
+            .get::<mlua::Function>("validate")?
+            .call::<mlua::Value>((ctx, args))?;
+
+        if matches!(value, mlua::Value::Nil) {
+            return Ok(());
+        }
+
+        let outcome = lua
+            .from_value::<crate::executor::ValidationResult>(value)
+            .map_err(|error| crate::Error::ModuleValidation {
+                id: self.name.clone(),
+                message: format!("invalid validation result: {error}"),
+            })?;
+
+        if outcome.ok {
             Ok(())
+        } else {
+            Err(crate::Error::ModuleValidation {
+                id: self.name.clone(),
+                message: outcome.message.unwrap_or_else(|| "unknown error".to_owned()),
+            })
         }
     }
 
-    pub fn apply(&self, ctx: mlua::Table, args: mlua::Value) -> crate::Result {
-        match self.module.get::<mlua::Function>("apply")?.call((ctx, args)) {
-            Ok((true, _)) => Ok(()),
-            Ok((false, None)) => Err(crate::Error::ModuleApply {
-                id: self.name.clone(),
-                message: "unknown error".into(),
-            }),
-            Ok((false, Some(reason))) => Err(crate::Error::ModuleApply {
-                id: self.name.clone(),
-                message: reason,
-            }),
-            Err(error) => Err(error.into()),
+    pub fn apply(&self, lua: &mlua::Lua, ctx: mlua::Table, args: mlua::Value) -> crate::Result<ExecutionResult> {
+        let value = self
+            .module
+            .get::<mlua::Function>("apply")?
+            .call::<mlua::Value>((ctx, args))?;
+
+        if matches!(value, mlua::Value::Nil) {
+            return Ok(ExecutionResult::default());
         }
+
+        lua.from_value::<ExecutionResult>(value)
+            .map_err(|error| crate::Error::ModuleApply {
+                id: self.name.clone(),
+                message: format!("invalid apply result: {error}"),
+            })
     }
 }
