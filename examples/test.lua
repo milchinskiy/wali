@@ -72,6 +72,12 @@ return {
 		},
 		{
 			id = "task #2",
+            when = {
+                any = {
+                    { os = "darwin" },
+                    { arch = "arm64" },
+                },
+            },
 			module = "test_module",
 			args = { target = "some/path" },
 		},

@@ -68,7 +68,7 @@ impl Requires {
                     Err(crate::Error::RequirementCheck(format!("required environment variable {key:?} is not set")))
                 }
             },
-            Self::Os(expected) => check_fact("os", expected, backend.os()?),
+            Self::Os(expected) => check_fact_ignore_ascii_case("os", expected, backend.os()?),
             Self::Arch(expected) => check_fact("arch", expected, backend.arch()?),
             Self::Hostname(expected) => check_fact("hostname", expected, backend.hostname()?),
             Self::User(expected) => check_fact("user", expected, backend.user()?),
@@ -97,6 +97,14 @@ impl std::fmt::Display for Requires {
 
 fn check_fact(name: &str, expected: &str, actual: String) -> crate::Result {
     if actual == expected {
+        Ok(())
+    } else {
+        Err(crate::Error::RequirementCheck(format!("required {name} {expected:?}, got {actual:?}")))
+    }
+}
+
+fn check_fact_ignore_ascii_case(name: &str, expected: &str, actual: String) -> crate::Result {
+    if actual.eq_ignore_ascii_case(expected) {
         Ok(())
     } else {
         Err(crate::Error::RequirementCheck(format!("required {name} {expected:?}, got {actual:?}")))

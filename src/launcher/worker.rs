@@ -25,10 +25,15 @@ impl Worker {
         let backend = self.connect()?;
 
         for task in &self.plan.tasks {
+            let bound = backend.bind(task.run_as.clone());
+            if let Some(when) = &task.when
+                && !when.check(&bound)?
+            {
+                continue;
+            }
+
             let lua = self.task_runtime()?;
             let module = lua.module_load_by_name(&task.module)?;
-
-            let bound = backend.bind(task.run_as.clone());
             module.check_requires(&bound)?;
             let args = module.normalize_args(lua.lua(), &task.args)?;
             let ctx = crate::lua::api::build_task_ctx(
@@ -83,10 +88,34 @@ impl Worker {
                 continue;
             }
 
+            let bound = backend.bind(task.run_as.clone());
+            match task.when.as_ref().map(|when| when.check(&bound)).transpose() {
+                Ok(Some(false)) => {
+                    sender.send(Event::TaskSkip {
+                        host_id: self.plan.id.clone(),
+                        task_id: task.id.clone(),
+                        reason: task
+                            .when
+                            .as_ref()
+                            .map(|when| format!("when predicate did not match: {when}")),
+                    })?;
+                    continue;
+                }
+                Ok(None | Some(true)) => {}
+                Err(error) => {
+                    sender.send(Event::TaskFail {
+                        host_id: self.plan.id.clone(),
+                        task_id: task.id.clone(),
+                        error: error.to_string(),
+                    })?;
+                    runtime_error = Some(error);
+                    continue;
+                }
+            }
+
             let result = (|| -> crate::Result<crate::executor::ExecutionResult> {
                 let lua = self.task_runtime()?;
                 let module = lua.module_load_by_name(&task.module)?;
-                let bound = backend.bind(task.run_as.clone());
                 module.check_requires(&bound)?;
 
                 let validate_args = module.normalize_args(lua.lua(), &task.args)?;

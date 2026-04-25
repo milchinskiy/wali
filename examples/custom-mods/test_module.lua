@@ -1,4 +1,4 @@
-local res = require("wali.api").result.apply
+local apply_result = require("wali.api").result.apply
 
 return {
 	name = "test module",
@@ -27,12 +27,12 @@ return {
 	end,
 
 	apply = function(ctx, args)
-		ctx.sleep_ms(ctx.rand.irange(100, 2000))
+		local result = apply_result()
+		ctx.sleep_ms(ctx.rand.irange(100, 1000))
 		if ctx.rand.ratio(1, 20) then
-			error("some error has occured during execution")
+            error("some error has occured during apply")
 		end
 		-- print("os", ctx.host.facts.os())
-		local result = res():with("some apply message")
 		for _, v in ipairs({ args.source, args.target }) do
 			result:created(v):updated(v):removed(v):unchanged(v)
 		end

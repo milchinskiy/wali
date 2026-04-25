@@ -2,8 +2,8 @@ use mlua::LuaSerdeExt;
 
 use crate::executor::{Backend, ExecutionResult};
 
-pub mod schema;
 pub mod requires;
+pub mod schema;
 use requires::Requires;
 
 #[derive(Clone)]
