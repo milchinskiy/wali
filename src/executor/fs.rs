@@ -18,28 +18,28 @@ where
     E: CommandExec<Error = crate::Error>,
 {
     let script = format!(
-        "p={path}
-if [ ! -e \"$p\" ] && [ ! -L \"$p\" ]; then
+        r#"p={path}
+if [ ! -e "$p" ] && [ ! -L "$p" ]; then
     exit {not_found}
 fi
-if [ -L \"$p\" ]; then
+if [ -L "$p" ]; then
     kind=symlink
-elif [ -f \"$p\" ]; then
+elif [ -f "$p" ]; then
     kind=file
-elif [ -d \"$p\" ]; then
+elif [ -d "$p" ]; then
     kind=dir
 else
     kind=other
 fi
-if out=$(stat -c '%s\\n%u\\n%g\\n%a\\n%X\\n%Y\\n%Z\\n%W' -- \"$p\" 2>/dev/null); then
+if out=$(stat --printf '%s\n%u\n%g\n%a\n%X\n%Y\n%Z\n%W' -- "$p" 2>/dev/null); then
     :
-elif out=$(stat -f '%z\\n%u\\n%g\\n%Lp\\n%a\\n%m\\n%c\\n%B' \"$p\" 2>/dev/null); then
+elif out=$(stat -f --printf '%z\n%u\n%g\n%Lp\n%a\n%m\n%c\n%B' "$p" 2>/dev/null); then
     :
 else
     echo 'failed to collect path metadata with stat' >&2
     exit 125
 fi
-printf '%s\\n%s\\n' \"$kind\" \"$out\"\n",
+printf '%s\n%s\n' "$kind" "$out""#,
         path = operand_shell(path),
         not_found = STATUS_NOT_FOUND,
     );
@@ -57,15 +57,15 @@ where
     E: CommandExec<Error = crate::Error>,
 {
     let script = format!(
-        "p={path}
-if [ ! -e \"$p\" ] && [ ! -L \"$p\" ]; then
+        r#"p={path}
+if [ ! -e "$p" ] && [ ! -L "$p" ]; then
     exit {not_found}
 fi
-if [ ! -f \"$p\" ]; then
+if [ ! -f "$p" ]; then
     echo 'path is not a regular file' >&2
     exit {invalid}
 fi
-base64 < \"$p\"\n",
+base64 < "$p""#,
         path = operand_shell(path),
         not_found = STATUS_NOT_FOUND,
         invalid = STATUS_INVALID_TARGET,

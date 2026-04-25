@@ -1,14 +1,17 @@
 use mlua::LuaSerdeExt;
 
-use crate::executor::ExecutionResult;
+use crate::executor::{Backend, ExecutionResult};
 
 pub mod schema;
+pub mod requires;
+use requires::Requires;
 
 #[derive(Clone)]
 pub struct Module {
     name: String,
     module: mlua::Table,
     schema: Option<schema::Schema>,
+    requires: Option<Requires>,
 }
 
 impl Module {
@@ -18,12 +21,21 @@ impl Module {
             value => Some(schema::Schema::from_lua(lua, value)?),
         };
 
+        let requires = match module.get::<mlua::Value>("requires")? {
+            mlua::Value::Nil => None,
+            value => Some(
+                lua.from_value::<Requires>(value)
+                    .map_err(|error| mlua::Error::external(format!("invalid requires contract: {error}")))?,
+            ),
+        };
+
         let _: mlua::Function = module.get("apply")?;
 
         Ok(Self {
             name: name.into(),
             module,
             schema,
+            requires,
         })
     }
 
@@ -32,6 +44,24 @@ impl Module {
         match &self.schema {
             Some(schema) => Ok(schema.normalize_lua(lua, raw_value)?),
             None => Ok(raw_value),
+        }
+    }
+
+    pub fn check_requires(&self, backend: &Backend) -> crate::Result {
+        let Some(requires) = &self.requires else {
+            return Ok(());
+        };
+
+        match requires.check(backend) {
+            Ok(()) => Ok(()),
+            Err(crate::Error::RequirementCheck(message)) => Err(crate::Error::ModuleRequirement {
+                id: self.name.clone(),
+                message,
+            }),
+            Err(error) => Err(crate::Error::ModuleRequirement {
+                id: self.name.clone(),
+                message: error.to_string(),
+            }),
         }
     }
 

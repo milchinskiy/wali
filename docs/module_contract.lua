@@ -4,17 +4,29 @@ return {
 	---@type string description
 	description = "module description (human readable)",
 
-	---Nested table with declared requirements on host
+	---Host requirements checked before validate() and apply().
+	---Supported requirement forms:
+	---  { command = "wget" }
+	---  { path = "/tmp" }
+	---  { env = "HOME" }
+	---  { os = "linux" }
+	---  { arch = "x86_64" }
+	---  { hostname = "web-1" }
+	---  { user = "root" }
+	---  { group = "root" }
+	---  { not = { command = "busybox" } }
+	---  { all = { ... } }
+	---  { any = { ... } }
 	---@type table
 	requires = {
 		all = {
-			{ command = "wget" },
 			{ path = "/tmp" },
-		},
-		-- or
-		any = {
-			{ command = "wget" },
-			{ command = "curl" },
+			{
+				any = {
+					{ command = "wget" },
+					{ command = "curl" },
+				},
+			},
 		},
 	},
 

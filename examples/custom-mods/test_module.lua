@@ -4,6 +4,13 @@ return {
 	name = "test module",
 	description = "test module description",
 
+	requires = {
+		all = {
+			{ path = "/tmp" },
+			{ command = "sh" },
+		},
+	},
+
 	schema = {
 		type = "object",
 		required = true,

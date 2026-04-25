@@ -29,6 +29,7 @@ impl Worker {
             let module = lua.module_load_by_name(&task.module)?;
 
             let bound = backend.bind(task.run_as.clone());
+            module.check_requires(&bound)?;
             let args = module.normalize_args(lua.lua(), &task.args)?;
             let ctx = crate::lua::api::build_task_ctx(
                 lua.lua(),
@@ -86,6 +87,7 @@ impl Worker {
                 let lua = self.task_runtime()?;
                 let module = lua.module_load_by_name(&task.module)?;
                 let bound = backend.bind(task.run_as.clone());
+                module.check_requires(&bound)?;
 
                 let validate_args = module.normalize_args(lua.lua(), &task.args)?;
                 let validate_ctx = crate::lua::api::build_task_ctx(
