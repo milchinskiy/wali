@@ -77,6 +77,35 @@ For removal:
 }
 ```
 
+## `wali.builtin.copy_file`
+
+Copies one regular file on the same target host. The copy is performed by the
+executor on the host side; file bytes are not routed through Lua.
+
+```lua
+{
+    id = "copy config template",
+    module = "wali.builtin.copy_file",
+    args = {
+        src = "/opt/example/default.conf",
+        dest = "/etc/example.conf",
+        create_parents = true,
+        replace = true,
+        preserve_mode = true,
+        owner = { user = "root", group = "root" },
+    },
+}
+```
+
+Behavior:
+
+- `src` must be an existing regular file;
+- source symlinks are refused instead of followed;
+- destination directories are refused;
+- an existing identical regular file is unchanged unless requested metadata must
+  be updated;
+- `mode` overrides `preserve_mode` when both are provided.
+
 ## `wali.builtin.link`
 
 Ensures a symbolic link exists or is absent.
@@ -224,6 +253,44 @@ Safety rules:
 - source `other` entries are refused unless `allow_special = true`;
 - extra destination entries are not pruned.
 
+
+## `wali.builtin.copy_tree`
+
+Copies a source directory tree into a destination directory on the same target
+host. It is built on deterministic `ctx.host.fs.walk(...)` output plus the
+host-side `ctx.host.fs.copy_file(...)` primitive.
+
+```lua
+{
+    id = "copy plugin tree",
+    module = "wali.builtin.copy_tree",
+    args = {
+        src = "/opt/example/releases/current/plugins",
+        dest = "/var/lib/example/plugins",
+        replace = true,
+        preserve_mode = true,
+        preserve_owner = false,
+        symlinks = "preserve",
+    },
+}
+```
+
+Safety rules:
+
+- `src` and `dest` must be absolute paths;
+- `/` is refused as either source or destination;
+- source and destination must not be nested inside each other;
+- source symlinks are not followed;
+- `symlinks = "preserve"` recreates the same link text at the destination;
+- `symlinks = "skip"` leaves destination symlink paths untouched;
+- `symlinks = "error"` refuses source symlinks;
+- special source entries are refused unless `skip_special = true`;
+- extra destination entries are not pruned.
+
+`dir_mode` / `file_mode` override source modes. Without overrides,
+`preserve_mode = true` preserves mode bits from the source entries.
+`preserve_owner = true` applies numeric source uid/gid to destination entries and
+therefore usually requires suitable privileges.
 
 ## `wali.builtin.command`
 

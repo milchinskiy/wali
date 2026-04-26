@@ -14,7 +14,7 @@ mod ssh;
 
 pub use self::command::{CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
 pub use self::path::{
-    DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
+    CopyFileOpts, DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
     WalkEntry, WalkOpts, WalkOrder, WriteOpts,
 };
 pub use self::result::{ChangeKind, ChangeSubject, ExecutionChange, ExecutionResult, ValidationResult};
@@ -101,6 +101,16 @@ pub trait Fs {
     /// # Errors
     /// returns an error if write fails
     fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ExecutionResult, Self::Error>;
+
+    /// copy a regular file on the same target host
+    /// # Errors
+    /// returns an error if the source cannot be copied
+    fn copy_file(
+        &self,
+        from: &TargetPath,
+        to: &TargetPath,
+        opts: CopyFileOpts,
+    ) -> Result<ExecutionResult, Self::Error>;
 
     /// create a directory
     /// # Errors

@@ -157,6 +157,28 @@ impl Default for WriteOpts {
     }
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub struct CopyFileOpts {
+    pub create_parents: bool,
+    pub mode: Option<FileMode>,
+    pub owner: Option<Owner>,
+    pub replace: bool,
+    pub preserve_mode: bool,
+}
+
+impl Default for CopyFileOpts {
+    fn default() -> Self {
+        Self {
+            create_parents: false,
+            mode: None,
+            owner: None,
+            replace: true,
+            preserve_mode: true,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, serde::Deserialize)]
 #[serde(default)]
 pub struct DirOpts {

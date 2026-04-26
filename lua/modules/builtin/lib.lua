@@ -136,6 +136,31 @@ function lib.merge_opts(base, extra)
 	return out
 end
 
+function lib.copy_file_opts(args)
+	local opts = {}
+	if args.mode ~= nil then
+		opts.mode = lib.mode_bits(args.mode)
+	end
+	local owner = lib.owner(args.owner)
+	if owner ~= nil then
+		opts.owner = owner
+	end
+	opts.create_parents = args.create_parents
+	opts.replace = args.replace
+	opts.preserve_mode = args.preserve_mode
+	return opts
+end
+
+function lib.owner_from_metadata(metadata)
+	if metadata == nil then
+		return nil
+	end
+	return {
+		user = metadata.uid,
+		group = metadata.gid,
+	}
+end
+
 function lib.output_text(output)
 	if output.stderr ~= nil and #output.stderr > 0 then
 		return output.stderr

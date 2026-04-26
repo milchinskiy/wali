@@ -35,6 +35,16 @@ return {
 			},
 		},
 		{
+			id = "copy demo file",
+			module = "wali.builtin.copy_file",
+			args = {
+				src = "/tmp/wali-demo/hello.txt",
+				dest = "/tmp/wali-demo/hello-copy.txt",
+				replace = true,
+				preserve_mode = true,
+			},
+		},
+		{
 			id = "write stale file",
 			module = "wali.builtin.file",
 			args = {
@@ -93,6 +103,17 @@ return {
 				dest = "/tmp/wali-demo-linked",
 				replace = true,
 				dir_mode = "0755",
+			},
+		},
+		{
+			id = "copy demo tree",
+			module = "wali.builtin.copy_tree",
+			args = {
+				src = "/tmp/wali-demo",
+				dest = "/tmp/wali-demo-copied",
+				replace = true,
+				preserve_mode = true,
+				symlinks = "preserve",
 			},
 		},
 		{

@@ -43,11 +43,13 @@ impl LuaRuntime {
             ("wali.builtin.lib", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/lib.lua"))),
             ("wali.builtin.dir", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/dir.lua"))),
             ("wali.builtin.file", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/file.lua"))),
+            ("wali.builtin.copy_file", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy_file.lua"))),
             ("wali.builtin.link", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link.lua"))),
             ("wali.builtin.remove", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/remove.lua"))),
             ("wali.builtin.touch", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/touch.lua"))),
             ("wali.builtin.walk", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/walk.lua"))),
             ("wali.builtin.link_tree", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link_tree.lua"))),
+            ("wali.builtin.copy_tree", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy_tree.lua"))),
             (
                 "wali.builtin.permissions",
                 include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/permissions.lua")),

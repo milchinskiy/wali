@@ -3,7 +3,7 @@ use rand::RngExt;
 
 use crate::executor::{
     Backend, CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams,
-    DirOpts, Facts, FileMode, Fs, MetadataOpts, PathSemantics, RemoveDirOpts, RenameOpts, TargetPath, WalkOpts, WriteOpts,
+    CopyFileOpts, DirOpts, Facts, FileMode, Fs, MetadataOpts, PathSemantics, RemoveDirOpts, RenameOpts, TargetPath, WalkOpts, WriteOpts,
 };
 use crate::plan::TaskInstance;
 use crate::spec::account::Owner;
@@ -260,6 +260,17 @@ fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
             let opts: WriteOpts = deserialize_table_or_default(lua, opts)?;
             let result = backend
                 .write(&TargetPath::from(path), content.as_bytes().as_ref(), opts)
+                .map_err(mlua::Error::external)?;
+            lua.to_value(&result)
+        })?
+    })?;
+
+    table.set("copy_file", {
+        let backend = backend.clone();
+        lua.create_function(move |lua, (from, to, opts): (String, String, Option<Table>)| {
+            let opts: CopyFileOpts = deserialize_table_or_default(lua, opts)?;
+            let result = backend
+                .copy_file(&TargetPath::from(from), &TargetPath::from(to), opts)
                 .map_err(mlua::Error::external)?;
             lua.to_value(&result)
         })?

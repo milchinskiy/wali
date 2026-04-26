@@ -1,12 +1,12 @@
 use crate::spec::account::Owner;
 
 use crate::executor::fs::{
-    chmod_via_commands, chown_via_commands, create_dir_via_commands, list_dir_via_commands, metadata_via_commands,
+    chmod_via_commands, chown_via_commands, copy_file_via_commands, create_dir_via_commands, list_dir_via_commands, metadata_via_commands,
     mktemp_via_commands, read_link_via_commands, read_via_commands, remove_dir_via_commands, remove_file_via_commands,
     rename_via_commands, symlink_via_commands, walk_via_commands, write_via_commands,
 };
 use crate::executor::{
-    DirEntry, DirOpts, ExecutionResult, FileMode, Fs, Metadata, MetadataOpts, MkTempOpts, RemoveDirOpts, RenameOpts,
+    CopyFileOpts, DirEntry, DirOpts, ExecutionResult, FileMode, Fs, Metadata, MetadataOpts, MkTempOpts, RemoveDirOpts, RenameOpts,
     TargetPath, WalkEntry, WalkOpts, WriteOpts,
 };
 
@@ -25,6 +25,15 @@ impl Fs for LocalExecutor {
 
     fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ExecutionResult, Self::Error> {
         write_via_commands(self, path, content, opts)
+    }
+
+    fn copy_file(
+        &self,
+        from: &TargetPath,
+        to: &TargetPath,
+        opts: CopyFileOpts,
+    ) -> Result<ExecutionResult, Self::Error> {
+        copy_file_via_commands(self, from, to, opts)
     }
 
     fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ExecutionResult, Self::Error> {

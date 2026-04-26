@@ -144,6 +144,18 @@ impl Fs for Backend {
         }
     }
 
+    fn copy_file(
+        &self,
+        from: &super::TargetPath,
+        to: &super::TargetPath,
+        opts: super::CopyFileOpts,
+    ) -> Result<super::ExecutionResult, Self::Error> {
+        match self {
+            Self::Local(x) => x.copy_file(from, to, opts),
+            Self::Ssh(x) => x.copy_file(from, to, opts),
+        }
+    }
+
     fn create_dir(
         &self,
         path: &super::TargetPath,
