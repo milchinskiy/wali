@@ -98,7 +98,7 @@ wali.builtin.walk
 Most filesystem modules are desired-state modules. They should report
 `unchanged` when the host already matches the requested state.
 
-More detailed builtin module notes are in `docs/builtin-modules.md`.
+More detailed builtin module notes are in `docs/builtin-modules.md`. The broader design direction is recorded in `docs/philosophy.md`.
 
 ## Module phases
 
@@ -113,7 +113,7 @@ when -> requires -> schema normalization -> validate -> apply
 `validate` receives a read/probe-only context. `apply` receives the full
 context, including mutation APIs.
 
-See `docs/module_contract.lua` for the current Lua module contract.
+See `docs/module_contract.lua` for the compact contract reference and `docs/module-developers.md` for module authoring guidance.
 
 ## Development checks
 
