@@ -9,6 +9,7 @@ pub mod task;
 pub type Tag = String;
 
 #[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Manifest {
     #[serde(skip)]
     pub file: PathBuf,
@@ -81,7 +82,15 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
         }
     }
 
+    modules::validate_sources(&manifest.modules)?;
+
     for task in &manifest.tasks {
+        modules::validate_task_module_name(&task.module)?;
+
+        if task.module == "wali" || task.module.starts_with("wali.") {
+            modules::resolve_task_module(&[] as &[modules::ModuleMount], &task.module)?;
+        }
+
         if let Some(depends_on) = &task.depends_on {
             if depends_on.contains(&task.id) {
                 return Err(crate::Error::InvalidManifest(format!("Task '{}' cannot depend on itself", task.id)));
@@ -125,13 +134,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
 
 fn canonicalize_manifest(root_path: &Path, manifest: &mut Manifest) -> crate::Result<()> {
     for module in &mut manifest.modules {
-        if let modules::Module::Path(mpath) = module
-            && mpath.is_relative()
-        {
-            *mpath = root_path.join(&mpath).canonicalize().map_err(|e| {
-                crate::Error::InvalidManifest(format!("Invalid module include path: {}: {}", mpath.display(), e))
-            })?;
-        }
+        module.canonicalize_local_path(root_path)?;
     }
 
     Ok(())

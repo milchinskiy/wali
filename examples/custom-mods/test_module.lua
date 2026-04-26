@@ -22,9 +22,7 @@ return {
 	},
 
 	validate = function(ctx, args)
-		if ctx.rand.ratio(1, 20) then
-			return validation_result():fail("some error has occured during validation"):build()
-		end
+        return validation_result():ok():build()
 	end,
 
 	apply = function(ctx, args)

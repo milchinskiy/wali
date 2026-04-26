@@ -11,7 +11,7 @@ return {
 	},
 
 	modules = {
-		{ path = "./custom-mods" },
+		{ namespace = "custom1", path = "./custom-mods" },
 	},
 
 	tasks = {
@@ -125,5 +125,14 @@ return {
 				order = "pre",
 			},
 		},
+
+        {
+            id = "test custom module",
+            module = "custom1.test_module",
+            args = {
+                source = "/tmp/wali-demo",
+                target = "/tmp/wali-demo-custom",
+            },
+        },
 	},
 }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum HostKeyPolicy {
     Ignore,
     AllowAdd {
@@ -24,7 +24,7 @@ impl Default for HostKeyPolicy {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Connection {
     pub user: String,
     pub host: String,
@@ -50,7 +50,7 @@ fn default_host_key_path() -> PathBuf {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Auth {
     #[default]
     Agent,

@@ -155,8 +155,9 @@ impl Worker {
     }
 
     fn run_task(&self, task: &TaskInstance, backend: Backend, mode: ExecutionMode) -> crate::Result<ExecutionResult> {
-        let lua = self.task_runtime()?;
-        let module = lua.module_load_by_name(&task.module)?;
+        let resolved = crate::manifest::modules::resolve_task_module(&self.plan.modules, &task.module)?;
+        let lua = self.task_runtime(resolved.include_path.as_deref())?;
+        let module = lua.module_load_by_name_as(&resolved.local_name, task.module.clone())?;
         module.check_requires(&backend)?;
 
         let mut result = ExecutionResult::unchanged();
@@ -207,9 +208,9 @@ impl Worker {
         Backend::connect(self.plan.id.clone(), Arc::clone(&self.secrets), &self.plan.transport)
     }
 
-    fn task_runtime(&self) -> crate::Result<crate::lua::LuaRuntime> {
+    fn task_runtime(&self, include_path: Option<&std::path::Path>) -> crate::Result<crate::lua::LuaRuntime> {
         let lua = crate::lua::LuaRuntime::with_modules_flow()?;
-        for path in &self.plan.modules_paths {
+        if let Some(path) = include_path {
             lua.add_include_path(path)?;
         }
         Ok(lua)

@@ -69,16 +69,27 @@ fn lua_quote(value: &str) -> String {
 }
 
 fn run_wali(args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_wali"))
+    run_wali_with_env(args, &[])
+}
+
+fn run_wali_with_env(args: &[&str], envs: &[(&str, &Path)]) -> std::process::Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_wali"));
+    command
         .args(args)
         .env("NO_COLOR", "1")
-        .env_remove("__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__")
-        .output()
-        .expect("failed to run wali binary")
+        .env_remove("__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__");
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().expect("failed to run wali binary")
 }
 
 fn run_wali_json(args: &[&str]) -> Value {
-    let output = run_wali(args);
+    run_wali_json_with_env(args, &[])
+}
+
+fn run_wali_json_with_env(args: &[&str], envs: &[(&str, &Path)]) -> Value {
+    let output = run_wali_with_env(args, envs);
     assert!(
         output.status.success(),
         "wali failed with status {:?}\nstdout:\n{}\nstderr:\n{}",
@@ -548,6 +559,804 @@ return {{
     assert_eq!(ssh_host.pointer("/transport/kind").and_then(Value::as_str), Some("ssh"));
 }
 
+#[test]
+fn namespaced_local_modules_isolate_same_tree_and_keep_internal_imports() {
+    let sandbox = Sandbox::new("local-namespace-isolation");
+    let modules_a = sandbox.mkdir("modules-a");
+    let modules_b = sandbox.mkdir("modules-b");
+
+    for (root, content) in [(&modules_a, "from namespace a\n"), (&modules_b, "from namespace b\n")] {
+        std::fs::create_dir_all(root.join("internal/utils")).expect("failed to create internal module directory");
+        std::fs::write(
+            root.join("writer.lua"),
+            r#"
+local tool = require("internal.utils.tool")
+
+return {
+    schema = {
+        type = "object",
+        required = true,
+        props = {
+            path = { type = "string", required = true },
+        },
+    },
+
+    validate = function(ctx, args)
+        return nil
+    end,
+
+    apply = function(ctx, args)
+        return ctx.host.fs.write(args.path, tool.content(), { create_parents = true })
+    end,
+}
+"#,
+        )
+        .expect("failed to write namespaced writer module");
+        std::fs::write(
+            root.join("internal/utils/tool.lua"),
+            format!(
+                r#"
+return {{
+    content = function()
+        return {}
+    end,
+}}
+"#,
+                lua_quote(content)
+            ),
+        )
+        .expect("failed to write internal helper module");
+    }
+
+    let target_a = sandbox.path("target/a.txt");
+    let target_b = sandbox.path("target/b.txt");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ namespace = "repo_a", path = {} }},
+        {{ namespace = "repo_b", path = {} }},
+    }},
+    tasks = {{
+        {{ id = "write a", module = "repo_a.writer", args = {{ path = {} }} }},
+        {{ id = "write b", module = "repo_b.writer", args = {{ path = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&modules_a),
+        lua_string(&modules_b),
+        lua_string(&target_a),
+        lua_string(&target_b),
+    ));
+
+    let apply = run_apply(&manifest);
+    assert_task_changed(&apply, "write a");
+    assert_task_changed(&apply, "write b");
+    assert_eq!(std::fs::read_to_string(&target_a).expect("failed to read target a"), "from namespace a\n");
+    assert_eq!(std::fs::read_to_string(&target_b).expect("failed to read target b"), "from namespace b\n");
+}
+
+#[test]
+fn duplicate_module_namespace_is_rejected() {
+    let sandbox = Sandbox::new("duplicate-namespace");
+    let modules_a = sandbox.mkdir("modules-a");
+    let modules_b = sandbox.mkdir("modules-b");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    modules = {{
+        {{ namespace = "repo", path = {} }},
+        {{ namespace = "repo", path = {} }},
+    }},
+    tasks = {{}},
+}}
+"#,
+        lua_string(&modules_a),
+        lua_string(&modules_b),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "namespace 'repo' is not unique",
+    );
+}
+
+#[test]
+fn overlapping_module_namespace_is_rejected() {
+    let sandbox = Sandbox::new("overlapping-namespace");
+    let modules_a = sandbox.mkdir("modules-a");
+    let modules_b = sandbox.mkdir("modules-b");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    modules = {{
+        {{ namespace = "repo", path = {} }},
+        {{ namespace = "repo.lib", path = {} }},
+    }},
+    tasks = {{}},
+}}
+"#,
+        lua_string(&modules_a),
+        lua_string(&modules_b),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "overlaps with namespace 'repo'",
+    );
+}
+
+#[test]
+fn unnamespaced_duplicate_module_is_rejected() {
+    let sandbox = Sandbox::new("unnamespaced-duplicate-module");
+    let modules_a = sandbox.mkdir("modules-a");
+    let modules_b = sandbox.mkdir("modules-b");
+    std::fs::write(modules_a.join("shared.lua"), "return { apply = function(ctx, args) return nil end }\n")
+        .expect("failed to write module a");
+    std::fs::write(modules_b.join("shared.lua"), "return { apply = function(ctx, args) return nil end }\n")
+        .expect("failed to write module b");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "ambiguous", module = "shared", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules_a),
+        lua_string(&modules_b),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        "module 'shared' is ambiguous",
+    );
+}
+
+#[test]
+fn local_module_file_and_init_conflict_is_rejected() {
+    let sandbox = Sandbox::new("file-init-conflict");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(modules.join("foo.lua"), "return { apply = function(ctx, args) return nil end }\n")
+        .expect("failed to write foo.lua");
+    std::fs::create_dir_all(modules.join("foo")).expect("failed to create foo directory");
+    std::fs::write(modules.join("foo/init.lua"), "return { apply = function(ctx, args) return nil end }\n")
+        .expect("failed to write foo/init.lua");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "conflict", module = "foo", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    assert_wali_failure_contains(&["--json", "check", manifest.to_str().expect("non-utf8 manifest path")], "both");
+}
+
+#[test]
+fn namespaced_source_is_not_exposed_globally() {
+    let sandbox = Sandbox::new("namespaced-not-global");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(modules.join("writer.lua"), "return { apply = function(ctx, args) return nil end }\n")
+        .expect("failed to write writer module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ namespace = "repo", path = {} }},
+    }},
+    tasks = {{
+        {{ id = "not global", module = "writer", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        "not found in any unnamespaced module source",
+    );
+}
+
+#[test]
+fn module_source_path_must_be_existing_directory() {
+    let sandbox = Sandbox::new("module-source-not-dir");
+    let file_source = sandbox.path("source.lua");
+    std::fs::write(&file_source, "return {}\n").expect("failed to write source file");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{}},
+}}
+"#,
+        lua_string(&file_source),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "is not a directory",
+    );
+}
+
+#[test]
+fn custom_source_must_not_expose_reserved_wali_namespace() {
+    let sandbox = Sandbox::new("reserved-wali-source");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(modules.join("writer.lua"), "return { apply = function(ctx, args) return nil end }\n")
+        .expect("failed to write writer module");
+    std::fs::create_dir_all(modules.join("wali/private")).expect("failed to create reserved wali directory");
+    std::fs::write(modules.join("wali/private/helper.lua"), "return {}\n").expect("failed to write reserved helper");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ namespace = "repo", path = {} }},
+    }},
+    tasks = {{
+        {{ id = "writer", module = "repo.writer", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        "reserved module namespace",
+    );
+}
+
+fn git_is_available() -> bool {
+    Command::new("git")
+        .arg("--version")
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn run_test_git(args: &[&str], cwd: &Path) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("failed to execute git for integration test");
+    assert!(
+        output.status.success(),
+        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn init_git_repo_with_simple_module(repo: &Path, module_name: &str, content: &str) {
+    let module_dir = repo.join("mods");
+    std::fs::create_dir_all(&module_dir).expect("failed to create repo module directory");
+    std::fs::write(
+        module_dir.join(format!("{module_name}.lua")),
+        format!(
+            r#"
+return {{
+    schema = {{
+        type = "object",
+        required = true,
+        props = {{
+            path = {{ type = "string", required = true }},
+        }},
+    }},
+
+    validate = function(ctx, args)
+        return nil
+    end,
+
+    apply = function(ctx, args)
+        return ctx.host.fs.write(args.path, {}, {{ create_parents = true }})
+    end,
+}}
+"#,
+            lua_quote(content)
+        ),
+    )
+    .expect("failed to write git module");
+
+    run_test_git(&["init", "--quiet"], repo);
+    run_test_git(&["config", "user.email", "wali@example.invalid"], repo);
+    run_test_git(&["config", "user.name", "wali test"], repo);
+    run_test_git(&["add", "mods"], repo);
+    run_test_git(&["commit", "--quiet", "-m", "add module"], repo);
+    run_test_git(&["branch", "-M", "main"], repo);
+}
+
+#[test]
+fn git_module_sources_are_fetched_for_check_and_apply_but_not_plan() {
+    if !git_is_available() {
+        eprintln!("skipping git module source test: git executable not available");
+        return;
+    }
+
+    let sandbox = Sandbox::new("git-modules");
+    let repo = sandbox.mkdir("repo");
+    let repo_modules = repo.join("mods");
+    std::fs::create_dir_all(&repo_modules).expect("failed to create repo module directory");
+    std::fs::write(
+        repo_modules.join("git_file.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    schema = {
+        type = "object",
+        required = true,
+        props = {
+            path = { type = "string", required = true },
+            content = { type = "string", required = true },
+        },
+    },
+
+    validate = function(ctx, args)
+        if ctx.phase ~= "validate" then
+            return api.result.validation():fail("expected validate phase"):build()
+        end
+        return nil
+    end,
+
+    apply = function(ctx, args)
+        return ctx.host.fs.write(args.path, args.content, { create_parents = true })
+    end,
+}
+"#,
+    )
+    .expect("failed to write git module");
+
+    run_test_git(&["init", "--quiet"], &repo);
+    run_test_git(&["config", "user.email", "wali@example.invalid"], &repo);
+    run_test_git(&["config", "user.name", "wali test"], &repo);
+    run_test_git(&["add", "mods/git_file.lua"], &repo);
+    run_test_git(&["commit", "--quiet", "-m", "add module"], &repo);
+    run_test_git(&["branch", "-M", "main"], &repo);
+
+    let target = sandbox.path("target/from-git.txt");
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ git = {{
+            url = {},
+            ref = "main",
+            path = "mods",
+        }} }},
+    }},
+    tasks = {{
+        {{
+            id = "write from git module",
+            module = "git_file",
+            args = {{ path = {}, content = "from git module\n" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&repo),
+        lua_string(&target),
+    ));
+
+    let plan = run_wali_json_with_env(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_eq!(plan.get("mode").and_then(Value::as_str), Some("plan"));
+    assert!(!cache.exists(), "plan must not fetch git module sources");
+
+    let check = run_wali_json_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_unchanged(&check, "write from git module");
+    assert!(cache.exists(), "check should fetch git module sources before validation");
+    assert!(!target.exists(), "check must not apply git module changes");
+
+    let first = run_wali_json_with_env(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_changed(&first, "write from git module");
+    assert_eq!(
+        std::fs::read_to_string(&target).expect("failed to read target written by git module"),
+        "from git module\n"
+    );
+
+    let second = run_wali_json_with_env(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_unchanged(&second, "write from git module");
+}
+
+#[test]
+fn git_module_cache_identity_separates_repos_with_same_leaf_and_ref() {
+    if !git_is_available() {
+        eprintln!("skipping git module cache identity test: git executable not available");
+        return;
+    }
+
+    let sandbox = Sandbox::new("git-cache-identity");
+    let repo_a = sandbox.mkdir("owner-a/shared");
+    let repo_b = sandbox.mkdir("owner-b/shared");
+    init_git_repo_with_simple_module(&repo_a, "git_a", "from repo a\n");
+    init_git_repo_with_simple_module(&repo_b, "git_b", "from repo b\n");
+
+    let target_a = sandbox.path("target/from-a.txt");
+    let target_b = sandbox.path("target/from-b.txt");
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ git = {{ url = {}, ref = "main", path = "mods" }} }},
+        {{ git = {{ url = {}, ref = "main", path = "mods" }} }},
+    }},
+    tasks = {{
+        {{ id = "write from repo a", module = "git_a", args = {{ path = {} }} }},
+        {{ id = "write from repo b", module = "git_b", args = {{ path = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&repo_a),
+        lua_string(&repo_b),
+        lua_string(&target_a),
+        lua_string(&target_b),
+    ));
+
+    let check = run_wali_json_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_unchanged(&check, "write from repo a");
+    assert_task_unchanged(&check, "write from repo b");
+
+    let checkouts = cache.join("git/checkouts");
+    let cache_roots = std::fs::read_dir(&checkouts)
+        .unwrap_or_else(|error| panic!("failed to read git checkouts cache {}: {error}", checkouts.display()))
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cache_roots.len(),
+        2,
+        "repos with the same leaf directory and ref must not share one git checkout"
+    );
+    assert!(
+        cache_roots.iter().all(|name| name.starts_with("source-v1-") && name.len() <= 42),
+        "git checkout cache names should be short stable source ids: {cache_roots:?}"
+    );
+
+    let apply = run_wali_json_with_env(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_changed(&apply, "write from repo a");
+    assert_task_changed(&apply, "write from repo b");
+    assert_eq!(std::fs::read_to_string(&target_a).expect("failed to read repo a target"), "from repo a\n");
+    assert_eq!(std::fs::read_to_string(&target_b).expect("failed to read repo b target"), "from repo b\n");
+}
+
+
+#[test]
+fn git_module_cache_lock_blocks_concurrent_mutation() {
+    if !git_is_available() {
+        eprintln!("skipping git module cache lock test: git executable not available");
+        return;
+    }
+
+    let sandbox = Sandbox::new("git-cache-lock");
+    let repo = sandbox.mkdir("repo");
+    init_git_repo_with_simple_module(&repo, "locked_mod", "from locked module\n");
+
+    let target = sandbox.path("target/locked.txt");
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ git = {{ url = {}, ref = "main", path = "mods" }} }},
+    }},
+    tasks = {{
+        {{ id = "write locked", module = "locked_mod", args = {{ path = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&repo),
+        lua_string(&target),
+    ));
+
+    let check = run_wali_json_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_unchanged(&check, "write locked");
+
+    let checkouts = cache.join("git/checkouts");
+    let checkout_id = std::fs::read_dir(&checkouts)
+        .unwrap_or_else(|error| panic!("failed to read git checkouts cache {}: {error}", checkouts.display()))
+        .filter_map(Result::ok)
+        .find(|entry| entry.path().is_dir())
+        .expect("git checkout was not created")
+        .file_name();
+
+    let lock = cache.join("git/locks").join(format!("{}.lock", checkout_id.to_string_lossy()));
+    std::fs::create_dir_all(&lock).expect("failed to create simulated git cache lock");
+    std::fs::write(lock.join("owner"), "pid = test\n").expect("failed to write simulated lock owner");
+
+    let output = run_wali_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert!(
+        !output.status.success(),
+        "wali unexpectedly succeeded while git cache was locked\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let combined = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        combined.contains("module git cache is locked"),
+        "locked cache failure should mention the git cache lock:\n{combined}"
+    );
+}
+
+#[test]
+fn git_module_cache_identity_separates_submodule_materialization_modes() {
+    if !git_is_available() {
+        eprintln!("skipping git module submodule cache identity test: git executable not available");
+        return;
+    }
+
+    let sandbox = Sandbox::new("git-cache-submodules");
+    let repo = sandbox.mkdir("repo");
+    init_git_repo_with_simple_module(&repo, "git_mod", "from repo\n");
+
+    let target_a = sandbox.path("target/plain.txt");
+    let target_b = sandbox.path("target/submodules.txt");
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ namespace = "plain", git = {{ url = {}, ref = "main", path = "mods" }} }},
+        {{ namespace = "submods", git = {{ url = {}, ref = "main", path = "mods", submodules = true }} }},
+    }},
+    tasks = {{
+        {{ id = "write plain", module = "plain.git_mod", args = {{ path = {} }} }},
+        {{ id = "write submodules", module = "submods.git_mod", args = {{ path = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&repo),
+        lua_string(&repo),
+        lua_string(&target_a),
+        lua_string(&target_b),
+    ));
+
+    let check = run_wali_json_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_unchanged(&check, "write plain");
+    assert_task_unchanged(&check, "write submodules");
+
+    let checkouts = cache.join("git/checkouts");
+    let count = std::fs::read_dir(&checkouts)
+        .unwrap_or_else(|error| panic!("failed to read git checkouts cache {}: {error}", checkouts.display()))
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_dir())
+        .count();
+    assert_eq!(
+        count, 2,
+        "the same url/ref with and without submodules must not share one materialized checkout"
+    );
+}
+
+#[test]
+fn git_namespaces_allow_repos_with_same_internal_tree_and_local_imports() {
+    if !git_is_available() {
+        eprintln!("skipping git module namespace test: git executable not available");
+        return;
+    }
+
+    let sandbox = Sandbox::new("git-namespace-isolation");
+    let repo_a = sandbox.mkdir("owner-a/modules");
+    let repo_b = sandbox.mkdir("owner-b/modules");
+
+    for (repo, content) in [(&repo_a, "from git namespace a\n"), (&repo_b, "from git namespace b\n")] {
+        let module_dir = repo.join("mods");
+        std::fs::create_dir_all(module_dir.join("internal/utils")).expect("failed to create repo module directory");
+        std::fs::write(
+            module_dir.join("writer.lua"),
+            r#"
+local tool = require("internal.utils.tool")
+
+return {
+    schema = {
+        type = "object",
+        required = true,
+        props = {
+            path = { type = "string", required = true },
+        },
+    },
+
+    validate = function(ctx, args)
+        return nil
+    end,
+
+    apply = function(ctx, args)
+        return ctx.host.fs.write(args.path, tool.content(), { create_parents = true })
+    end,
+}
+"#,
+        )
+        .expect("failed to write git writer module");
+        std::fs::write(
+            module_dir.join("internal/utils/tool.lua"),
+            format!(
+                r#"
+return {{
+    content = function()
+        return {}
+    end,
+}}
+"#,
+                lua_quote(content)
+            ),
+        )
+        .expect("failed to write git internal helper module");
+
+        run_test_git(&["init", "--quiet"], repo);
+        run_test_git(&["config", "user.email", "wali@example.invalid"], repo);
+        run_test_git(&["config", "user.name", "wali test"], repo);
+        run_test_git(&["add", "mods"], repo);
+        run_test_git(&["commit", "--quiet", "-m", "add modules"], repo);
+        run_test_git(&["branch", "-M", "main"], repo);
+    }
+
+    let target_a = sandbox.path("target/git-a.txt");
+    let target_b = sandbox.path("target/git-b.txt");
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ namespace = "repo_a", git = {{ url = {}, ref = "main", path = "mods" }} }},
+        {{ namespace = "repo_b", git = {{ url = {}, ref = "main", path = "mods" }} }},
+    }},
+    tasks = {{
+        {{ id = "write git a", module = "repo_a.writer", args = {{ path = {} }} }},
+        {{ id = "write git b", module = "repo_b.writer", args = {{ path = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&repo_a),
+        lua_string(&repo_b),
+        lua_string(&target_a),
+        lua_string(&target_b),
+    ));
+
+    let apply = run_wali_json_with_env(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_changed(&apply, "write git a");
+    assert_task_changed(&apply, "write git b");
+    assert_eq!(std::fs::read_to_string(&target_a).expect("failed to read git target a"), "from git namespace a\n");
+    assert_eq!(std::fs::read_to_string(&target_b).expect("failed to read git target b"), "from git namespace b\n");
+}
+
+
+#[test]
+fn git_module_source_rejects_surrounding_url_and_ref_whitespace() {
+    for (name, git_source, needle) in [
+        (
+            "url-whitespace",
+            r#"{ git = { url = " https://example.invalid/wali/mods.git", ref = "main" } }"#,
+            "url must not contain surrounding whitespace",
+        ),
+        (
+            "ref-whitespace",
+            r#"{ git = { url = "https://example.invalid/wali/mods.git", ref = " main" } }"#,
+            "ref must not contain surrounding whitespace",
+        ),
+    ] {
+        let sandbox = Sandbox::new(name);
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+return {{
+    modules = {{
+        {},
+    }},
+    tasks = {{}},
+}}
+"#,
+            git_source
+        ));
+
+        assert_wali_failure_contains(
+            &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+            needle,
+        );
+    }
+}
+
+#[test]
+fn git_module_source_rejects_removed_manifest_fields() {
+    let sandbox = Sandbox::new("git-removed-fields");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    modules = {
+        { git = {
+            url = "https://example.invalid/wali/mods.git",
+            ref = "main",
+            name = "legacy-cache-name",
+        } },
+    },
+    tasks = {},
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "unknown field",
+    );
+}
 fn run_wali_failure(args: &[&str]) -> std::process::Output {
     let output = run_wali(args);
     assert!(
@@ -567,6 +1376,221 @@ fn assert_wali_failure_contains(args: &[&str], needle: &str) {
         stdout.contains(needle) || stderr.contains(needle),
         "wali failure did not contain {needle:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
+}
+
+#[test]
+fn check_preflights_task_module_resolution_before_host_connection() {
+    let sandbox = Sandbox::new("module-preflight-before-connect");
+    let modules = sandbox.mkdir("modules");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{
+            id = "unreachable",
+            transport = {{
+                ssh = {{
+                    user = "nobody",
+                    host = "192.0.2.1",
+                    port = 22,
+                    auth = "password",
+                }},
+            }},
+        }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{
+            id = "missing module",
+            module = "missing_module",
+            args = {{}},
+        }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    let output = run_wali_failure(&["--json", "check", manifest.to_str().expect("non-utf8 manifest path")]);
+    let combined = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        combined.contains("was not found in any unnamespaced module source"),
+        "failure should report missing module before host connection:\n{combined}"
+    );
+    assert!(
+        !combined.contains("SSH error"),
+        "module preflight should fail before SSH connection is attempted:\n{combined}"
+    );
+}
+
+#[test]
+fn manifest_root_unknown_fields_are_rejected() {
+    let sandbox = Sandbox::new("unknown-root-field");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    unexpected = true,
+    tasks = {},
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "unknown field",
+    );
+}
+
+#[test]
+fn host_unknown_fields_are_rejected() {
+    let sandbox = Sandbox::new("unknown-host-field");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local", typo = true },
+    },
+    tasks = {},
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "unknown field",
+    );
+}
+
+#[test]
+fn task_unknown_fields_are_rejected() {
+    let sandbox = Sandbox::new("unknown-task-field");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "typo",
+            module = "wali.builtin.touch",
+            args = { path = "/tmp/wali-should-not-touch" },
+            moduel = "wali.builtin.file",
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "unknown field",
+    );
+}
+
+#[test]
+fn run_as_unknown_fields_are_rejected() {
+    let sandbox = Sandbox::new("unknown-runas-field");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        {
+            id = "localhost",
+            transport = "local",
+            run_as = {
+                { id = "root", user = "root", typo = true },
+            },
+        },
+    },
+    tasks = {},
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "unknown field",
+    );
+}
+
+#[test]
+fn invalid_task_module_names_are_rejected() {
+    let sandbox = Sandbox::new("invalid-task-module-name");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        { id = "bad", module = "repo-bad.writer", args = {} },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "invalid segment",
+    );
+}
+
+#[test]
+fn unknown_wali_builtin_modules_are_rejected_before_execution() {
+    let sandbox = Sandbox::new("unknown-wali-builtin");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        { id = "bad builtin", module = "wali.builtin.no_such_module", args = {} },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "not a known wali builtin module",
+    );
+}
+
+#[test]
+fn package_path_unsafe_module_source_paths_are_rejected() {
+    let sandbox = Sandbox::new("unsafe-package-path");
+
+    for dirname in ["modules;unsafe", "modules?unsafe"] {
+        let modules = sandbox.mkdir(dirname);
+        std::fs::write(modules.join("writer.lua"), "return { apply = function(ctx, args) return nil end }\n")
+            .expect("failed to write writer module");
+
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "writer", module = "writer", args = {{}} }},
+    }},
+}}
+"#,
+            lua_string(&modules),
+        ));
+
+        assert_wali_failure_contains(
+            &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+            "unsafe for Lua package.path",
+        );
+    }
 }
 
 #[test]
@@ -660,10 +1684,7 @@ return {{
         "where a file is expected",
     );
     assert!(dest.join("conflict").is_dir(), "preflight must not replace existing conflict directory");
-    assert!(
-        !dest.join("later").exists(),
-        "preflight should fail before copying unrelated later entries"
-    );
+    assert!(!dest.join("later").exists(), "preflight should fail before copying unrelated later entries");
 }
 
 #[test]

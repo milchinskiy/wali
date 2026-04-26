@@ -56,7 +56,7 @@ pub enum PtyMode {
 /// assert!(matches!(parsed.env_policy, RunAsEnv::Clear));
 /// ```
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct RunAs {
     pub id: String,
     pub user: String,

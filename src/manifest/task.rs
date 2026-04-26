@@ -5,7 +5,7 @@ use crate::spec::predicate::When;
 pub type TaskId = String;
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Task {
     pub id: TaskId,
     pub tags: Option<BTreeSet<super::Tag>>,

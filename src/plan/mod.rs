@@ -19,7 +19,7 @@ pub struct Plan {
 pub struct HostPlan {
     pub id: String,
     pub transport: Transport,
-    pub modules_paths: Vec<PathBuf>,
+    pub modules: Vec<crate::manifest::modules::ModuleMount>,
     pub tasks: Vec<TaskInstance>,
 }
 
@@ -210,11 +210,11 @@ pub struct TaskInstance {
 }
 
 pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
-    let module_paths = manifest
+    let module_mounts = manifest
         .modules
         .iter()
-        .filter_map(|module| module.include_path())
-        .collect::<Vec<_>>();
+        .map(crate::manifest::modules::Module::mount)
+        .collect::<crate::Result<Vec<_>>>()?;
 
     let hosts: Vec<HostPlan> = manifest
         .hosts
@@ -249,7 +249,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
 
             Ok(HostPlan {
                 id: host.id.clone(),
-                modules_paths: module_paths.clone(),
+                modules: module_mounts.clone(),
                 transport: host.transport.clone(),
                 tasks,
             })

@@ -76,10 +76,99 @@ return {
 }
 ```
 
+
+## Custom module sources
+
+A manifest can load user modules from local directories or from Git repositories.
+Local paths are resolved relative to the manifest file:
+
+```lua
+modules = {
+    { path = "./modules" },
+}
+```
+
+Module sources may also be mounted under a manifest-local namespace:
+
+```lua
+modules = {
+    { namespace = "local_ops", path = "./modules" },
+}
+
+tasks = {
+    {
+        id = "run namespaced module",
+        module = "local_ops.example_file",
+        args = {},
+    },
+}
+```
+
+The namespace is only a public selector used by the manifest. Once a task is
+resolved to one effective module source, wali creates a fresh Lua runtime for
+that task, adds only that source's include directory to `package.path`, and
+loads the source-local module name. Module internals therefore keep normal Lua
+imports:
+
+```lua
+local tool = require("internal.utils.tool")
+```
+
+Git sources are fetched with the system `git` executable before `check` or
+`apply`. `plan` remains compile-only and does not fetch Git sources. Git `url`
+and `ref` values are strict strings and must not contain surrounding whitespace.
+
+```lua
+modules = {
+    {
+        namespace = "ops",
+        git = {
+            url = "https://example.invalid/ops/wali-modules.git",
+            ref = "main",
+            path = "modules",
+            depth = 1,
+            submodules = false,
+        },
+    },
+}
+
+tasks = {
+    {
+        id = "run git module",
+        module = "ops.file",
+        args = {},
+    },
+}
+```
+
+Local module paths must resolve to existing directories and must be safely
+representable in Lua `package.path`; paths containing `;` or `?` are rejected.
+Namespaces and task module names are strict Lua-style dotted names. Each segment
+must match `[A-Za-z_][A-Za-z0-9_]*`. Namespaces must be unique, must not
+overlap, and must not use the reserved `wali.*` namespace. Custom sources must
+not contain a top-level `wali.lua` or `wali/` tree because that package prefix
+is reserved for wali itself. The same repository may be mounted more than once
+at different refs only by using different namespaces.
+
+Unnamespaced sources preserve the simple local workflow. If an unnamespaced task
+module exists in more than one unnamespaced source, wali fails instead of
+choosing by search-path order. Namespaced sources are not exposed globally.
+Before `check` or `apply` connects to hosts or asks for secrets, wali prepares
+module sources and resolves every task module name.
+
+Git sources are cached under `$WALI_MODULES_CACHE` when it is set, otherwise
+under `$XDG_DATA_HOME/wali/modules` or `~/.local/share/wali/modules`. Git
+checkouts use short stable source IDs derived from the Git URL, ref, and
+submodule materialization mode. The namespace, repository leaf name, and
+module `path` are not cache keys. `check` and `apply` hold a process-level cache
+lock for every Git source until execution finishes, so another wali process
+cannot reset or clean the same checkout while modules are being loaded.
+
 ## Builtin modules
 
-Builtin modules use the reserved `wali.builtin.*` namespace. The current set
-includes:
+Builtin task modules use the reserved `wali.builtin.*` namespace. Unknown
+`wali.*` task modules are rejected during manifest/preflight validation. The
+current set includes:
 
 ```text
 wali.builtin.command

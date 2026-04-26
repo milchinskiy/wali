@@ -7,7 +7,7 @@ use crate::spec::runas::RunAs;
 pub type HostId = String;
 
 #[derive(Default, Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Host {
     pub id: HostId,
     pub transport: Transport,

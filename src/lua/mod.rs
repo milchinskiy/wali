@@ -141,7 +141,15 @@ impl LuaRuntime {
     where
         N: AsRef<str>,
     {
-        let module: mlua::Table = self.require(name.as_ref())?;
-        module::Module::new(name.as_ref().to_string(), &self.lua, module)
+        self.module_load_by_name_as(name.as_ref(), name.as_ref())
+    }
+
+    pub fn module_load_by_name_as<N, D>(&self, load_name: N, display_name: D) -> mlua::Result<module::Module>
+    where
+        N: AsRef<str>,
+        D: Into<String>,
+    {
+        let module: mlua::Table = self.require(load_name.as_ref())?;
+        module::Module::new(display_name, &self.lua, module)
     }
 }

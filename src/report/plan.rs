@@ -69,11 +69,7 @@ impl PlanHost {
         Self {
             id: host.id.clone(),
             transport: PlanTransport::from_transport(&host.transport),
-            modules_paths: host
-                .modules_paths
-                .iter()
-                .map(|path| path.display().to_string())
-                .collect(),
+            modules_paths: host.modules.iter().map(|module| module.label.clone()).collect(),
             tasks: host.tasks.iter().map(PlanTask::from_task_instance).collect(),
         }
     }

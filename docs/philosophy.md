@@ -64,6 +64,41 @@ A task becomes meaningful only after host expansion. Dependency resolution is
 host-local: a task instance may depend only on task instances on the same host.
 Cross-host dependency ordering is intentionally outside the current design.
 
+
+## Module source preparation
+
+Local module paths are resolved when the manifest is loaded. Git module sources
+are prepared before `check` and `apply` by invoking the system `git` executable.
+This keeps Git behavior familiar and avoids carrying a second Git
+implementation in wali.
+
+`plan` does not fetch Git sources. It should remain a compile-only operation:
+manifest in, expanded task plan out, no host access and no network access.
+
+Fetched Git module sources are cached locally. The cache is an implementation
+detail of module loading, not a state backend and not part of host convergence.
+Git checkout identity is the exact URL, ref, and submodule materialization mode.
+Manifest namespaces are not used as cache keys because they are local to one
+manifest and too easy to collide. Module `path` is also not a cache key; it is
+only the include root inside an already checked-out source.
+
+A module source may be mounted under a namespace. The namespace is a public
+selector for task module names, not a loader cache key and not something module
+authors must know. Namespaces and task module names are strict dotted Lua-style
+identifiers, which keeps file lookup predictable. Each task still gets a
+one-shot Lua runtime with only the effective module source in `package.path`, so
+internal imports such as `require("internal.utils.tool")` remain ordinary
+source-local Lua imports. Namespaced sources are not exposed globally;
+unnamespaced sources are kept only for the simple local workflow and must not
+ambiguously provide the same module name.
+
+For `check` and `apply`, module sources are prepared and all task module names
+are resolved before secret collection, host connection, or worker execution.
+Git source locks are held until execution finishes, not only during fetch, so
+the checkout cannot be reset by another wali process while a task runtime is
+loading module files. Invalid module wiring should fail as manifest/preflight
+input, not as a late runtime error.
+
 ## Lua phases
 
 Lua module execution has three separate contracts:
@@ -121,8 +156,9 @@ A builtin module should normally be:
 - structured in its execution result;
 - covered by integration tests before more modules are added on top of it.
 
-The reserved namespace is `wali.builtin.*`. User modules should not use it.
-Shared builtin Lua helpers belong in `wali.builtin.lib`.
+The reserved namespace is `wali.*`. User modules should not use it, and custom
+module sources should not expose a top-level `wali.lua` or `wali/` tree. Shared
+builtin Lua helpers belong in `wali.builtin.lib`.
 
 ## Filesystem semantics
 

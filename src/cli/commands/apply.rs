@@ -16,8 +16,8 @@ pub fn apply<'a>() -> ap::CmdSpec<'a, Context> {
 }
 
 fn apply_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
-    let plan = super::load_plan(ctx)?;
-    let launcher = wali::launcher::Launcher::prepare(&plan)?;
+    let execution = super::load_execution_plan(ctx)?;
+    let launcher = wali::launcher::Launcher::prepare(&execution.plan)?;
     let report = Reporter::new(ApplyLayout::new(super::render_kind(ctx)));
     launcher.apply(report)?;
 

@@ -52,7 +52,7 @@ fn opt_pretty_json<'a>() -> ap::OptSpec<'a, Context> {
     .group("json")
 }
 
-fn load_plan(ctx: &Context) -> Result<wali::plan::Plan, ap::Error> {
+fn load_manifest(ctx: &Context) -> Result<wali::manifest::Manifest, ap::Error> {
     let Some(manifest) = ctx.manifest.as_ref() else {
         return Err(ap::Error::User("Manifest file not specified".to_string()));
     };
@@ -60,8 +60,32 @@ fn load_plan(ctx: &Context) -> Result<wali::plan::Plan, ap::Error> {
         return Err(ap::Error::User(format!("Manifest file {} not found", manifest.display())));
     }
 
-    let manifest = wali::manifest::load_from_file(manifest.as_path())?;
-    Ok(wali::plan::compile(manifest)?)
+    Ok(wali::manifest::load_from_file(manifest.as_path())?)
+}
+
+fn load_plan(ctx: &Context) -> Result<wali::plan::Plan, ap::Error> {
+    Ok(wali::plan::compile(load_manifest(ctx)?)?)
+}
+
+pub(super) struct ExecutionPlan {
+    pub plan: wali::plan::Plan,
+    _module_locks: Vec<wali::manifest::modules::ModuleGitLock>,
+}
+
+fn load_execution_plan(ctx: &Context) -> Result<ExecutionPlan, ap::Error> {
+    let manifest = load_manifest(ctx)?;
+    let module_locks = wali::manifest::modules::prepare_sources(&manifest.modules)?;
+    let module_mounts = manifest
+        .modules
+        .iter()
+        .map(wali::manifest::modules::Module::mount)
+        .collect::<wali::Result<Vec<_>>>()?;
+    wali::manifest::modules::validate_prepared_mounts(&module_mounts)?;
+    wali::manifest::modules::validate_task_modules(&module_mounts, &manifest.tasks)?;
+    Ok(ExecutionPlan {
+        plan: wali::plan::compile(manifest)?,
+        _module_locks: module_locks,
+    })
 }
 
 fn render_kind(ctx: &Context) -> RenderKind {
