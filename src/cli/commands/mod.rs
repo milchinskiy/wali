@@ -6,6 +6,7 @@ use wali::report::RenderKind;
 
 mod apply;
 mod check;
+mod plan;
 
 pub fn root<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new(env!("CARGO_PKG_NAME"))
@@ -17,6 +18,7 @@ pub fn root<'a>() -> ap::CmdSpec<'a, Context> {
         .handler_try(|_, _| Err(ap::Error::User("not implemented".to_string())))
         .subcmd(apply::apply())
         .subcmd(check::check())
+        .subcmd(plan::plan())
 }
 
 fn opt_verbosity<'a>() -> ap::OptSpec<'a, Context> {

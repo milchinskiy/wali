@@ -442,3 +442,107 @@ return {{
     assert_task_unchanged(&second, "link tree");
     assert_task_unchanged(&second, "walk copied");
 }
+
+fn run_plan(manifest: &Path) -> Value {
+    run_wali_json(&["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")])
+}
+
+#[test]
+fn plan_compiles_task_order_without_host_access_or_mutation() {
+    let sandbox = Sandbox::new("plan");
+    let should_not_exist = sandbox.path("should-not-exist.txt");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{
+            id = "localhost",
+            transport = "local",
+            run_as = {{
+                {{ id = "root", user = "root", via = "sudo" }},
+            }},
+        }},
+        {{
+            id = "unreachable-ssh",
+            transport = {{
+                ssh = {{
+                    user = "nobody",
+                    host = "192.0.2.1",
+                    port = 22,
+                    auth = "password",
+                }},
+            }},
+        }},
+    }},
+    tasks = {{
+        {{
+            id = "second",
+            depends_on = {{ "first" }},
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "must not be written by plan\n" }},
+        }},
+        {{
+            id = "first",
+            module = "wali.builtin.dir",
+            args = {{ path = {} }},
+        }},
+        {{
+            id = "root-owned",
+            host = {{ id = "localhost" }},
+            depends_on = {{ "second" }},
+            run_as = "root",
+            when = {{ os = "linux" }},
+            module = "wali.builtin.touch",
+            args = {{ path = {} }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&should_not_exist),
+        lua_string(&sandbox.path("dir")),
+        lua_string(&sandbox.path("root-owned")),
+    ));
+
+    let report = run_plan(&manifest);
+    assert_eq!(report.get("mode").and_then(Value::as_str), Some("plan"));
+    assert_eq!(report.get("hosts").and_then(Value::as_array).map(Vec::len), Some(2));
+    assert!(!should_not_exist.exists(), "plan must not apply file changes");
+
+    let localhost = report
+        .get("hosts")
+        .and_then(Value::as_array)
+        .and_then(|hosts| {
+            hosts
+                .iter()
+                .find(|host| host.get("id").and_then(Value::as_str) == Some("localhost"))
+        })
+        .expect("localhost host missing from plan report");
+
+    let tasks = localhost
+        .get("tasks")
+        .and_then(Value::as_array)
+        .expect("localhost tasks missing from plan report");
+    let task_ids = tasks
+        .iter()
+        .map(|task| task.get("id").and_then(Value::as_str).expect("task id missing"))
+        .collect::<Vec<_>>();
+    assert_eq!(task_ids, vec!["first", "second", "root-owned"]);
+
+    let root_owned = tasks
+        .iter()
+        .find(|task| task.get("id").and_then(Value::as_str) == Some("root-owned"))
+        .expect("root-owned task missing");
+    assert_eq!(root_owned.pointer("/run_as/id").and_then(Value::as_str), Some("root"));
+    assert_eq!(root_owned.get("has_when").and_then(Value::as_bool), Some(true));
+
+    let ssh_host = report
+        .get("hosts")
+        .and_then(Value::as_array)
+        .and_then(|hosts| {
+            hosts
+                .iter()
+                .find(|host| host.get("id").and_then(Value::as_str) == Some("unreachable-ssh"))
+        })
+        .expect("ssh host missing from plan report");
+    assert_eq!(ssh_host.pointer("/transport/kind").and_then(Value::as_str), Some("ssh"));
+}

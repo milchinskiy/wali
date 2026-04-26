@@ -2,6 +2,7 @@ use std::sync::mpsc;
 use std::thread;
 
 pub mod apply;
+pub mod plan;
 
 pub const BRAILLE: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ";
 pub const BRAILLE_SUCCESS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✓";
