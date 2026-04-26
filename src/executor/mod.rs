@@ -26,25 +26,44 @@ mod backend;
 pub use backend::Backend;
 
 pub trait ExecutorBinder {
+    /// bind the executor to a run_as
     fn bind(&self, run_as: Option<RunAs>) -> Self;
 }
 
 pub trait Facts {
     type Error;
 
+    /// returns the current operating system
     fn os(&self) -> Result<String, Self::Error>;
+
+    /// returns the current architecture
     fn arch(&self) -> Result<String, Self::Error>;
+
+    /// returns the current hostname
     fn hostname(&self) -> Result<String, Self::Error>;
 
+    /// returns the value of an environment variable
     fn env(&self, key: &str) -> Result<Option<String>, Self::Error>;
+
+    /// returns the current user id
     fn uid(&self) -> Result<u32, Self::Error>;
+
+    /// returns the current group id
     fn gid(&self) -> Result<u32, Self::Error>;
+    
+    /// returns user's group ids
     fn gids(&self) -> Result<Vec<u32>, Self::Error>;
 
+    /// returns the current username
     fn user(&self) -> Result<String, Self::Error>;
+
+    /// returns the current group
     fn group(&self) -> Result<String, Self::Error>;
+
+    /// returns the current user's groups
     fn groups(&self) -> Result<Vec<String>, Self::Error>;
 
+    /// returns the path to a command
     fn which(&self, command: &str) -> Result<Option<TargetPath>, Self::Error>;
 }
 
@@ -127,6 +146,9 @@ pub trait Fs {
 pub trait CommandExec {
     type Error;
 
+    /// execute a command
+    /// # Errors
+    /// returns an error if the command cannot be executed
     fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error>;
 
     /// execute a command
@@ -161,8 +183,11 @@ pub trait CommandExec {
 }
 
 pub trait PathSemantics {
+    /// join two paths
     fn join(&self, base: &TargetPath, child: &str) -> TargetPath;
+    /// normalize a path
     fn normalize(&self, path: &TargetPath) -> TargetPath;
+    /// get the parent of a path
     fn parent(&self, path: &TargetPath) -> Option<TargetPath>;
 }
 
