@@ -1,14 +1,18 @@
 # Builtin modules
 
-Builtin modules live under the reserved `wali.builtin.*` namespace. User modules should not use this namespace.
+Builtin modules live under the reserved `wali.builtin.*` namespace. User modules
+should not use this namespace.
 
 The builtin module philosophy is:
 
 - builtin modules describe desired state whenever possible;
-- low-level host operations remain available through `ctx.host.*`, but builtin modules should expose stable resources rather than syscall-shaped wrappers;
+- low-level host operations remain available through `ctx.host.*`, but builtin
+  modules should expose stable resources rather than syscall-shaped wrappers;
 - each builtin module must be idempotent by default;
-- each builtin module must return a structured `ExecutionResult` with concrete changes;
-- shared Lua behavior belongs in `wali.builtin.lib`, not duplicated across modules.
+- each builtin module must return a structured `ExecutionResult` with concrete
+  changes;
+- shared Lua behavior belongs in `wali.builtin.lib`, not duplicated across
+  modules.
 
 ## `wali.builtin.dir`
 
@@ -89,11 +93,37 @@ Ensures a symbolic link exists or is absent.
 }
 ```
 
-`replace = true` may replace files and symlinks, but it refuses to replace directories.
+`replace = true` may replace files and symlinks, but it refuses to replace
+directories.
+
+## `wali.builtin.remove`
+
+Ensures any filesystem path is absent. Use this when the existing path kind is
+not important, or when cleanup code should remove either a file, symlink, or
+directory. It is idempotent: an already absent path is reported as unchanged.
+
+```lua
+{
+    id = "remove stale path",
+    module = "wali.builtin.remove",
+    args = {
+        path = "/tmp/old-example",
+        recursive = true,
+    },
+}
+```
+
+Safety rules:
+
+- empty path, `/`, `.`, and `..` are rejected after host path normalization;
+- directories require `recursive = true` when they are non-empty;
+- special filesystem entries are rejected unless `allow_special = true`;
+- symlinks are removed as links, not followed.
 
 ## `wali.builtin.command`
 
-Runs an explicitly imperative command or shell script. Use `creates` or `removes` guards when the command can be made idempotent.
+Runs an explicitly imperative command or shell script. Use `creates` or
+`removes` guards when the command can be made idempotent.
 
 ```lua
 {

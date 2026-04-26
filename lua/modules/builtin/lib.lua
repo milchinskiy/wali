@@ -65,6 +65,19 @@ function lib.owner(value)
 	return value
 end
 
+function lib.validate_safe_remove_path(ctx, path)
+	if path == nil or path == "" then
+		return lib.validation_error("path must not be empty")
+	end
+
+	local normalized = ctx.host.path.normalize(path)
+	if normalized == "" or normalized == "/" or normalized == "." or normalized == ".." then
+		return lib.validation_error("refusing to remove unsafe path: " .. tostring(path))
+	end
+
+	return nil
+end
+
 function lib.fs_opts(args)
 	local opts = {}
 	if args.mode ~= nil then

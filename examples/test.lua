@@ -34,6 +34,15 @@ return {
 				mode = "0644",
 			},
 		},
+        {
+            id = "write stale file",
+            module = "wali.builtin.file",
+            args = {
+                path = "/tmp/wali-demo/stale.txt",
+                content = "I'll be removed soon by wali\n",
+                mode = "0644",
+            },
+        },
 		{
 			id = "link demo file",
 			module = "wali.builtin.link",
@@ -41,6 +50,13 @@ return {
 				path = "/tmp/wali-demo/hello.link",
 				target = "/tmp/wali-demo/hello.txt",
 				replace = true,
+			},
+		},
+		{
+			id = "remove stale demo file",
+			module = "wali.builtin.remove",
+			args = {
+				path = "/tmp/wali-demo/stale.txt",
 			},
 		},
 		{
