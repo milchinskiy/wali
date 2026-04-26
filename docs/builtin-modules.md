@@ -193,6 +193,38 @@ modules.
 `order` may be `"pre"`, `"post"`, or `"native"`. The task result is always
 unchanged and includes `data.entries` in JSON reports.
 
+## `wali.builtin.link_tree`
+
+Mirrors a source directory tree into a destination directory by creating
+destination directories and symlinks to source files. This module does not copy
+file bytes and does not follow source symlinks; a source symlink is mirrored as
+a destination symlink pointing at the source symlink path itself.
+
+```lua
+{
+    id = "link plugin tree",
+    module = "wali.builtin.link_tree",
+    args = {
+        src = "/opt/example/releases/current/plugins",
+        dest = "/var/lib/example/plugins",
+        replace = false,
+        dir_mode = "0755",
+    },
+}
+```
+
+Safety rules:
+
+- `src` and `dest` must be absolute paths;
+- `/` is refused as either source or destination;
+- source and destination must not be nested inside each other;
+- destination directories are created or verified;
+- destination file/symlink conflicts are refused unless `replace = true`;
+- destination directory conflicts are never replaced by links;
+- source `other` entries are refused unless `allow_special = true`;
+- extra destination entries are not pruned.
+
+
 ## `wali.builtin.command`
 
 Runs an explicitly imperative command or shell script. Use `creates` or

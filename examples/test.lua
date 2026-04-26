@@ -34,15 +34,15 @@ return {
 				mode = "0644",
 			},
 		},
-        {
-            id = "write stale file",
-            module = "wali.builtin.file",
-            args = {
-                path = "/tmp/wali-demo/stale.txt",
-                content = "I'll be removed soon by wali\n",
-                mode = "0644",
-            },
-        },
+		{
+			id = "write stale file",
+			module = "wali.builtin.file",
+			args = {
+				path = "/tmp/wali-demo/stale.txt",
+				content = "I'll be removed soon by wali\n",
+				mode = "0644",
+			},
+		},
 		{
 			id = "touch marker file",
 			module = "wali.builtin.touch",
@@ -83,6 +83,16 @@ return {
 				program = "sh",
 				args = { "-c", "printf command-ran > /tmp/wali-demo/command.txt" },
 				creates = "/tmp/wali-demo/command.txt",
+			},
+		},
+		{
+			id = "link demo tree",
+			module = "wali.builtin.link_tree",
+			args = {
+				src = "/tmp/wali-demo",
+				dest = "/tmp/wali-demo-linked",
+				replace = true,
+				dir_mode = "0755",
 			},
 		},
 		{

@@ -65,6 +65,29 @@ function lib.owner(value)
 	return value
 end
 
+function lib.validate_owner(value, field)
+	local ok, err = pcall(lib.owner, value)
+	if ok then
+		return nil
+	end
+	return lib.validation_error((field or "owner") .. ": " .. err)
+end
+
+function lib.is_absolute_path(path)
+	return type(path) == "string" and path:sub(1, 1) == "/"
+end
+
+function lib.validate_absolute_path(path, field)
+	field = field or "path"
+	if path == nil or path == "" then
+		return lib.validation_error(field .. " must not be empty")
+	end
+	if not lib.is_absolute_path(path) then
+		return lib.validation_error(field .. " must be absolute")
+	end
+	return nil
+end
+
 function lib.validate_safe_remove_path(ctx, path)
 	if path == nil or path == "" then
 		return lib.validation_error("path must not be empty")
@@ -84,6 +107,18 @@ function lib.fs_opts(args)
 		opts.mode = lib.mode_bits(args.mode)
 	end
 	local owner = lib.owner(args.owner)
+	if owner ~= nil then
+		opts.owner = owner
+	end
+	return opts
+end
+
+function lib.dir_opts(args)
+	local opts = {}
+	if args.dir_mode ~= nil then
+		opts.mode = lib.mode_bits(args.dir_mode)
+	end
+	local owner = lib.owner(args.dir_owner)
 	if owner ~= nil then
 		opts.owner = owner
 	end
@@ -135,6 +170,91 @@ function lib.command_detail(kind, value)
 		return value.program
 	end
 	return value.program .. " " .. table.concat(value.args, " ")
+end
+
+function lib.is_same_or_child(parent, path)
+	if parent == path then
+		return true
+	end
+	if parent == "/" then
+		return path:sub(1, 1) == "/"
+	end
+	return path:sub(1, #parent + 1) == parent .. "/"
+end
+
+function lib.validate_tree_roots(ctx, src, dest)
+	local src_error = lib.validate_absolute_path(src, "src")
+	if src_error ~= nil then
+		return src_error
+	end
+	local dest_error = lib.validate_absolute_path(dest, "dest")
+	if dest_error ~= nil then
+		return dest_error
+	end
+
+	local normalized_src = ctx.host.path.normalize(src)
+	local normalized_dest = ctx.host.path.normalize(dest)
+	if normalized_src == "/" then
+		return lib.validation_error("refusing to use / as a tree source")
+	end
+	if normalized_dest == "/" then
+		return lib.validation_error("refusing to use / as a tree destination")
+	end
+	if lib.is_same_or_child(normalized_src, normalized_dest) then
+		return lib.validation_error("tree destination must not be inside source")
+	end
+	if lib.is_same_or_child(normalized_dest, normalized_src) then
+		return lib.validation_error("tree source must not be inside destination")
+	end
+	return nil
+end
+
+function lib.tree_destination(ctx, dest_root, relative_path)
+	if relative_path == nil or relative_path == "" then
+		return dest_root
+	end
+	return ctx.host.path.join(dest_root, relative_path)
+end
+
+function lib.ensure_dir(ctx, result, path, opts)
+	local current = ctx.host.fs.lstat(path)
+	if current == nil then
+		result:merge(ctx.host.fs.create_dir(path, opts or { recursive = true }))
+		return
+	end
+	if current.kind ~= "dir" then
+		error("expected directory at " .. path .. ", got " .. current.kind)
+	end
+	result:merge(ctx.host.fs.create_dir(path, opts or { recursive = true }))
+end
+
+function lib.ensure_symlink(ctx, result, link_path, target_path, replace)
+	local current = ctx.host.fs.lstat(link_path)
+	if current == nil then
+		result:merge(ctx.host.fs.symlink(target_path, link_path))
+		return
+	end
+
+	if current.kind == "symlink" then
+		local current_target = ctx.host.fs.read_link(link_path)
+		if current_target == target_path then
+			result:unchanged(link_path, "symlink already points to target")
+			return
+		end
+	end
+
+	if not replace then
+		error("path already exists and replace is false: " .. link_path)
+	end
+	if current.kind == "dir" then
+		error("refusing to replace directory with symlink: " .. link_path)
+	end
+	if current.kind ~= "file" and current.kind ~= "symlink" then
+		error("refusing to replace special filesystem entry with symlink: " .. link_path)
+	end
+
+	result:merge(ctx.host.fs.remove_file(link_path))
+	result:merge(ctx.host.fs.symlink(target_path, link_path))
 end
 
 return lib
