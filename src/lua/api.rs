@@ -3,7 +3,7 @@ use rand::RngExt;
 
 use crate::executor::{
     Backend, CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams,
-    DirOpts, Facts, FileMode, Fs, PathSemantics, RemoveDirOpts, RenameOpts, TargetPath, WalkOpts, WriteOpts,
+    DirOpts, Facts, FileMode, Fs, MetadataOpts, PathSemantics, RemoveDirOpts, RenameOpts, TargetPath, WalkOpts, WriteOpts,
 };
 use crate::plan::TaskInstance;
 use crate::spec::account::Owner;
@@ -206,6 +206,20 @@ fn build_command_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
 fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
     let table = lua.create_table()?;
 
+    table.set("metadata", {
+        let backend = backend.clone();
+        lua.create_function(move |lua, (path, opts): (String, Option<Table>)| {
+            let opts: MetadataOpts = deserialize_table_or_default(lua, opts)?;
+            match backend
+                .metadata(&TargetPath::from(path), opts)
+                .map_err(mlua::Error::external)?
+            {
+                Some(metadata) => Ok(Some(lua.to_value(&metadata)?)),
+                None => Ok(None),
+            }
+        })?
+    })?;
+
     table.set("stat", {
         let backend = backend.clone();
         lua.create_function(move |lua, path: String| {
@@ -216,6 +230,15 @@ fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
         })?
     })?;
 
+    table.set("lstat", {
+        let backend = backend.clone();
+        lua.create_function(move |lua, path: String| {
+            match backend.lstat(&TargetPath::from(path)).map_err(mlua::Error::external)? {
+                Some(metadata) => Ok(Some(lua.to_value(&metadata)?)),
+                None => Ok(None),
+            }
+        })?
+    })?;
     table.set("exists", {
         let backend = backend.clone();
         lua.create_function(move |_, path: String| {

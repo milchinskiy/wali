@@ -120,7 +120,6 @@ Safety rules:
 - special filesystem entries are rejected unless `allow_special = true`;
 - symlinks are removed as links, not followed.
 
-
 ## `wali.builtin.touch`
 
 Ensures a regular file exists without replacing existing content. This is useful
@@ -164,10 +163,13 @@ Ensures mode and/or owner metadata on an existing file or directory.
 }
 ```
 
-`expect` may be `"any"`, `"file"`, or `"dir"`. The module refuses symlinks
-for now because the executor API currently uses lstat-style metadata while
-POSIX chmod/chown symlink-follow behavior is platform-sensitive. Follow/no-follow
-semantics should be added explicitly later rather than guessed.
+`expect` may be `"any"`, `"file"`, or `"dir"`.
+
+By default, `follow = true`, so a symlink to a file or directory is resolved and
+`chmod` / `chown` affect the target, matching normal POSIX command behavior. Set
+`follow = false` only when you want to inspect the path itself; the module will
+then refuse symlinks because portable no-follow chmod/chown semantics are not
+available through the current executor contract.
 
 ## `wali.builtin.command`
 
@@ -212,17 +214,34 @@ ctx.host.fs.walk(path, {
 })
 ```
 
-It returns entries with:
+It returns entries with lstat-style metadata:
 
 ```lua
 {
     path = "/absolute/or/target/path",
     relative_path = "path/relative/to/root",
+    depth = 1,
     kind = "file" | "dir" | "symlink" | "other",
+    link_target = nil,
+    metadata = {
+        kind = "file" | "dir" | "symlink" | "other",
+        size = 123,
+        link_target = nil,
+        uid = 0,
+        gid = 0,
+        mode = 420,
+        accessed_at = 1710000000.0,
+        modified_at = 1710000000.0,
+        changed_at = 1710000000.0,
+        created_at = nil,
+    },
 }
 ```
 
-The walk does not follow symlinks. This primitive is intentionally separate
-from tree modules; `copy_tree`, `link_tree`, and archive-style modules should
-be designed on top of this traversal contract instead of shelling out directly
-to `cp -a` or `find` inside each module.
+`ctx.host.fs.stat(path)` follows symlinks. `ctx.host.fs.lstat(path)` and
+`ctx.host.fs.walk(...)` inspect the path itself and never follow symlinks.
+
+The walk primitive is intentionally separate from tree modules; `copy_tree`,
+`link_tree`, and archive-style modules should be designed on top of this
+traversal contract instead of shelling out directly to `cp -a` or `find` inside
+each module.

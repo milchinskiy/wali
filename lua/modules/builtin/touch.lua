@@ -26,7 +26,7 @@ return {
 	end,
 
 	apply = function(ctx, args)
-		local current = ctx.host.fs.stat(args.path)
+		local current = ctx.host.fs.lstat(args.path)
 		if current == nil then
 			local opts = lib.fs_opts(args)
 			opts.create_parents = args.create_parents

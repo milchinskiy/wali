@@ -71,6 +71,7 @@ impl FileMode {
 pub struct Metadata {
     pub kind: FsPathKind,
     pub size: u64,
+    pub link_target: Option<TargetPath>,
 
     // optional because availability varies by platform/backend
     #[serde(serialize_with = "serialize_optional_system_time_secs")]
@@ -98,7 +99,22 @@ pub struct DirEntry {
 pub struct WalkEntry {
     pub path: TargetPath,
     pub relative_path: String,
+    pub depth: u32,
     pub kind: FsPathKind,
+    pub metadata: Metadata,
+    pub link_target: Option<TargetPath>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
+pub struct MetadataOpts {
+    pub follow: bool,
+}
+
+impl Default for MetadataOpts {
+    fn default() -> Self {
+        Self { follow: true }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]

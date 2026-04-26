@@ -27,7 +27,7 @@ return {
 			return ctx.host.fs.remove_file(args.path)
 		end
 
-		local current = ctx.host.fs.stat(args.path)
+		local current = ctx.host.fs.lstat(args.path)
 		if current == nil then
 			return ctx.host.fs.symlink(args.target, args.path)
 		end

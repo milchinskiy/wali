@@ -86,5 +86,7 @@ return {
 --   wali.builtin.file
 --   wali.builtin.link
 --   wali.builtin.remove
+--   wali.builtin.touch
+--   wali.builtin.permissions
 --   wali.builtin.command
 -- Shared builtin Lua helpers are available as wali.builtin.lib.

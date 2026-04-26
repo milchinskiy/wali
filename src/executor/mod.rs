@@ -14,7 +14,7 @@ mod ssh;
 
 pub use self::command::{CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
 pub use self::path::{
-    DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
+    DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
     WalkEntry, WalkOpts, WriteOpts,
 };
 pub use self::result::{ChangeKind, ChangeSubject, ExecutionChange, ExecutionResult, ValidationResult};
@@ -70,10 +70,27 @@ pub trait Facts {
 pub trait Fs {
     type Error;
 
+    /// inspect filesystem metadata
+    ///
+    /// `MetadataOpts::default()` follows symlinks, matching POSIX `stat`.
+    /// Use `lstat` when the path itself must be inspected without following links.
+    /// # Errors
+    /// returns an error if an error occurs during the lookup
+    fn metadata(&self, path: &TargetPath, opts: MetadataOpts) -> Result<Option<Metadata>, Self::Error>;
+
+    /// `stat` behavior: inspect the target and follow symlinks
+    /// # Errors
+    /// returns an error if an error occurs during the lookup
+    fn stat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error> {
+        self.metadata(path, MetadataOpts { follow: true })
+    }
+
     /// `lstat` behavior: inspect the path itself and do not follow symlinks
     /// # Errors
     /// returns an error if an error occurs during the lookup
-    fn stat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error>;
+    fn lstat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error> {
+        self.metadata(path, MetadataOpts { follow: false })
+    }
 
     /// read the contents of a file
     /// # Errors
@@ -144,7 +161,7 @@ pub trait Fs {
     /// # Errors
     /// returns an error if stat fails
     fn exists(&self, path: &TargetPath) -> Result<bool, Self::Error> {
-        Ok(self.stat(path)?.is_some())
+        Ok(self.lstat(path)?.is_some())
     }
 }
 

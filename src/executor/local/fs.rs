@@ -1,13 +1,13 @@
 use crate::spec::account::Owner;
 
 use crate::executor::fs::{
-    chmod_via_commands, chown_via_commands, create_dir_via_commands, list_dir_via_commands, mktemp_via_commands, walk_via_commands,
-    read_link_via_commands, read_via_commands, remove_dir_via_commands, remove_file_via_commands, rename_via_commands,
-    stat_via_commands, symlink_via_commands, write_via_commands,
+    chmod_via_commands, chown_via_commands, create_dir_via_commands, list_dir_via_commands, metadata_via_commands,
+    mktemp_via_commands, read_link_via_commands, read_via_commands, remove_dir_via_commands, remove_file_via_commands,
+    rename_via_commands, symlink_via_commands, walk_via_commands, write_via_commands,
 };
 use crate::executor::{
-    DirEntry, DirOpts, ExecutionResult, FileMode, Fs, Metadata, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath, WalkEntry, WalkOpts,
-    WriteOpts,
+    DirEntry, DirOpts, ExecutionResult, FileMode, Fs, Metadata, MetadataOpts, MkTempOpts, RemoveDirOpts, RenameOpts,
+    TargetPath, WalkEntry, WalkOpts, WriteOpts,
 };
 
 use super::LocalExecutor;
@@ -15,8 +15,8 @@ use super::LocalExecutor;
 impl Fs for LocalExecutor {
     type Error = crate::Error;
 
-    fn stat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error> {
-        stat_via_commands(self, path)
+    fn metadata(&self, path: &TargetPath, opts: MetadataOpts) -> Result<Option<Metadata>, Self::Error> {
+        metadata_via_commands(self, path, opts)
     }
 
     fn read(&self, path: &TargetPath) -> Result<Vec<u8>, Self::Error> {

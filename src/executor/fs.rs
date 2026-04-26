@@ -6,49 +6,85 @@ use crate::spec::runas::PtyMode;
 use super::shared::{shell_escape, trim_trailing_newlines};
 use super::{
     ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, DirEntry, DirOpts,
-    ExecutionResult, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath, WalkEntry, WalkOpts,
-    WriteOpts,
+    ExecutionResult, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
+    WalkEntry, WalkOpts, WriteOpts,
 };
 
 const STATUS_NOT_FOUND: i32 = 7;
 const STATUS_INVALID_TARGET: i32 = 8;
 
-pub(crate) fn stat_via_commands<E>(exec: &E, path: &TargetPath) -> crate::Result<Option<Metadata>>
+pub(crate) fn metadata_via_commands<E>(
+    exec: &E,
+    path: &TargetPath,
+    opts: MetadataOpts,
+) -> crate::Result<Option<Metadata>>
 where
     E: CommandExec<Error = crate::Error>,
 {
-    let script = format!(
-        r#"p={path}
-if [ ! -e "$p" ] && [ ! -L "$p" ]; then
-    exit {not_found}
-fi
-if [ -L "$p" ]; then
-    kind=symlink
-elif [ -f "$p" ]; then
+    let stat_flag = if opts.follow { "-L " } else { "" };
+    let exists_check = if opts.follow {
+        r#"[ ! -e "$p" ]"#
+    } else {
+        r#"[ ! -e "$p" ] && [ ! -L "$p" ]"#
+    };
+    let kind_probe = if opts.follow {
+        r#"if [ -f "$p" ]; then
     kind=file
 elif [ -d "$p" ]; then
     kind=dir
 else
     kind=other
 fi
-if out=$(stat --printf '%s\n%u\n%g\n%a\n%X\n%Y\n%Z\n%W' -- "$p" 2>/dev/null); then
+link_target="#
+    } else {
+        r#"if [ -L "$p" ]; then
+    kind=symlink
+    link_target=$(readlink "$p") || exit 125
+elif [ -f "$p" ]; then
+    kind=file
+    link_target=
+elif [ -d "$p" ]; then
+    kind=dir
+    link_target=
+else
+    kind=other
+    link_target=
+fi"#
+    };
+
+    let script = format!(
+        r#"p={path}
+if {exists_check}; then
+    exit {not_found}
+fi
+{kind_probe}
+if out=$(stat {stat_flag}--printf '%s %u %g %a %X %Y %Z %W' -- "$p" 2>/dev/null); then
     :
-elif out=$(stat -f --printf '%z\n%u\n%g\n%Lp\n%a\n%m\n%c\n%B' "$p" 2>/dev/null); then
+elif out=$(stat {stat_flag}-f '%z %u %g %Lp %a %m %c %B' "$p" 2>/dev/null); then
     :
 else
     echo 'failed to collect path metadata with stat' >&2
     exit 125
 fi
-printf '%s\n%s\n' "$kind" "$out""#,
+set -- $out
+if [ $# -ne 8 ]; then
+    echo 'stat returned unexpected field count' >&2
+    exit 125
+fi
+printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0' \
+    "$kind" "$1" "$link_target" "$2" "$3" "$4" "$5" "$6" "$7" "$8""#,
         path = operand_shell(path),
+        exists_check = exists_check,
+        kind_probe = kind_probe,
+        stat_flag = stat_flag,
         not_found = STATUS_NOT_FOUND,
     );
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => parse_stat_output(stdout_bytes(&output)),
+        Some(0) => parse_metadata_output(stdout_bytes(&output)),
         Some(STATUS_NOT_FOUND) => Ok(None),
-        _ => Err(command_error("stat", path.as_str(), &output)),
+        _ => Err(command_error("metadata", path.as_str(), &output)),
     }
 }
 
@@ -412,14 +448,32 @@ for entry do
     fi
     if [ -L "$entry" ]; then
         kind=symlink
+        link_target=$(readlink "$entry") || exit 125
     elif [ -f "$entry" ]; then
         kind=file
+        link_target=
     elif [ -d "$entry" ]; then
         kind=dir
+        link_target=
     else
         kind=other
+        link_target=
     fi
-    printf "%s\0%s\0%s\0" "$entry" "$rel" "$kind"
+    if out=$(stat --printf '\''%s %u %g %a %X %Y %Z %W'\'' -- "$entry" 2>/dev/null); then
+        :
+    elif out=$(stat -f '\''%z %u %g %Lp %a %m %c %B'\'' "$entry" 2>/dev/null); then
+        :
+    else
+        echo "failed to collect path metadata with stat: $entry" >&2
+        exit 125
+    fi
+    set -- $out
+    if [ $# -ne 8 ]; then
+        echo "stat returned unexpected field count: $entry" >&2
+        exit 125
+    fi
+    printf "%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0" \
+        "$entry" "$rel" "$kind" "$1" "$link_target" "$2" "$3" "$4" "$5" "$6" "$7" "$8"
 done
 ' sh "$root" {{}} +
 "#,
@@ -441,7 +495,7 @@ pub(crate) fn chmod_via_commands<E>(exec: &E, path: &TargetPath, mode: FileMode)
 where
     E: CommandExec<Error = crate::Error>,
 {
-    let before = stat_via_commands(exec, path)?
+    let before = metadata_via_commands(exec, path, MetadataOpts { follow: true })?
         .ok_or_else(|| crate::Error::CommandExec(format!("chmod target does not exist: {}", path.as_str())))?;
     if before.mode.bits() == mode.bits() {
         return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, path.clone()));
@@ -474,7 +528,7 @@ where
         return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, path.clone()));
     };
 
-    let before = stat_via_commands(exec, path)?
+    let before = metadata_via_commands(exec, path, MetadataOpts { follow: true })?
         .ok_or_else(|| crate::Error::CommandExec(format!("chown target does not exist: {}", path.as_str())))?;
 
     let script = format!(
@@ -491,7 +545,7 @@ chown -- {owner} "$path""#,
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
         Some(0) => {
-            let after = stat_via_commands(exec, path)?.ok_or_else(|| {
+            let after = metadata_via_commands(exec, path, MetadataOpts { follow: true })?.ok_or_else(|| {
                 crate::Error::CommandExec(format!("chown target disappeared after command: {}", path.as_str()))
             })?;
             if before.uid == after.uid && before.gid == after.gid {
@@ -665,34 +719,50 @@ fn command_error(action: &str, path: &str, output: &CommandOutput) -> crate::Err
     crate::Error::CommandExec(format!("{action} failed for {path}: {detail}"))
 }
 
-fn parse_stat_output(stdout: &[u8]) -> crate::Result<Option<Metadata>> {
-    let text = trim_trailing_newlines(&String::from_utf8_lossy(stdout));
-    let mut lines = text.lines();
-
-    let kind = decode_fs_path_kind(next_line(&mut lines, "kind")?)?;
-    let size = next_line(&mut lines, "size")?
-        .parse::<u64>()
-        .map_err(|err| crate::Error::FactProbe(format!("invalid stat size: {err}")))?;
-    let uid = next_line(&mut lines, "uid")?
-        .parse::<u32>()
-        .map_err(|err| crate::Error::FactProbe(format!("invalid stat uid: {err}")))?;
-    let gid = next_line(&mut lines, "gid")?
-        .parse::<u32>()
-        .map_err(|err| crate::Error::FactProbe(format!("invalid stat gid: {err}")))?;
-    let mode = u32::from_str_radix(next_line(&mut lines, "mode")?, 8)
-        .map_err(|err| crate::Error::FactProbe(format!("invalid stat mode: {err}")))?;
-    let accessed_at = parse_timestamp(next_line(&mut lines, "accessed_at")?, "accessed_at")?;
-    let modified_at = parse_timestamp(next_line(&mut lines, "modified_at")?, "modified_at")?;
-    let changed_at = parse_timestamp(next_line(&mut lines, "changed_at")?, "changed_at")?;
-    let created_at = parse_timestamp(next_line(&mut lines, "created_at")?, "created_at")?;
-
-    if let Some(extra) = lines.find(|line| !line.trim().is_empty()) {
-        return Err(crate::Error::FactProbe(format!("unexpected extra stat output line: {extra:?}")));
+fn parse_metadata_output(stdout: &[u8]) -> crate::Result<Option<Metadata>> {
+    if stdout.is_empty() {
+        return Ok(None);
     }
 
-    Ok(Some(Metadata {
+    let mut fields = stdout.split(|byte| *byte == 0).collect::<Vec<_>>();
+    if fields.last().is_some_and(|field| field.is_empty()) {
+        fields.pop();
+    }
+
+    if fields.len() != 10 {
+        return Err(crate::Error::FactProbe(format!(
+            "invalid metadata output: expected 10 fields, got {}",
+            fields.len()
+        )));
+    }
+
+    Ok(Some(parse_metadata_fields(&fields)?))
+}
+
+fn parse_metadata_fields(fields: &[&[u8]]) -> crate::Result<Metadata> {
+    if fields.len() != 10 {
+        return Err(crate::Error::FactProbe(format!(
+            "invalid metadata field count: expected 10, got {}",
+            fields.len()
+        )));
+    }
+
+    let kind = decode_fs_path_kind(&field_string(fields[0], "kind")?)?;
+    let size = parse_field::<u64>(fields[1], "size")?;
+    let link_target = optional_target_path(fields[2]);
+    let uid = parse_field::<u32>(fields[3], "uid")?;
+    let gid = parse_field::<u32>(fields[4], "gid")?;
+    let mode = u32::from_str_radix(field_string(fields[5], "mode")?.trim(), 8)
+        .map_err(|err| crate::Error::FactProbe(format!("invalid stat mode: {err}")))?;
+    let accessed_at = parse_timestamp(&field_string(fields[6], "accessed_at")?, "accessed_at")?;
+    let modified_at = parse_timestamp(&field_string(fields[7], "modified_at")?, "modified_at")?;
+    let changed_at = parse_timestamp(&field_string(fields[8], "changed_at")?, "changed_at")?;
+    let created_at = parse_timestamp(&field_string(fields[9], "created_at")?, "created_at")?;
+
+    Ok(Metadata {
         kind,
         size,
+        link_target,
         created_at,
         modified_at,
         accessed_at,
@@ -700,7 +770,31 @@ fn parse_stat_output(stdout: &[u8]) -> crate::Result<Option<Metadata>> {
         uid,
         gid,
         mode: FileMode::new(mode),
-    }))
+    })
+}
+
+fn parse_field<T>(field: &[u8], name: &str) -> crate::Result<T>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    field_string(field, name)?
+        .trim()
+        .parse::<T>()
+        .map_err(|err| crate::Error::FactProbe(format!("invalid stat {name}: {err}")))
+}
+
+fn field_string(field: &[u8], name: &str) -> crate::Result<String> {
+    String::from_utf8(field.to_vec())
+        .map_err(|err| crate::Error::FactProbe(format!("invalid utf-8 in stat {name}: {err}")))
+}
+
+fn optional_target_path(field: &[u8]) -> Option<TargetPath> {
+    if field.is_empty() {
+        None
+    } else {
+        Some(TargetPath::new(String::from_utf8_lossy(field).into_owned()))
+    }
 }
 
 fn parse_timestamp(value: &str, field: &str) -> crate::Result<Option<SystemTime>> {
@@ -719,13 +813,6 @@ fn parse_timestamp(value: &str, field: &str) -> crate::Result<Option<SystemTime>
         let duration = Duration::from_secs(seconds.unsigned_abs());
         Ok(UNIX_EPOCH.checked_sub(duration))
     }
-}
-
-fn next_line<'a>(lines: &mut std::str::Lines<'a>, field: &str) -> crate::Result<&'a str> {
-    lines
-        .next()
-        .map(str::trim)
-        .ok_or_else(|| crate::Error::FactProbe(format!("missing {field} in command output")))
 }
 
 fn result_shell_prelude(path: &TargetPath) -> crate::Result<String> {
@@ -786,25 +873,40 @@ fn parse_walk(stdout: &[u8]) -> crate::Result<Vec<WalkEntry>> {
         fields.pop();
     }
 
-    if fields.len() % 3 != 0 {
+    const WALK_FIELD_COUNT: usize = 12;
+    if fields.len() % WALK_FIELD_COUNT != 0 {
         return Err(crate::Error::CommandExec(
             "invalid walk output: missing one or more entry fields".to_owned(),
         ));
     }
 
-    let mut entries = Vec::with_capacity(fields.len() / 3);
-    for chunk in fields.chunks_exact(3) {
-        let path = String::from_utf8_lossy(chunk[0]).into_owned();
+    let mut entries = Vec::with_capacity(fields.len() / WALK_FIELD_COUNT);
+    for chunk in fields.chunks_exact(WALK_FIELD_COUNT) {
+        let path = TargetPath::new(String::from_utf8_lossy(chunk[0]).into_owned());
         let relative_path = String::from_utf8_lossy(chunk[1]).into_owned();
-        let kind = decode_fs_path_kind(&String::from_utf8_lossy(chunk[2]))?;
+        let metadata = parse_metadata_fields(&chunk[2..12])?;
+        let kind = metadata.kind;
+        let link_target = metadata.link_target.clone();
+        let depth = walk_depth(&relative_path);
         entries.push(WalkEntry {
-            path: TargetPath::new(path),
+            path,
             relative_path,
+            depth,
             kind,
+            metadata,
+            link_target,
         });
     }
 
     Ok(entries)
+}
+
+fn walk_depth(relative_path: &str) -> u32 {
+    if relative_path.is_empty() {
+        0
+    } else {
+        relative_path.split('/').count() as u32
+    }
 }
 
 fn render_owner_spec(owner: &Option<Owner>) -> crate::Result<Option<String>> {

@@ -19,7 +19,7 @@ return {
 	end,
 
 	apply = function(ctx, args)
-		local current = ctx.host.fs.stat(args.path)
+		local current = ctx.host.fs.lstat(args.path)
 		if current == nil then
 			return lib.result.apply():unchanged(args.path, "path is already absent"):build()
 		end

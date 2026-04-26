@@ -9,6 +9,7 @@ return {
 		required = true,
 		props = {
 			path = { type = "string", required = true },
+			follow = { type = "boolean", default = true },
 			expect = { type = "enum", values = { "any", "file", "dir" }, default = "any" },
 			mode = { type = "string" },
 			owner = {
@@ -33,12 +34,18 @@ return {
 	end,
 
 	apply = function(ctx, args)
-		local current = ctx.host.fs.stat(args.path)
+		local current
+		if args.follow then
+			current = ctx.host.fs.stat(args.path)
+		else
+			current = ctx.host.fs.lstat(args.path)
+		end
+
 		if current == nil then
 			error("permissions target does not exist: " .. args.path)
 		end
 		if current.kind == "symlink" then
-			error("refusing to manage symlink permissions without explicit follow semantics: " .. args.path)
+			error("refusing to manage symlink permissions with follow=false: " .. args.path)
 		end
 		if current.kind == "other" then
 			error("refusing to manage special filesystem entry permissions: " .. args.path)

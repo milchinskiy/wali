@@ -114,10 +114,14 @@ impl Facts for Backend {
 impl Fs for Backend {
     type Error = crate::Error;
 
-    fn stat(&self, path: &super::path::TargetPath) -> Result<Option<super::path::Metadata>, Self::Error> {
+    fn metadata(
+        &self,
+        path: &super::path::TargetPath,
+        opts: super::path::MetadataOpts,
+    ) -> Result<Option<super::path::Metadata>, Self::Error> {
         match self {
-            Self::Local(x) => x.stat(path),
-            Self::Ssh(x) => x.stat(path),
+            Self::Local(x) => x.metadata(path, opts),
+            Self::Ssh(x) => x.metadata(path, opts),
         }
     }
 
