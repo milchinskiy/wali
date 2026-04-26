@@ -199,11 +199,7 @@ impl Fs for Backend {
         }
     }
 
-    fn walk(
-        &self,
-        path: &super::TargetPath,
-        opts: super::WalkOpts,
-    ) -> Result<Vec<super::WalkEntry>, Self::Error> {
+    fn walk(&self, path: &super::TargetPath, opts: super::WalkOpts) -> Result<Vec<super::WalkEntry>, Self::Error> {
         match self {
             Self::Local(x) => x.walk(path, opts),
             Self::Ssh(x) => x.walk(path, opts),

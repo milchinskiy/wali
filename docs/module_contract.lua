@@ -1,3 +1,37 @@
+-- Lua execution phases:
+--
+-- requires  -> checked by Rust against the effective backend before module Lua
+--              validation/apply. It is for host capability checks only.
+-- validate  -> receives a read/probe-only ctx. It may inspect facts, paths,
+--              metadata, directory listings, file contents, symlink targets,
+--              and tree walk output. It must not mutate host state and does
+--              not expose ctx.host.cmd, ctx.rand, or ctx.sleep_ms.
+-- apply     -> receives the full ctx, including mutating filesystem functions,
+--              command execution, random helpers, and sleep_ms.
+--
+-- Common ctx fields:
+--   ctx.phase                     "validate" or "apply"
+--   ctx.task.id                   task id
+--   ctx.task.module               module name
+--   ctx.task.tags                 task tags
+--   ctx.task.depends_on           task dependency ids
+--   ctx.vars                      task variables
+--   ctx.run_as                    optional effective run_as spec
+--   ctx.host.id                   host id
+--   ctx.host.transport            "local" or "ssh"
+--   ctx.host.facts.*              os/arch/hostname/env/user/group/which/etc
+--   ctx.host.path.*               join/normalize/parent
+--
+-- validate ctx.host.fs exposes only read/probe helpers:
+--   metadata, stat, lstat, exists, read, list_dir, walk, read_link
+--
+-- apply ctx.host.fs additionally exposes mutation helpers:
+--   write, copy_file, create_dir, remove_file, remove_dir, mktemp, chmod,
+--   chown, rename, symlink
+--
+-- apply ctx.host.cmd exposes command execution helpers:
+--   exec, shell
+
 return {
 	---@type string name of the module
 	name = "module name (human readable)",
@@ -30,6 +64,20 @@ return {
 		},
 	},
 
+    ---Input arguments (required).
+    ---Supported argument types:
+    ---  any
+    ---  null
+    ---  string
+    ---  number
+    ---  integer
+    ---  boolean
+    ---  list
+    ---  tuple
+    ---  enum
+    ---  object
+    ---  map
+    ---@type table
 	schema = {
 		type = "object",
 		required = true,
@@ -85,10 +133,13 @@ return {
 -- Builtin modules are reserved under the wali.builtin.* namespace:
 --   wali.builtin.dir
 --   wali.builtin.file
+--   wali.builtin.copy_file
 --   wali.builtin.link
 --   wali.builtin.remove
 --   wali.builtin.touch
 --   wali.builtin.walk
+--   wali.builtin.link_tree
+--   wali.builtin.copy_tree
 --   wali.builtin.permissions
 --   wali.builtin.command
 -- Shared builtin Lua helpers are available as wali.builtin.lib.

@@ -3,10 +3,30 @@ use rand::RngExt;
 
 use crate::executor::{
     Backend, CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams,
-    CopyFileOpts, DirOpts, Facts, FileMode, Fs, MetadataOpts, PathSemantics, RemoveDirOpts, RenameOpts, TargetPath, WalkOpts, WriteOpts,
+    CopyFileOpts, DirOpts, Facts, FileMode, Fs, MetadataOpts, PathSemantics, RemoveDirOpts, RenameOpts, TargetPath,
+    WalkOpts, WriteOpts,
 };
 use crate::plan::TaskInstance;
 use crate::spec::account::Owner;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskCtxPhase {
+    Validate,
+    Apply,
+}
+
+impl TaskCtxPhase {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Validate => "validate",
+            Self::Apply => "apply",
+        }
+    }
+
+    fn allows_mutation(self) -> bool {
+        matches!(self, Self::Apply)
+    }
+}
 
 pub fn build_task_ctx(
     lua: &Lua,
@@ -14,8 +34,10 @@ pub fn build_task_ctx(
     transport: &str,
     task: &TaskInstance,
     backend: Backend,
+    phase: TaskCtxPhase,
 ) -> mlua::Result<Table> {
     let ctx = lua.create_table()?;
+    ctx.set("phase", phase.as_str())?;
     ctx.set("task", build_task_table(lua, task)?)?;
     ctx.set("vars", lua.to_value(&task.vars)?)?;
 
@@ -23,15 +45,18 @@ pub fn build_task_ctx(
         ctx.set("run_as", lua.to_value(run_as)?)?;
     }
 
-    ctx.set("host", build_host_table(lua, host_id, transport, backend)?)?;
-    ctx.set("rand", build_rand_table(lua)?)?;
-    ctx.set(
-        "sleep_ms",
-        lua.create_function(|_, s: u64| {
-            std::thread::sleep(std::time::Duration::from_millis(s));
-            Ok(())
-        })?,
-    )?;
+    ctx.set("host", build_host_table(lua, host_id, transport, backend, phase)?)?;
+
+    if phase.allows_mutation() {
+        ctx.set("rand", build_rand_table(lua)?)?;
+        ctx.set(
+            "sleep_ms",
+            lua.create_function(|_, s: u64| {
+                std::thread::sleep(std::time::Duration::from_millis(s));
+                Ok(())
+            })?,
+        )?;
+    }
 
     Ok(ctx)
 }
@@ -93,14 +118,24 @@ fn build_task_table(lua: &Lua, task: &TaskInstance) -> mlua::Result<Table> {
     Ok(table)
 }
 
-fn build_host_table(lua: &Lua, host_id: &str, transport: &str, backend: Backend) -> mlua::Result<Table> {
+fn build_host_table(
+    lua: &Lua,
+    host_id: &str,
+    transport: &str,
+    backend: Backend,
+    phase: TaskCtxPhase,
+) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     table.set("id", host_id.to_owned())?;
     table.set("transport", transport.to_owned())?;
     table.set("facts", build_facts_table(lua, backend.clone())?)?;
-    table.set("cmd", build_command_table(lua, backend.clone())?)?;
-    table.set("fs", build_fs_table(lua, backend.clone())?)?;
-    table.set("path", build_path_table(lua, backend)?)?;
+    table.set("fs", build_fs_table(lua, backend.clone(), phase)?)?;
+    table.set("path", build_path_table(lua, backend.clone())?)?;
+
+    if phase.allows_mutation() {
+        table.set("cmd", build_command_table(lua, backend)?)?;
+    }
+
     Ok(table)
 }
 
@@ -203,7 +238,7 @@ fn build_command_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
     Ok(table)
 }
 
-fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
+fn build_fs_table(lua: &Lua, backend: Backend, phase: TaskCtxPhase) -> mlua::Result<Table> {
     let table = lua.create_table()?;
 
     table.set("metadata", {
@@ -239,6 +274,7 @@ fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
             }
         })?
     })?;
+
     table.set("exists", {
         let backend = backend.clone();
         lua.create_function(move |_, path: String| {
@@ -253,6 +289,41 @@ fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
             lua.create_string(&bytes)
         })?
     })?;
+
+    table.set("list_dir", {
+        let backend = backend.clone();
+        lua.create_function(move |lua, path: String| {
+            let entries = backend
+                .list_dir(&TargetPath::from(path))
+                .map_err(mlua::Error::external)?;
+            lua.to_value(&entries)
+        })?
+    })?;
+
+    table.set("walk", {
+        let backend = backend.clone();
+        lua.create_function(move |lua, (path, opts): (String, Option<Table>)| {
+            let opts: WalkOpts = deserialize_table_or_default(lua, opts)?;
+            let entries = backend
+                .walk(&TargetPath::from(path), opts)
+                .map_err(mlua::Error::external)?;
+            lua.to_value(&entries)
+        })?
+    })?;
+
+    table.set("read_link", {
+        let backend = backend.clone();
+        lua.create_function(move |_, path: String| {
+            backend
+                .read_link(&TargetPath::from(path))
+                .map(|value| value.to_string())
+                .map_err(mlua::Error::external)
+        })?
+    })?;
+
+    if !phase.allows_mutation() {
+        return Ok(table);
+    }
 
     table.set("write", {
         let backend = backend.clone();
@@ -319,27 +390,6 @@ fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
         })?
     })?;
 
-    table.set("list_dir", {
-        let backend = backend.clone();
-        lua.create_function(move |lua, path: String| {
-            let entries = backend
-                .list_dir(&TargetPath::from(path))
-                .map_err(mlua::Error::external)?;
-            lua.to_value(&entries)
-        })?
-    })?;
-
-    table.set("walk", {
-        let backend = backend.clone();
-        lua.create_function(move |lua, (path, opts): (String, Option<Table>)| {
-            let opts: WalkOpts = deserialize_table_or_default(lua, opts)?;
-            let entries = backend
-                .walk(&TargetPath::from(path), opts)
-                .map_err(mlua::Error::external)?;
-            lua.to_value(&entries)
-        })?
-    })?;
-
     table.set("chmod", {
         let backend = backend.clone();
         lua.create_function(move |lua, (path, mode): (String, u32)| {
@@ -379,16 +429,6 @@ fn build_fs_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
                 .symlink(&TargetPath::from(target), &TargetPath::from(link))
                 .map_err(mlua::Error::external)?;
             lua.to_value(&result)
-        })?
-    })?;
-
-    table.set("read_link", {
-        let backend = backend.clone();
-        lua.create_function(move |_, path: String| {
-            backend
-                .read_link(&TargetPath::from(path))
-                .map(|value| value.to_string())
-                .map_err(mlua::Error::external)
         })?
     })?;
 

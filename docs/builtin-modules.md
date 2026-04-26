@@ -14,6 +14,26 @@ The builtin module philosophy is:
 - shared Lua behavior belongs in `wali.builtin.lib`, not duplicated across
   modules.
 
+
+## Lua phase contract
+
+Builtin modules follow the same phase contract expected from user modules:
+
+```text
+requires -> host capability check
+validate -> read/probe-only argument and context validation
+apply    -> mutation allowed
+```
+
+`validate()` receives `ctx.phase == "validate"` and cannot access mutating
+filesystem functions, `ctx.host.cmd`, `ctx.rand`, or `ctx.sleep_ms`. It can use
+read/probe filesystem helpers such as `stat`, `lstat`, `exists`, `read`,
+`list_dir`, `walk`, and `read_link`.
+
+`apply()` receives `ctx.phase == "apply"` and has the full host API. This makes
+future `wali check` / dry validation workflows meaningful because module
+validation cannot accidentally change the host.
+
 ## Naming note: `link` versus `copy_file`
 
 `wali.builtin.link` manages one symbolic-link path. It is intentionally named

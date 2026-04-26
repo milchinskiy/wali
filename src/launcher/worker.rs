@@ -42,6 +42,7 @@ impl Worker {
                 transport_name(&self.plan.transport),
                 task,
                 bound,
+                crate::lua::api::TaskCtxPhase::Validate,
             )?;
 
             module.validate(lua.lua(), ctx, args)?;
@@ -125,6 +126,7 @@ impl Worker {
                     transport_name(&self.plan.transport),
                     task,
                     bound.clone(),
+                    crate::lua::api::TaskCtxPhase::Validate,
                 )?;
                 module.validate(lua.lua(), validate_ctx, validate_args)?;
 
@@ -135,6 +137,7 @@ impl Worker {
                     transport_name(&self.plan.transport),
                     task,
                     bound,
+                    crate::lua::api::TaskCtxPhase::Apply,
                 )?;
                 module.apply(lua.lua(), apply_ctx, apply_args)
             })();

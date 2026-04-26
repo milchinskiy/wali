@@ -5,9 +5,9 @@ use crate::spec::runas::PtyMode;
 
 use super::shared::{shell_escape, trim_trailing_newlines};
 use super::{
-    ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, CopyFileOpts, DirEntry, DirOpts,
-    ExecutionResult, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
-    WalkEntry, WalkOpts, WalkOrder, WriteOpts,
+    ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, CopyFileOpts, DirEntry,
+    DirOpts, ExecutionResult, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts,
+    RenameOpts, TargetPath, WalkEntry, WalkOpts, WalkOrder, WriteOpts,
 };
 
 const STATUS_NOT_FOUND: i32 = 7;
@@ -338,10 +338,9 @@ emit_result "$result""#,
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
         Some(0) => decode_execution_result(stdout_bytes(&output), "copy_file"),
-        Some(STATUS_NOT_FOUND) => Err(crate::Error::CommandExec(format!(
-            "copy source does not exist: {}",
-            from.as_str()
-        ))),
+        Some(STATUS_NOT_FOUND) => {
+            Err(crate::Error::CommandExec(format!("copy source does not exist: {}", from.as_str())))
+        }
         _ => Err(command_error("copy_file", to.as_str(), &output)),
     }
 }
@@ -558,10 +557,7 @@ pub(crate) fn walk_via_commands<E>(exec: &E, path: &TargetPath, opts: WalkOpts) 
 where
     E: CommandExec<Error = crate::Error>,
 {
-    let max_depth = opts
-        .max_depth
-        .map(|depth| depth.to_string())
-        .unwrap_or_default();
+    let max_depth = opts.max_depth.map(|depth| depth.to_string()).unwrap_or_default();
     let min_depth = if opts.include_root { 0 } else { 1 };
 
     let script = format!(
@@ -1026,9 +1022,7 @@ fn parse_walk(stdout: &[u8], order: WalkOrder) -> crate::Result<Vec<WalkEntry>> 
 
     const WALK_FIELD_COUNT: usize = 12;
     if fields.len() % WALK_FIELD_COUNT != 0 {
-        return Err(crate::Error::CommandExec(
-            "invalid walk output: missing one or more entry fields".to_owned(),
-        ));
+        return Err(crate::Error::CommandExec("invalid walk output: missing one or more entry fields".to_owned()));
     }
 
     let mut entries = Vec::with_capacity(fields.len() / WALK_FIELD_COUNT);
