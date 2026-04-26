@@ -25,11 +25,7 @@ return {
 	},
 
 	validate = function(_, args)
-		local mode_error = lib.validate_mode(args.mode)
-		if mode_error ~= nil then
-			return mode_error
-		end
-		return lib.validate_owner(args.owner)
+		return lib.validate_mode_owner(args)
 	end,
 
 	apply = function(ctx, args)

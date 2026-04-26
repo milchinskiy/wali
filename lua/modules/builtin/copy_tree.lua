@@ -7,39 +7,28 @@ local function count_entry(counts, kind)
 	counts[kind] = counts[kind] + 1
 end
 
-local function owner_or_preserved(explicit_owner, preserve_owner, metadata)
-	local owner = lib.owner(explicit_owner)
-	if owner ~= nil then
-		return owner
+local function preflight_entry(ctx, args, dest, entry)
+	local path = lib.tree_destination(ctx, dest, entry.relative_path)
+	if entry.kind == "dir" then
+		lib.assert_tree_destination(ctx, path, { expect = "dir" })
+	elseif entry.kind == "file" then
+		lib.assert_tree_destination(ctx, path, { expect = "file" })
+	elseif entry.kind == "symlink" then
+		if args.symlinks == "preserve" then
+			if entry.link_target == nil then
+				error("source symlink has no target in walk output: " .. entry.path)
+			end
+			lib.assert_tree_destination(ctx, path, {
+				expect = "symlink",
+				target = entry.link_target,
+				replace = args.replace,
+			})
+		elseif args.symlinks ~= "skip" then
+			error("refusing to copy source symlink: " .. entry.path)
+		end
+	elseif not args.skip_special then
+		error("refusing to copy special filesystem entry without skip_special=true: " .. entry.path)
 	end
-	if preserve_owner then
-		return lib.owner_from_metadata(metadata)
-	end
-	return nil
-end
-
-local function dir_opts_for(args, metadata)
-	local opts = { recursive = true }
-	if args.dir_mode ~= nil then
-		opts.mode = lib.mode_bits(args.dir_mode)
-	elseif args.preserve_mode then
-		opts.mode = metadata.mode
-	end
-	opts.owner = owner_or_preserved(args.dir_owner, args.preserve_owner, metadata)
-	return opts
-end
-
-local function file_opts_for(args, metadata)
-	local opts = {
-		create_parents = true,
-		replace = args.replace,
-		preserve_mode = args.preserve_mode,
-	}
-	if args.file_mode ~= nil then
-		opts.mode = lib.mode_bits(args.file_mode)
-	end
-	opts.owner = owner_or_preserved(args.file_owner, args.preserve_owner, metadata)
-	return opts
 end
 
 return {
@@ -82,19 +71,13 @@ return {
 		if root_error ~= nil then
 			return root_error
 		end
-		local dir_mode_error = lib.validate_mode(args.dir_mode)
-		if dir_mode_error ~= nil then
-			return dir_mode_error
+
+		local dir_metadata_error = lib.validate_mode_owner(args, { mode = "dir_mode", owner = "dir_owner" })
+		if dir_metadata_error ~= nil then
+			return dir_metadata_error
 		end
-		local file_mode_error = lib.validate_mode(args.file_mode)
-		if file_mode_error ~= nil then
-			return file_mode_error
-		end
-		local dir_owner_error = lib.validate_owner(args.dir_owner, "dir_owner")
-		if dir_owner_error ~= nil then
-			return dir_owner_error
-		end
-		return lib.validate_owner(args.file_owner, "file_owner")
+
+		return lib.validate_mode_owner(args, { mode = "file_mode", owner = "file_owner" })
 	end,
 
 	apply = function(ctx, args)
@@ -122,37 +105,21 @@ return {
 			skipped = 0,
 		}
 
-		lib.assert_tree_root_destination(ctx, dest)
+		lib.assert_tree_destination(ctx, dest, { expect = "dir", label = "tree destination root" })
 		for _, entry in ipairs(entries) do
-			local path = lib.tree_destination(ctx, dest, entry.relative_path)
-			if entry.kind == "dir" then
-				lib.assert_tree_destination_dir(ctx, path)
-			elseif entry.kind == "file" then
-				lib.assert_tree_destination_file(ctx, path)
-			elseif entry.kind == "symlink" then
-				if args.symlinks == "preserve" then
-					if entry.link_target == nil then
-						error("source symlink has no target in walk output: " .. entry.path)
-					end
-					lib.assert_tree_destination_symlink(ctx, path, entry.link_target, args.replace)
-				elseif args.symlinks ~= "skip" then
-					error("refusing to copy source symlink: " .. entry.path)
-				end
-			elseif not args.skip_special then
-				error("refusing to copy special filesystem entry without skip_special=true: " .. entry.path)
-			end
+			preflight_entry(ctx, args, dest, entry)
 		end
 
-		lib.ensure_dir(ctx, result, dest, dir_opts_for(args, source_root))
+		lib.ensure_dir(ctx, result, dest, lib.tree_dir_opts(args, source_root))
 
 		for _, entry in ipairs(entries) do
 			local path = lib.tree_destination(ctx, dest, entry.relative_path)
 			if entry.kind == "dir" then
 				count_entry(counts, "dir")
-				lib.ensure_dir(ctx, result, path, dir_opts_for(args, entry.metadata))
+				lib.ensure_dir(ctx, result, path, lib.tree_dir_opts(args, entry.metadata))
 			elseif entry.kind == "file" then
 				count_entry(counts, "file")
-				result:merge(ctx.host.fs.copy_file(entry.path, path, file_opts_for(args, entry.metadata)))
+				result:merge(ctx.host.fs.copy_file(entry.path, path, lib.tree_copy_file_opts(args, entry.metadata)))
 			elseif entry.kind == "symlink" then
 				count_entry(counts, "symlink")
 				if args.symlinks == "preserve" then

@@ -14,6 +14,21 @@ The builtin module philosophy is:
 - shared Lua behavior belongs in `wali.builtin.lib`, not duplicated across
   modules.
 
+## Naming note: `link` versus `copy_file`
+
+`wali.builtin.link` manages one symbolic-link path. It is intentionally named
+`link`, not `link_file`, because a symlink target may be a file, directory,
+missing path, or any other path string; the module owns the link path itself,
+not the target kind.
+
+`wali.builtin.link_tree` applies the same idea to a tree: destination
+directories are created, while non-directory source entries are represented as
+symlinks.
+
+`wali.builtin.copy_file` is explicitly file-scoped because the source must be
+an existing regular file. `wali.builtin.copy_tree` composes that file primitive
+with deterministic tree walking.
+
 ## `wali.builtin.dir`
 
 Ensures a directory exists or is absent.
@@ -108,7 +123,7 @@ Behavior:
 
 ## `wali.builtin.link`
 
-Ensures a symbolic link exists or is absent.
+Ensures a symbolic link path exists or is absent.
 
 ```lua
 {

@@ -25,9 +25,9 @@ return {
 	},
 
 	validate = function(_, args)
-		local mode_error = lib.validate_mode(args.mode)
-		if mode_error ~= nil then
-			return mode_error
+		local metadata_error = lib.validate_mode_owner(args)
+		if metadata_error ~= nil then
+			return metadata_error
 		end
 		if args.state == "present" and args.content == nil then
 			return lib.validation_error("content is required when state is present")
@@ -40,9 +40,6 @@ return {
 			return ctx.host.fs.remove_file(args.path)
 		end
 
-		local opts = lib.fs_opts(args)
-		opts.create_parents = args.create_parents
-		opts.replace = args.replace
-		return ctx.host.fs.write(args.path, args.content, opts)
+		return ctx.host.fs.write(args.path, args.content, lib.write_file_opts(args))
 	end,
 }

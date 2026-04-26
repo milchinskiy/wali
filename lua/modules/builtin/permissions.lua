@@ -23,11 +23,11 @@ return {
 	},
 
 	validate = function(_, args)
-		local mode_error = lib.validate_mode(args.mode)
-		if mode_error ~= nil then
-			return mode_error
+		local metadata_error = lib.validate_mode_owner(args)
+		if metadata_error ~= nil then
+			return metadata_error
 		end
-		if args.mode == nil and lib.owner(args.owner) == nil then
+		if not lib.has_mode_owner(args) then
 			return lib.validation_error("mode or owner is required")
 		end
 		return nil
@@ -55,13 +55,7 @@ return {
 		end
 
 		local result = lib.result.apply()
-		if args.mode ~= nil then
-			result:merge(ctx.host.fs.chmod(args.path, lib.mode_bits(args.mode)))
-		end
-		local owner = lib.owner(args.owner)
-		if owner ~= nil then
-			result:merge(ctx.host.fs.chown(args.path, owner))
-		end
+		lib.apply_mode_owner(ctx, result, args.path, args)
 		return result:build()
 	end,
 }

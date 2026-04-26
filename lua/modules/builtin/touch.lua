@@ -22,15 +22,13 @@ return {
 	},
 
 	validate = function(_, args)
-		return lib.validate_mode(args.mode)
+		return lib.validate_mode_owner(args)
 	end,
 
 	apply = function(ctx, args)
 		local current = ctx.host.fs.lstat(args.path)
 		if current == nil then
-			local opts = lib.fs_opts(args)
-			opts.create_parents = args.create_parents
-			return ctx.host.fs.write(args.path, "", opts)
+			return ctx.host.fs.write(args.path, "", lib.write_file_opts(args))
 		end
 
 		if current.kind ~= "file" then
@@ -38,13 +36,7 @@ return {
 		end
 
 		local result = lib.result.apply()
-		if args.mode ~= nil then
-			result:merge(ctx.host.fs.chmod(args.path, lib.mode_bits(args.mode)))
-		end
-		local owner = lib.owner(args.owner)
-		if owner ~= nil then
-			result:merge(ctx.host.fs.chown(args.path, owner))
-		end
+		lib.apply_mode_owner(ctx, result, args.path, args)
 		if result:empty() then
 			result:unchanged(args.path, "file already exists")
 		end

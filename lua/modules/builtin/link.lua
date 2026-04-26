@@ -2,7 +2,7 @@ local lib = require("wali.builtin.lib")
 
 return {
 	name = "builtin symlink",
-	description = "Ensure a symbolic link is present or absent on the target host.",
+	description = "Ensure a symbolic link path is present or absent on the target host.",
 
 	schema = {
 		type = "object",
@@ -27,28 +27,8 @@ return {
 			return ctx.host.fs.remove_file(args.path)
 		end
 
-		local current = ctx.host.fs.lstat(args.path)
-		if current == nil then
-			return ctx.host.fs.symlink(args.target, args.path)
-		end
-
-		if current.kind == "symlink" then
-			local current_target = ctx.host.fs.read_link(args.path)
-			if current_target == args.target then
-				return lib.result.apply():unchanged(args.path, "symlink already points to target"):build()
-			end
-		end
-
-		if not args.replace then
-			error("path already exists and replace is false: " .. args.path)
-		end
-		if current.kind == "dir" then
-			error("refusing to replace directory with symlink: " .. args.path)
-		end
-
 		local result = lib.result.apply()
-		result:merge(ctx.host.fs.remove_file(args.path))
-		result:merge(ctx.host.fs.symlink(args.target, args.path))
-		return result:message("replaced existing path with symlink"):build()
+		lib.ensure_symlink(ctx, result, args.path, args.target, args.replace)
+		return result:build()
 	end,
 }

@@ -73,78 +73,73 @@ function lib.validate_owner(value, field)
 	return lib.validation_error((field or "owner") .. ": " .. err)
 end
 
-function lib.is_absolute_path(path)
-	return type(path) == "string" and path:sub(1, 1) == "/"
+local function mode_owner_fields(spec)
+	spec = spec or {}
+	return spec.mode or "mode", spec.owner or "owner"
 end
 
-function lib.validate_absolute_path(path, field)
-	field = field or "path"
-	if path == nil or path == "" then
-		return lib.validation_error(field .. " must not be empty")
+function lib.validate_mode_owner(args, spec)
+	local mode_field, owner_field = mode_owner_fields(spec)
+
+	local mode_error = lib.validate_mode(args[mode_field])
+	if mode_error ~= nil then
+		return mode_error
 	end
-	if not lib.is_absolute_path(path) then
-		return lib.validation_error(field .. " must be absolute")
-	end
-	return nil
+
+	return lib.validate_owner(args[owner_field], owner_field)
 end
 
-function lib.validate_safe_remove_path(ctx, path)
-	if path == nil or path == "" then
-		return lib.validation_error("path must not be empty")
-	end
-
-	local normalized = ctx.host.path.normalize(path)
-	if normalized == "" or normalized == "/" or normalized == "." or normalized == ".." then
-		return lib.validation_error("refusing to remove unsafe path: " .. tostring(path))
-	end
-
-	return nil
+function lib.has_mode_owner(args, spec)
+	local mode_field, owner_field = mode_owner_fields(spec)
+	return args[mode_field] ~= nil or lib.owner(args[owner_field]) ~= nil
 end
 
-function lib.fs_opts(args)
+function lib.mode_owner_opts(args, spec)
+	local mode_field, owner_field = mode_owner_fields(spec)
 	local opts = {}
-	if args.mode ~= nil then
-		opts.mode = lib.mode_bits(args.mode)
+
+	if args[mode_field] ~= nil then
+		opts.mode = lib.mode_bits(args[mode_field])
 	end
-	local owner = lib.owner(args.owner)
+
+	local owner = lib.owner(args[owner_field])
 	if owner ~= nil then
 		opts.owner = owner
 	end
+
 	return opts
 end
 
-function lib.dir_opts(args)
-	local opts = {}
-	if args.dir_mode ~= nil then
-		opts.mode = lib.mode_bits(args.dir_mode)
+function lib.apply_mode_owner(ctx, result, path, args, spec)
+	local mode_field, owner_field = mode_owner_fields(spec)
+
+	if args[mode_field] ~= nil then
+		result:merge(ctx.host.fs.chmod(path, lib.mode_bits(args[mode_field])))
 	end
-	local owner = lib.owner(args.dir_owner)
+
+	local owner = lib.owner(args[owner_field])
 	if owner ~= nil then
-		opts.owner = owner
+		result:merge(ctx.host.fs.chown(path, owner))
 	end
+
+	return result
+end
+
+function lib.write_file_opts(args)
+	local opts = lib.mode_owner_opts(args)
+	opts.create_parents = args.create_parents
+	opts.replace = args.replace
 	return opts
 end
 
-function lib.merge_opts(base, extra)
-	local out = {}
-	for key, value in pairs(base or {}) do
-		out[key] = value
-	end
-	for key, value in pairs(extra or {}) do
-		out[key] = value
-	end
-	return out
+function lib.create_dir_opts(args)
+	local opts = lib.mode_owner_opts(args)
+	opts.recursive = args.parents
+	return opts
 end
 
 function lib.copy_file_opts(args)
-	local opts = {}
-	if args.mode ~= nil then
-		opts.mode = lib.mode_bits(args.mode)
-	end
-	local owner = lib.owner(args.owner)
-	if owner ~= nil then
-		opts.owner = owner
-	end
+	local opts = lib.mode_owner_opts(args)
 	opts.create_parents = args.create_parents
 	opts.replace = args.replace
 	opts.preserve_mode = args.preserve_mode
@@ -159,6 +154,47 @@ function lib.owner_from_metadata(metadata)
 		user = metadata.uid,
 		group = metadata.gid,
 	}
+end
+
+function lib.owner_or_preserved(explicit_owner, preserve_owner, metadata)
+	local owner = lib.owner(explicit_owner)
+	if owner ~= nil then
+		return owner
+	end
+	if preserve_owner then
+		return lib.owner_from_metadata(metadata)
+	end
+	return nil
+end
+
+function lib.tree_dir_opts(args, metadata)
+	local opts = { recursive = true }
+	if args.dir_mode ~= nil then
+		opts.mode = lib.mode_bits(args.dir_mode)
+	elseif args.preserve_mode then
+		opts.mode = metadata.mode
+	end
+	opts.owner = lib.owner_or_preserved(args.dir_owner, args.preserve_owner, metadata)
+	return opts
+end
+
+function lib.tree_copy_file_opts(args, metadata)
+	local opts = {
+		create_parents = true,
+		replace = args.replace,
+		preserve_mode = args.preserve_mode,
+	}
+	if args.file_mode ~= nil then
+		opts.mode = lib.mode_bits(args.file_mode)
+	end
+	opts.owner = lib.owner_or_preserved(args.file_owner, args.preserve_owner, metadata)
+	return opts
+end
+
+function lib.link_tree_dir_opts(args)
+	local opts = lib.mode_owner_opts(args, { mode = "dir_mode", owner = "dir_owner" })
+	opts.recursive = true
+	return opts
 end
 
 function lib.output_text(output)
@@ -195,6 +231,34 @@ function lib.command_detail(kind, value)
 		return value.program
 	end
 	return value.program .. " " .. table.concat(value.args, " ")
+end
+
+function lib.is_absolute_path(path)
+	return type(path) == "string" and path:sub(1, 1) == "/"
+end
+
+function lib.validate_absolute_path(path, field)
+	field = field or "path"
+	if path == nil or path == "" then
+		return lib.validation_error(field .. " must not be empty")
+	end
+	if not lib.is_absolute_path(path) then
+		return lib.validation_error(field .. " must be absolute")
+	end
+	return nil
+end
+
+function lib.validate_safe_remove_path(ctx, path)
+	if path == nil or path == "" then
+		return lib.validation_error("path must not be empty")
+	end
+
+	local normalized = ctx.host.path.normalize(path)
+	if normalized == "" or normalized == "/" or normalized == "." or normalized == ".." then
+		return lib.validation_error("refusing to remove unsafe path: " .. tostring(path))
+	end
+
+	return nil
 end
 
 function lib.is_same_or_child(parent, path)
@@ -234,48 +298,38 @@ function lib.validate_tree_roots(ctx, src, dest)
 	return nil
 end
 
-function lib.assert_tree_root_destination(ctx, dest)
-	local current = ctx.host.fs.lstat(dest)
+local function assert_expected_dir(path, current, label)
 	if current ~= nil and current.kind ~= "dir" then
-		error("tree destination root already exists and is not a directory: " .. dest)
+		error(label .. " must be a directory: " .. path .. " is " .. current.kind)
 	end
 end
 
-function lib.assert_tree_destination_dir(ctx, path)
-	local current = ctx.host.fs.lstat(path)
-	if current ~= nil and current.kind ~= "dir" then
-		error("tree destination path must be a directory: " .. path .. " is " .. current.kind)
-	end
-end
-
-function lib.assert_tree_destination_file(ctx, path)
-	local current = ctx.host.fs.lstat(path)
+local function assert_expected_file(path, current, label)
 	if current == nil then
 		return
 	end
 	if current.kind == "dir" then
-		error("tree destination path is a directory where a file is expected: " .. path)
+		error(label .. " is a directory where a file is expected: " .. path)
 	end
 	if current.kind ~= "file" and current.kind ~= "symlink" then
-		error("tree destination path is a special filesystem entry where a file is expected: " .. path)
+		error(label .. " is a special filesystem entry where a file is expected: " .. path)
 	end
 end
 
-function lib.assert_tree_destination_symlink(ctx, path, target, replace)
-	local current = ctx.host.fs.lstat(path)
+local function assert_expected_symlink(ctx, path, current, policy, label)
 	if current == nil then
 		return
 	end
 
 	if current.kind == "symlink" then
 		local current_target = ctx.host.fs.read_link(path)
-		if current_target == target then
+		if current_target == policy.target then
 			return
 		end
 	end
 
-	if not replace then
-		error("tree destination path already exists and replace is false: " .. path)
+	if not policy.replace then
+		error(label .. " already exists and replace is false: " .. path)
 	end
 	if current.kind == "dir" then
 		error("refusing to replace directory with symlink during tree operation: " .. path)
@@ -283,6 +337,28 @@ function lib.assert_tree_destination_symlink(ctx, path, target, replace)
 	if current.kind ~= "file" and current.kind ~= "symlink" then
 		error("refusing to replace special filesystem entry with symlink during tree operation: " .. path)
 	end
+end
+
+function lib.assert_tree_destination(ctx, path, policy)
+	policy = policy or {}
+	local expect = policy.expect
+	local label = policy.label or "tree destination path"
+	local current = ctx.host.fs.lstat(path)
+
+	if expect == "dir" then
+		assert_expected_dir(path, current, label)
+		return
+	end
+	if expect == "file" then
+		assert_expected_file(path, current, label)
+		return
+	end
+	if expect == "symlink" then
+		assert_expected_symlink(ctx, path, current, policy, label)
+		return
+	end
+
+	error("unknown tree destination expectation: " .. tostring(expect))
 end
 
 function lib.tree_destination(ctx, dest_root, relative_path)

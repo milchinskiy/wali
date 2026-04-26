@@ -24,7 +24,7 @@ return {
 	},
 
 	validate = function(_, args)
-		return lib.validate_mode(args.mode)
+		return lib.validate_mode_owner(args)
 	end,
 
 	apply = function(ctx, args)
@@ -32,8 +32,6 @@ return {
 			return ctx.host.fs.remove_dir(args.path, { recursive = args.recursive })
 		end
 
-		local opts = lib.fs_opts(args)
-		opts.recursive = args.parents
-		return ctx.host.fs.create_dir(args.path, opts)
+		return ctx.host.fs.create_dir(args.path, lib.create_dir_opts(args))
 	end,
 }
