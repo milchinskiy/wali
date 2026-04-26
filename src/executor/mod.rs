@@ -50,7 +50,7 @@ pub trait Facts {
 
     /// returns the current group id
     fn gid(&self) -> Result<u32, Self::Error>;
-    
+
     /// returns user's group ids
     fn gids(&self) -> Result<Vec<u32>, Self::Error>;
 

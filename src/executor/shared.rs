@@ -52,9 +52,9 @@ pub(crate) fn describe_request(req: &CommandRequest) -> String {
         CommandKind::Shell { script } => {
             let trimmed = script.trim();
             if trimmed.chars().count() <= 80 {
-                format!("sh -lc {}", trimmed)
+                format!("sh -c {}", trimmed)
             } else {
-                format!("sh -lc {}…", trimmed.chars().take(80).collect::<String>())
+                format!("sh -c {}…", trimmed.chars().take(80).collect::<String>())
             }
         }
     }
@@ -107,7 +107,7 @@ pub(crate) fn render_request_script(req: &CommandRequest, start_marker: Option<&
 }
 
 pub(crate) fn render_shell_command(req: &CommandRequest) -> crate::Result<String> {
-    Ok(format!("sh -lc {}", shell_escape(&render_request_script(req, None)?)))
+    Ok(format!("sh -c {}", shell_escape(&render_request_script(req, None)?)))
 }
 
 pub(crate) fn shell_required_text<E>(exec: &E, script: impl Into<String>, context: &str) -> crate::Result<String>

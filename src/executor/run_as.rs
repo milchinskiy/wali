@@ -189,7 +189,7 @@ fn build_sudo_argv(run_as: &RunAs, inner_script: &str, marker_id: &str) -> crate
     argv.push(run_as.user.clone());
     argv.push("--".to_owned());
     argv.push("sh".to_owned());
-    argv.push("-lc".to_owned());
+    argv.push("-c".to_owned());
     argv.push(inner_script.to_owned());
 
     let mut prompt_markers = vec![prompt_marker.into_bytes()];
@@ -225,7 +225,7 @@ fn build_doas_argv(run_as: &RunAs, inner_script: &str) -> crate::Result<(Vec<Str
     argv.push("-u".to_owned());
     argv.push(run_as.user.clone());
     argv.push("sh".to_owned());
-    argv.push("-lc".to_owned());
+    argv.push("-c".to_owned());
     argv.push(inner_script.to_owned());
 
     Ok((argv, prompt_markers_for(run_as, &["Password:", "Password: ", "password:", "password: "])))

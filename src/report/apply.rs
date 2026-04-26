@@ -540,7 +540,10 @@ fn change_marker(kind: ChangeKind) -> String {
 
 fn change_label(change: &ExecutionChange) -> String {
     let subject = match change.subject {
-        ChangeSubject::FsEntry => change.path.as_ref().map_or_else(|| "<unknown path>".to_owned(), |path| path.to_string()),
+        ChangeSubject::FsEntry => change
+            .path
+            .as_ref()
+            .map_or_else(|| "<unknown path>".to_owned(), |path| path.to_string()),
         ChangeSubject::Command => change.detail.clone().unwrap_or_else(|| "<command>".to_owned()),
     };
 

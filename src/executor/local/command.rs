@@ -304,7 +304,7 @@ fn build_local_command(req: &CommandRequest) -> Command {
         }
         CommandKind::Shell { script } => {
             let mut command = Command::new("sh");
-            command.arg("-lc");
+            command.arg("-c");
             command.arg(script);
             command
         }
@@ -323,7 +323,7 @@ fn build_local_pty_command(req: &CommandRequest) -> CommandBuilder {
         }
         CommandKind::Shell { script } => {
             let mut builder = CommandBuilder::new("sh");
-            builder.arg("-lc");
+            builder.arg("-c");
             builder.arg(script);
             builder
         }
