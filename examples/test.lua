@@ -85,5 +85,14 @@ return {
 				creates = "/tmp/wali-demo/command.txt",
 			},
 		},
+		{
+			id = "inspect demo tree",
+			module = "wali.builtin.walk",
+			args = {
+				path = "/tmp/wali-demo",
+				include_root = true,
+				order = "pre",
+			},
+		},
 	},
 }

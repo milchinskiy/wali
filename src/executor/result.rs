@@ -73,6 +73,9 @@ pub struct ExecutionResult {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
 }
 
 impl ExecutionResult {
@@ -86,6 +89,7 @@ impl ExecutionResult {
         Self {
             changes: vec![ExecutionChange::fs_entry(kind, path)],
             message: None,
+            data: None,
         }
     }
 
@@ -94,12 +98,19 @@ impl ExecutionResult {
         Self {
             changes: vec![ExecutionChange::command(kind, detail)],
             message: None,
+            data: None,
         }
     }
 
     #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = Some(message.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_data(mut self, data: serde_json::Value) -> Self {
+        self.data = Some(data);
         self
     }
 
@@ -112,6 +123,9 @@ impl ExecutionResult {
         self.changes.extend(other.changes);
         if self.message.is_none() {
             self.message = other.message;
+        }
+        if self.data.is_none() {
+            self.data = other.data;
         }
     }
 }

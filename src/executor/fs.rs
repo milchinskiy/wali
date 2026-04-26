@@ -7,7 +7,7 @@ use super::shared::{shell_escape, trim_trailing_newlines};
 use super::{
     ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, DirEntry, DirOpts,
     ExecutionResult, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
-    WalkEntry, WalkOpts, WriteOpts,
+    WalkEntry, WalkOpts, WalkOrder, WriteOpts,
 };
 
 const STATUS_NOT_FOUND: i32 = 7;
@@ -486,7 +486,7 @@ done
 
     let output = run_shell(exec, script, None)?;
     match exit_code(&output) {
-        Some(0) => parse_walk(stdout_bytes(&output)),
+        Some(0) => parse_walk(stdout_bytes(&output), opts.order),
         _ => Err(command_error("walk", path.as_str(), &output)),
     }
 }
@@ -863,7 +863,7 @@ fn parse_list_dir(stdout: &[u8]) -> crate::Result<Vec<DirEntry>> {
     Ok(entries)
 }
 
-fn parse_walk(stdout: &[u8]) -> crate::Result<Vec<WalkEntry>> {
+fn parse_walk(stdout: &[u8], order: WalkOrder) -> crate::Result<Vec<WalkEntry>> {
     if stdout.is_empty() {
         return Ok(Vec::new());
     }
@@ -897,8 +897,26 @@ fn parse_walk(stdout: &[u8]) -> crate::Result<Vec<WalkEntry>> {
             link_target,
         });
     }
-
+    order_walk_entries(&mut entries, order);
     Ok(entries)
+}
+
+fn order_walk_entries(entries: &mut [WalkEntry], order: WalkOrder) {
+    match order {
+        WalkOrder::Native => {}
+        WalkOrder::Pre => entries.sort_by(|left, right| {
+            left.relative_path
+                .cmp(&right.relative_path)
+                .then_with(|| left.path.cmp(&right.path))
+        }),
+        WalkOrder::Post => entries.sort_by(|left, right| {
+            right
+                .depth
+                .cmp(&left.depth)
+                .then_with(|| left.relative_path.cmp(&right.relative_path))
+                .then_with(|| left.path.cmp(&right.path))
+        }),
+    }
 }
 
 fn walk_depth(relative_path: &str) -> u32 {

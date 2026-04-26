@@ -117,11 +117,24 @@ impl Default for MetadataOpts {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WalkOrder {
+    /// Preserve backend traversal order. Mostly useful for debugging backend behavior.
+    Native,
+    /// Return parents before children, sorted deterministically by relative path.
+    #[default]
+    Pre,
+    /// Return children before parents, sorted deterministically by depth and relative path.
+    Post,
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(default)]
 pub struct WalkOpts {
     pub include_root: bool,
     pub max_depth: Option<u32>,
+    pub order: WalkOrder,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

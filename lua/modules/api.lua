@@ -31,10 +31,15 @@ local validation = function()
 end
 
 local apply = function()
-	local obj = { _message = "", _changes = {} }
+	local obj = { _message = "", _changes = {}, _data = nil }
 
 	function obj:message(msg)
 		self._message = msg
+		return self
+	end
+
+	function obj:data(value)
+		self._data = value
 		return self
 	end
 
@@ -86,6 +91,9 @@ local apply = function()
 		if self._message == "" and result.message ~= nil then
 			self._message = result.message
 		end
+		if self._data == nil and result.data ~= nil then
+			self._data = result.data
+		end
 		return self
 	end
 
@@ -101,6 +109,7 @@ local apply = function()
 		return {
 			changes = self._changes,
 			message = message,
+			data = self._data,
 		}
 	end
 

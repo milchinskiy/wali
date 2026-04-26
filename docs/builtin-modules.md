@@ -171,6 +171,28 @@ By default, `follow = true`, so a symlink to a file or directory is resolved and
 then refuse symlinks because portable no-follow chmod/chown semantics are not
 available through the current executor contract.
 
+## `wali.builtin.walk`
+
+Inspects a filesystem tree and returns deterministic `ctx.host.fs.walk(...)`
+output as structured result data. This module does not mutate the host; it is
+intended for validating traversal behavior before implementing tree mutation
+modules.
+
+```lua
+{
+    id = "inspect demo tree",
+    module = "wali.builtin.walk",
+    args = {
+        path = "/tmp/wali-demo",
+        include_root = true,
+        order = "pre",
+    },
+}
+```
+
+`order` may be `"pre"`, `"post"`, or `"native"`. The task result is always
+unchanged and includes `data.entries` in JSON reports.
+
 ## `wali.builtin.command`
 
 Runs an explicitly imperative command or shell script. Use `creates` or
@@ -211,8 +233,14 @@ The host filesystem API now exposes:
 ctx.host.fs.walk(path, {
     include_root = false,
     max_depth = nil,
+    order = "pre",
 })
 ```
+
+`order` may be `"pre"`, `"post"`, or `"native"`. The default is `"pre"`,
+which returns deterministic parent-before-child order. Use `"post"` when a
+caller needs child-before-parent order, for example deletion planning. Use
+`"native"` only when debugging backend traversal behavior.
 
 It returns entries with lstat-style metadata:
 

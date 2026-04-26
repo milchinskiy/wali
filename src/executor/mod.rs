@@ -15,7 +15,7 @@ mod ssh;
 pub use self::command::{CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
 pub use self::path::{
     DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
-    WalkEntry, WalkOpts, WriteOpts,
+    WalkEntry, WalkOpts, WalkOrder, WriteOpts,
 };
 pub use self::result::{ChangeKind, ChangeSubject, ExecutionChange, ExecutionResult, ValidationResult};
 

@@ -64,7 +64,7 @@ return {
 	---Apply desired state. Return an ExecutionResult-compatible table.
 	---@param ctx table
 	---@param args any
-	---@return { changes: table[], message: string? }
+	---@return { changes: table[], message: string?, data: any? }
 	apply = function(ctx, args)
 		-- do something
 		return {
@@ -75,6 +75,7 @@ return {
 				{ kind = "unchanged", subject = "fs_entry", path = "/tmp/already-ok" },
 			},
 			message = "optional human summary",
+			data = { optional = "structured machine-readable payload" },
 		}
 		-- or
 		-- error("error message")
@@ -87,6 +88,7 @@ return {
 --   wali.builtin.link
 --   wali.builtin.remove
 --   wali.builtin.touch
+--   wali.builtin.walk
 --   wali.builtin.permissions
 --   wali.builtin.command
 -- Shared builtin Lua helpers are available as wali.builtin.lib.
