@@ -283,13 +283,7 @@ impl HumanRender {
         Ok(())
     }
 
-    fn task_success(
-        &mut self,
-        mode: RunMode,
-        host_id: &str,
-        task_id: &str,
-        result: &ExecutionResult,
-    ) -> crate::Result {
+    fn task_success(&mut self, mode: RunMode, host_id: &str, task_id: &str, result: &ExecutionResult) -> crate::Result {
         self.bars.entry(host_id.to_string()).and_modify(|pb| pb.inc(1));
 
         let mut summary = String::new();
@@ -510,25 +504,23 @@ impl super::Renderer for TextRender {
                 host_id,
                 task_id,
                 result,
-            } => {
-                match state.mode {
-                    RunMode::Apply => {
-                        let change = if result.changed() { "changed" } else { "unchanged" };
-                        if let Some(message) = &result.message {
-                            println!("Task '{}' succeeded on '{}': {}: {}", task_id, host_id, change, message);
-                        } else {
-                            println!("Task '{}' succeeded on '{}': {}", task_id, host_id, change);
-                        }
-                    }
-                    RunMode::Check => {
-                        if let Some(message) = &result.message {
-                            println!("Task '{}' checked on '{}': {}", task_id, host_id, message);
-                        } else {
-                            println!("Task '{}' checked on '{}': ok", task_id, host_id);
-                        }
+            } => match state.mode {
+                RunMode::Apply => {
+                    let change = if result.changed() { "changed" } else { "unchanged" };
+                    if let Some(message) = &result.message {
+                        println!("Task '{}' succeeded on '{}': {}: {}", task_id, host_id, change, message);
+                    } else {
+                        println!("Task '{}' succeeded on '{}': {}", task_id, host_id, change);
                     }
                 }
-            }
+                RunMode::Check => {
+                    if let Some(message) = &result.message {
+                        println!("Task '{}' checked on '{}': {}", task_id, host_id, message);
+                    } else {
+                        println!("Task '{}' checked on '{}': ok", task_id, host_id);
+                    }
+                }
+            },
             Event::TaskSkip {
                 host_id,
                 task_id,

@@ -19,10 +19,7 @@ impl Sandbox {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "wali-it-{name}-{}-{nanos}-{unique}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir().join(format!("wali-it-{name}-{}-{nanos}-{unique}", std::process::id()));
         std::fs::create_dir_all(&root).expect("failed to create test sandbox");
         Self { root }
     }
@@ -127,7 +124,12 @@ fn result_changed(result: &Value) -> bool {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .any(|change| change.get("kind").and_then(Value::as_str).is_some_and(|kind| kind != "unchanged"))
+        .any(|change| {
+            change
+                .get("kind")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind != "unchanged")
+        })
 }
 
 fn assert_task_changed(report: &Value, task_id: &str) {
@@ -137,10 +139,7 @@ fn assert_task_changed(report: &Value, task_id: &str) {
 
 fn assert_task_unchanged(report: &Value, task_id: &str) {
     let result = task_result(report, task_id);
-    assert!(
-        !result_changed(result),
-        "task {task_id:?} should have been unchanged: {result:#}"
-    );
+    assert!(!result_changed(result), "task {task_id:?} should have been unchanged: {result:#}");
 }
 
 #[test]
@@ -242,10 +241,7 @@ return {{
     let apply = run_apply(&manifest);
     assert_eq!(apply.get("mode").and_then(Value::as_str), Some("apply"));
     assert_task_changed(&apply, "phase guard");
-    assert_eq!(
-        std::fs::read_to_string(&target).expect("failed to read created file"),
-        "created by apply\n"
-    );
+    assert_eq!(std::fs::read_to_string(&target).expect("failed to read created file"), "created by apply\n");
 }
 
 #[test]
@@ -419,10 +415,7 @@ return {{
     assert_eq!(std::fs::read_link(copied.join("root.link")).unwrap(), PathBuf::from("root.txt"));
     assert!(linked.join("nested").is_dir());
     assert_eq!(std::fs::read_link(linked.join("root.txt")).unwrap(), src.join("root.txt"));
-    assert_eq!(
-        std::fs::read_link(linked.join("nested/child.txt")).unwrap(),
-        src.join("nested/child.txt")
-    );
+    assert_eq!(std::fs::read_link(linked.join("nested/child.txt")).unwrap(), src.join("nested/child.txt"));
 
     let walk = task_result(&first, "walk copied");
     let entries = walk
@@ -431,7 +424,12 @@ return {{
         .expect("walk result should include entries");
     let relative_paths = entries
         .iter()
-        .map(|entry| entry.get("relative_path").and_then(Value::as_str).unwrap_or("<missing>"))
+        .map(|entry| {
+            entry
+                .get("relative_path")
+                .and_then(Value::as_str)
+                .unwrap_or("<missing>")
+        })
         .collect::<Vec<_>>();
     assert_eq!(
         relative_paths,

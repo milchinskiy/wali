@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::executor::{Backend, ExecutorBinder};
+use crate::executor::{Backend, ExecutionResult, ExecutorBinder};
 use crate::plan::{HostPlan, TaskInstance};
 use crate::report::ReportSender;
 use crate::report::apply::Event;
@@ -10,6 +10,27 @@ use super::secrets;
 pub struct Worker {
     plan: HostPlan,
     secrets: Arc<secrets::SecretVault>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionMode {
+    Check,
+    Apply,
+}
+
+impl ExecutionMode {
+    fn task_steps(self) -> &'static [TaskStep] {
+        match self {
+            Self::Check => &[TaskStep::Validate],
+            Self::Apply => &[TaskStep::Validate, TaskStep::Apply],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskStep {
+    Validate,
+    Apply,
 }
 
 impl Worker {
@@ -26,108 +47,25 @@ impl Worker {
 
         for task in &self.plan.tasks {
             let bound = backend.bind(task.run_as.clone());
-            if let Some(when) = &task.when
-                && !when.check(&bound)?
-            {
+            if self.skip_reason(task, &bound)?.is_some() {
                 continue;
             }
 
-            self.validate_task(task, bound)?;
+            self.run_task(task, bound, ExecutionMode::Check)?;
         }
 
         Ok(())
     }
 
     pub fn check(&self, sender: ReportSender<Event>) -> crate::Result {
-        sender.send(Event::HostSchedule {
-            host_id: self.plan.id.clone(),
-            tasks_count: self.plan.tasks.len() as u32,
-        })?;
-
-        let backend = match self.connect() {
-            Ok(backend) => {
-                sender.send(Event::HostConnect {
-                    host_id: self.plan.id.clone(),
-                    error: None,
-                })?;
-                backend
-            }
-            Err(error) => {
-                sender.send(Event::HostConnect {
-                    host_id: self.plan.id.clone(),
-                    error: Some(error.to_string()),
-                })?;
-                return Err(error);
-            }
-        };
-
-        let mut runtime_error = None;
-        for task in &self.plan.tasks {
-            sender.send(Event::TaskSchedule {
-                host_id: self.plan.id.clone(),
-                task_id: task.id.clone(),
-            })?;
-            if runtime_error.is_some() {
-                sender.send(Event::TaskSkip {
-                    host_id: self.plan.id.clone(),
-                    task_id: task.id.clone(),
-                    reason: Some("previous task failed".to_string()),
-                })?;
-                continue;
-            }
-
-            let bound = backend.bind(task.run_as.clone());
-            match task.when.as_ref().map(|when| when.check(&bound)).transpose() {
-                Ok(Some(false)) => {
-                    sender.send(Event::TaskSkip {
-                        host_id: self.plan.id.clone(),
-                        task_id: task.id.clone(),
-                        reason: task
-                            .when
-                            .as_ref()
-                            .map(|when| format!("when predicate did not match: {when}")),
-                    })?;
-                    continue;
-                }
-                Ok(None | Some(true)) => {}
-                Err(error) => {
-                    sender.send(Event::TaskFail {
-                        host_id: self.plan.id.clone(),
-                        task_id: task.id.clone(),
-                        error: error.to_string(),
-                    })?;
-                    runtime_error = Some(error);
-                    continue;
-                }
-            }
-
-            match self.validate_task(task, bound) {
-                Ok(()) => sender.send(Event::TaskSuccess {
-                    host_id: self.plan.id.clone(),
-                    task_id: task.id.clone(),
-                    result: crate::executor::ExecutionResult::unchanged(),
-                })?,
-                Err(error) => {
-                    sender.send(Event::TaskFail {
-                        host_id: self.plan.id.clone(),
-                        task_id: task.id.clone(),
-                        error: error.to_string(),
-                    })?;
-                    runtime_error = Some(error);
-                }
-            }
-        }
-
-        sender.send(Event::HostComplete {
-            host_id: self.plan.id.clone(),
-        })?;
-        if let Some(error) = runtime_error {
-            return Err(error);
-        }
-        Ok(())
+        self.run(sender, ExecutionMode::Check)
     }
 
     pub fn apply(&self, sender: ReportSender<Event>) -> crate::Result {
+        self.run(sender, ExecutionMode::Apply)
+    }
+
+    pub(crate) fn run(&self, sender: ReportSender<Event>, mode: ExecutionMode) -> crate::Result {
         sender.send(Event::HostSchedule {
             host_id: self.plan.id.clone(),
             tasks_count: self.plan.tasks.len() as u32,
@@ -156,6 +94,7 @@ impl Worker {
                 host_id: self.plan.id.clone(),
                 task_id: task.id.clone(),
             })?;
+
             if runtime_error.is_some() {
                 sender.send(Event::TaskSkip {
                     host_id: self.plan.id.clone(),
@@ -166,19 +105,16 @@ impl Worker {
             }
 
             let bound = backend.bind(task.run_as.clone());
-            match task.when.as_ref().map(|when| when.check(&bound)).transpose() {
-                Ok(Some(false)) => {
+            match self.skip_reason(task, &bound) {
+                Ok(Some(reason)) => {
                     sender.send(Event::TaskSkip {
                         host_id: self.plan.id.clone(),
                         task_id: task.id.clone(),
-                        reason: task
-                            .when
-                            .as_ref()
-                            .map(|when| format!("when predicate did not match: {when}")),
+                        reason: Some(reason),
                     })?;
                     continue;
                 }
-                Ok(None | Some(true)) => {}
+                Ok(None) => {}
                 Err(error) => {
                     sender.send(Event::TaskFail {
                         host_id: self.plan.id.clone(),
@@ -190,39 +126,11 @@ impl Worker {
                 }
             }
 
-            let result = (|| -> crate::Result<crate::executor::ExecutionResult> {
-                let lua = self.task_runtime()?;
-                let module = lua.module_load_by_name(&task.module)?;
-                module.check_requires(&bound)?;
-
-                let validate_args = module.normalize_args(lua.lua(), &task.args)?;
-                let validate_ctx = crate::lua::api::build_task_ctx(
-                    lua.lua(),
-                    &self.plan.id,
-                    transport_name(&self.plan.transport),
-                    task,
-                    bound.clone(),
-                    crate::lua::api::TaskCtxPhase::Validate,
-                )?;
-                module.validate(lua.lua(), validate_ctx, validate_args)?;
-
-                let apply_args = module.normalize_args(lua.lua(), &task.args)?;
-                let apply_ctx = crate::lua::api::build_task_ctx(
-                    lua.lua(),
-                    &self.plan.id,
-                    transport_name(&self.plan.transport),
-                    task,
-                    bound,
-                    crate::lua::api::TaskCtxPhase::Apply,
-                )?;
-                module.apply(lua.lua(), apply_ctx, apply_args)
-            })();
-
-            match result {
-                Ok(execution) => sender.send(Event::TaskSuccess {
+            match self.run_task(task, bound, mode) {
+                Ok(result) => sender.send(Event::TaskSuccess {
                     host_id: self.plan.id.clone(),
                     task_id: task.id.clone(),
-                    result: execution,
+                    result,
                 })?,
                 Err(error) => {
                     sender.send(Event::TaskFail {
@@ -238,27 +146,61 @@ impl Worker {
         sender.send(Event::HostComplete {
             host_id: self.plan.id.clone(),
         })?;
+
         if let Some(error) = runtime_error {
             return Err(error);
         }
+
         Ok(())
     }
 
-    fn validate_task(&self, task: &TaskInstance, backend: Backend) -> crate::Result {
+    fn run_task(&self, task: &TaskInstance, backend: Backend, mode: ExecutionMode) -> crate::Result<ExecutionResult> {
         let lua = self.task_runtime()?;
         let module = lua.module_load_by_name(&task.module)?;
         module.check_requires(&backend)?;
-        let args = module.normalize_args(lua.lua(), &task.args)?;
-        let ctx = crate::lua::api::build_task_ctx(
-            lua.lua(),
-            &self.plan.id,
-            transport_name(&self.plan.transport),
-            task,
-            backend,
-            crate::lua::api::TaskCtxPhase::Validate,
-        )?;
 
-        module.validate(lua.lua(), ctx, args)
+        let mut result = ExecutionResult::unchanged();
+        for &step in mode.task_steps() {
+            let args = module.normalize_args(lua.lua(), &task.args)?;
+            match step {
+                TaskStep::Validate => {
+                    let ctx = crate::lua::api::build_task_ctx(
+                        lua.lua(),
+                        &self.plan.id,
+                        transport_name(&self.plan.transport),
+                        task,
+                        backend.clone(),
+                        crate::lua::api::TaskCtxPhase::Validate,
+                    )?;
+                    module.validate(lua.lua(), ctx, args)?;
+                }
+                TaskStep::Apply => {
+                    let ctx = crate::lua::api::build_task_ctx(
+                        lua.lua(),
+                        &self.plan.id,
+                        transport_name(&self.plan.transport),
+                        task,
+                        backend.clone(),
+                        crate::lua::api::TaskCtxPhase::Apply,
+                    )?;
+                    result = module.apply(lua.lua(), ctx, args)?;
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn skip_reason(&self, task: &TaskInstance, backend: &Backend) -> crate::Result<Option<String>> {
+        let Some(when) = &task.when else {
+            return Ok(None);
+        };
+
+        if when.check(backend)? {
+            Ok(None)
+        } else {
+            Ok(Some(format!("when predicate did not match: {when}")))
+        }
     }
 
     fn connect(&self) -> crate::Result<Backend> {

@@ -7,7 +7,7 @@ pub mod secrets;
 pub use secrets::SecretKey;
 
 mod worker;
-pub use worker::Worker;
+pub use worker::{ExecutionMode, Worker};
 
 pub struct Launcher {
     workers: Vec<Worker>,
@@ -52,25 +52,20 @@ impl Launcher {
     }
 
     pub fn check(self, report: Reporter<ApplyLayout>) -> crate::Result {
-        let handles = self
-            .workers
-            .into_iter()
-            .map(|worker| {
-                let sender = report.sender();
-                std::thread::spawn(move || worker.check(sender))
-            })
-            .collect::<Vec<_>>();
-
-        join_reported(handles, report)
+        self.run_reported(report, ExecutionMode::Check)
     }
 
     pub fn apply(self, report: Reporter<ApplyLayout>) -> crate::Result {
+        self.run_reported(report, ExecutionMode::Apply)
+    }
+
+    fn run_reported(self, report: Reporter<ApplyLayout>, mode: ExecutionMode) -> crate::Result {
         let handles = self
             .workers
             .into_iter()
             .map(|worker| {
                 let sender = report.sender();
-                std::thread::spawn(move || worker.apply(sender))
+                std::thread::spawn(move || worker.run(sender, mode))
             })
             .collect::<Vec<_>>();
 
@@ -78,10 +73,7 @@ impl Launcher {
     }
 }
 
-fn join_reported(
-    handles: Vec<std::thread::JoinHandle<crate::Result>>,
-    report: Reporter<ApplyLayout>,
-) -> crate::Result {
+fn join_reported(handles: Vec<std::thread::JoinHandle<crate::Result>>, report: Reporter<ApplyLayout>) -> crate::Result {
     let mut worker_error = None;
     for handle in handles {
         match handle.join() {
