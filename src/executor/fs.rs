@@ -357,6 +357,12 @@ where
         r#"set -eu
 {result_prelude}
 path={path}
+mode_of() {{
+    if stat --printf '%a' -- "$1" 2>/dev/null; then
+        return 0
+    fi
+    stat -f '%Lp' "$1" 2>/dev/null
+}}
 if [ -e "$path" ] || [ -L "$path" ]; then
     if [ ! -d "$path" ]; then
         echo 'target path already exists and is not a directory' >&2
@@ -364,8 +370,11 @@ if [ -e "$path" ] || [ -L "$path" ]; then
     fi
     result=unchanged
     if [ -n {mode} ]; then
-        chmod -- {mode} "$path"
-        result=updated
+        current_mode=$(mode_of "$path") || exit 125
+        if [ "$current_mode" != {mode} ]; then
+            chmod -- {mode} "$path"
+            result=updated
+        fi
     fi
     if [ -n {owner} ]; then
         chown -- {owner} "$path"
