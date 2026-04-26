@@ -80,3 +80,10 @@ return {
 		-- error("error message")
 	end,
 }
+
+-- Builtin modules are reserved under the wali.builtin.* namespace:
+--   wali.builtin.dir
+--   wali.builtin.file
+--   wali.builtin.link
+--   wali.builtin.command
+-- Shared builtin Lua helpers are available as wali.builtin.lib.

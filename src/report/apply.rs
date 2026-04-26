@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use console::Style;
 
-use crate::executor::{ChangeKind, ExecutionResult, TargetPath};
+use crate::executor::{ChangeKind, ChangeSubject, ExecutionChange, ExecutionResult};
 
 use super::{Layout, RenderKind};
 
@@ -276,29 +276,7 @@ impl HumanRender {
         }
         if !result.changes.is_empty() {
             for change in &result.changes {
-                let _ = match &change.kind {
-                    ChangeKind::Unchanged => {
-                        writeln!(&mut summary, "= {}", change.path.as_ref().unwrap_or(&TargetPath::new(".")))
-                    }
-                    ChangeKind::Updated => writeln!(
-                        &mut summary,
-                        "{} {}",
-                        warn_string("~"),
-                        change.path.as_ref().unwrap_or(&TargetPath::new(".")).as_str()
-                    ),
-                    ChangeKind::Created => writeln!(
-                        &mut summary,
-                        "{} {}",
-                        succ_string("+"),
-                        change.path.as_ref().unwrap_or(&TargetPath::new(".")).as_str()
-                    ),
-                    ChangeKind::Removed => writeln!(
-                        &mut summary,
-                        "{} {}",
-                        err_string("-"),
-                        change.path.as_ref().unwrap_or(&TargetPath::new(".")).as_str()
-                    ),
-                };
+                let _ = writeln!(&mut summary, "{} {}", change_marker(change.kind), change_label(change));
             }
         }
 
@@ -549,6 +527,27 @@ fn warn_string(warn: impl Into<String>) -> String {
 
 fn succ_string(succ: impl Into<String>) -> String {
     Style::new().green().apply_to(succ.into()).to_string()
+}
+
+fn change_marker(kind: ChangeKind) -> String {
+    match kind {
+        ChangeKind::Unchanged => "=".to_owned(),
+        ChangeKind::Updated => warn_string("~"),
+        ChangeKind::Created => succ_string("+"),
+        ChangeKind::Removed => err_string("-"),
+    }
+}
+
+fn change_label(change: &ExecutionChange) -> String {
+    let subject = match change.subject {
+        ChangeSubject::FsEntry => change.path.as_ref().map_or_else(|| "<unknown path>".to_owned(), |path| path.to_string()),
+        ChangeSubject::Command => change.detail.clone().unwrap_or_else(|| "<command>".to_owned()),
+    };
+
+    match (&change.subject, &change.detail) {
+        (ChangeSubject::FsEntry, Some(detail)) if !detail.is_empty() => format!("{subject} ({detail})"),
+        _ => subject,
+    }
 }
 
 fn host_string(host: impl Into<String>) -> String {

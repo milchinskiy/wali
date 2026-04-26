@@ -7,47 +7,7 @@ return {
 			transport = "local",
 			tags = { "local" },
 			vars = { user = "test-user" },
-			-- run_as = {
-			-- 	{
-			-- 		id = "doas-test",
-			-- 		user = "test2",
-			-- 		via = "doas",
-			-- 		env_policy = { keep = { "PATH", "HOME" } },
-			-- 	},
-			-- },
 		},
-		{
-			id = "another host",
-			transport = "local",
-		},
-		{
-			id = "some remote host #3",
-			transport = "local",
-		},
-		{
-			id = "remote-host",
-			transport = { ssh = { host = "127.0.0.1", user = "test-user" } },
-		},
-		-- {
-		-- 	id = "ssh-test",
-		-- 	transport = {
-		-- 		ssh = {
-		-- 			host = "127.0.0.2",
-		-- 			user = "test-user",
-		-- 		},
-		-- 	},
-		-- 	tags = { "remote", "ssh" },
-		-- 	vars = { DISPLAY = ":1" },
-		--
-		-- 	run_as = {
-		-- 		{
-		-- 			id = "doas-test",
-		-- 			user = "test",
-		-- 			via = "doas",
-		-- 			env_policy = { keep = { "PATH", "HOME" } },
-		-- 		},
-		-- 	},
-		-- },
 	},
 
 	modules = {
@@ -56,45 +16,41 @@ return {
 
 	tasks = {
 		{
-			id = "test task #1",
-			tags = { "task-tag-1" },
-			when = {
-				all = {
-					{ hostname = "test-hostname" },
-					{ os = "linux" },
-					{ arch = "x86_64" },
-					{ env_set = "DISPLAY" },
-				},
+			id = "create demo directory",
+			module = "wali.builtin.dir",
+			args = {
+				path = "/tmp/wali-demo",
+				state = "present",
+				mode = "0755",
+				parents = true,
 			},
-			depends_on = { "task #2" },
-			module = "test_module",
-			args = { source = "test", target = "../examples" },
 		},
 		{
-			id = "task #2",
-            when = {
-                any = {
-                    { os = "darwin" },
-                    { arch = "arm64" },
-                },
-            },
-			module = "test_module",
-			args = { target = "some/path" },
+			id = "write demo file",
+			module = "wali.builtin.file",
+			args = {
+				path = "/tmp/wali-demo/hello.txt",
+				content = "hello from wali\n",
+				mode = "0644",
+			},
 		},
 		{
-			id = "create home dir",
-			module = "test_module",
-			args = { target = "some/path" },
+			id = "link demo file",
+			module = "wali.builtin.link",
+			args = {
+				path = "/tmp/wali-demo/hello.link",
+				target = "/tmp/wali-demo/hello.txt",
+				replace = true,
+			},
 		},
 		{
-			id = "link Alacritty config",
-			module = "test_module",
-			args = { target = "some/path" },
-		},
-		{
-			id = "write git config",
-			module = "test_module",
-			args = { target = "some/path" },
+			id = "run guarded command",
+			module = "wali.builtin.command",
+			args = {
+				program = "sh",
+				args = { "-c", "printf command-ran > /tmp/wali-demo/command.txt" },
+				creates = "/tmp/wali-demo/command.txt",
+			},
 		},
 	},
 }

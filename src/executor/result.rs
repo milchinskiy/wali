@@ -18,6 +18,7 @@ impl ChangeKind {
 #[serde(rename_all = "snake_case")]
 pub enum ChangeSubject {
     FsEntry,
+    Command,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -40,6 +41,16 @@ impl ExecutionChange {
             subject: ChangeSubject::FsEntry,
             path: Some(path.into()),
             detail: None,
+        }
+    }
+
+    #[must_use]
+    pub fn command(kind: ChangeKind, detail: impl Into<String>) -> Self {
+        Self {
+            kind,
+            subject: ChangeSubject::Command,
+            path: None,
+            detail: Some(detail.into()),
         }
     }
 
@@ -74,6 +85,14 @@ impl ExecutionResult {
     pub fn fs_entry(kind: ChangeKind, path: impl Into<super::TargetPath>) -> Self {
         Self {
             changes: vec![ExecutionChange::fs_entry(kind, path)],
+            message: None,
+        }
+    }
+
+    #[must_use]
+    pub fn command(kind: ChangeKind, detail: impl Into<String>) -> Self {
+        Self {
+            changes: vec![ExecutionChange::command(kind, detail)],
             message: None,
         }
     }

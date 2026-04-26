@@ -15,10 +15,10 @@ local validation = function()
 		return self
 	end
 
-    function obj:message(msg)
-        self._message = msg
-        return self
-    end
+	function obj:message(msg)
+		self._message = msg
+		return self
+	end
 
 	function obj:build()
 		return {
@@ -27,7 +27,7 @@ local validation = function()
 		}
 	end
 
-    return obj
+	return obj
 end
 
 local apply = function()
@@ -38,27 +38,54 @@ local apply = function()
 		return self
 	end
 
-	function obj:__add_change(kind, path, detail)
-		table.insert(self._changes, { kind = kind, subject = "fs_entry", path = path, detail = detail or nil })
+	function obj:change(kind, subject, data)
+		data = data or {}
+		local change = {
+			kind = kind,
+			subject = subject,
+			path = data.path,
+			detail = data.detail,
+		}
+		table.insert(self._changes, change)
+		return self
+	end
+
+	function obj:fs(kind, path, detail)
+		return self:change(kind, "fs_entry", { path = path, detail = detail })
+	end
+
+	function obj:command(kind, detail)
+		return self:change(kind, "command", { detail = detail })
 	end
 
 	function obj:created(path, detail)
-		self:__add_change("created", path, detail)
-		return self
+		return self:fs("created", path, detail)
 	end
 
 	function obj:updated(path, detail)
-		self:__add_change("updated", path, detail)
-		return self
+		return self:fs("updated", path, detail)
 	end
 
 	function obj:removed(path, detail)
-		self:__add_change("removed", path, detail)
-		return self
+		return self:fs("removed", path, detail)
 	end
 
 	function obj:unchanged(path, detail)
-		self:__add_change("unchanged", path, detail)
+		return self:fs("unchanged", path, detail)
+	end
+
+	function obj:merge(result)
+		if result == nil then
+			return self
+		end
+		if result.changes ~= nil then
+			for _, change in ipairs(result.changes) do
+				table.insert(self._changes, change)
+			end
+		end
+		if self._message == "" and result.message ~= nil then
+			self._message = result.message
+		end
 		return self
 	end
 

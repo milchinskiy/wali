@@ -38,10 +38,29 @@ impl LuaRuntime {
     pub fn with_modules_flow() -> mlua::Result<Self> {
         let runtime = Self::new()?;
 
-        #[allow(clippy::single_element_loop)]
-        for (name, content) in
-            &[("wali.api", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/api.lua")))]
-        {
+        for (name, content) in &[
+            ("wali.api", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/api.lua"))),
+            (
+                "wali.builtin.lib",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/lib.lua")),
+            ),
+            (
+                "wali.builtin.dir",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/dir.lua")),
+            ),
+            (
+                "wali.builtin.file",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/file.lua")),
+            ),
+            (
+                "wali.builtin.link",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link.lua")),
+            ),
+            (
+                "wali.builtin.command",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/command.lua")),
+            ),
+        ] {
             runtime.register_module_content(name, content)?;
         }
 
