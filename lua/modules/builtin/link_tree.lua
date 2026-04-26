@@ -82,6 +82,20 @@ return {
 		local result = lib.result.apply()
 		local options = dir_opts(args)
 
+		lib.assert_tree_root_destination(ctx, dest)
+		for _, entry in ipairs(entries) do
+			local path = lib.tree_destination(ctx, dest, entry.relative_path)
+			if entry.kind == "dir" then
+				lib.assert_tree_destination_dir(ctx, path)
+			elseif entry.kind == "file" or entry.kind == "symlink" then
+				lib.assert_tree_destination_symlink(ctx, path, entry.path, args.replace)
+			elseif args.allow_special then
+				lib.assert_tree_destination_symlink(ctx, path, entry.path, args.replace)
+			else
+				error("refusing to link special filesystem entry without allow_special=true: " .. entry.path)
+			end
+		end
+
 		lib.ensure_dir(ctx, result, dest, options)
 
 		for _, entry in ipairs(entries) do

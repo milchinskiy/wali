@@ -122,6 +122,27 @@ return {
 			skipped = 0,
 		}
 
+		lib.assert_tree_root_destination(ctx, dest)
+		for _, entry in ipairs(entries) do
+			local path = lib.tree_destination(ctx, dest, entry.relative_path)
+			if entry.kind == "dir" then
+				lib.assert_tree_destination_dir(ctx, path)
+			elseif entry.kind == "file" then
+				lib.assert_tree_destination_file(ctx, path)
+			elseif entry.kind == "symlink" then
+				if args.symlinks == "preserve" then
+					if entry.link_target == nil then
+						error("source symlink has no target in walk output: " .. entry.path)
+					end
+					lib.assert_tree_destination_symlink(ctx, path, entry.link_target, args.replace)
+				elseif args.symlinks ~= "skip" then
+					error("refusing to copy source symlink: " .. entry.path)
+				end
+			elseif not args.skip_special then
+				error("refusing to copy special filesystem entry without skip_special=true: " .. entry.path)
+			end
+		end
+
 		lib.ensure_dir(ctx, result, dest, dir_opts_for(args, source_root))
 
 		for _, entry in ipairs(entries) do

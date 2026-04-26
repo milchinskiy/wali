@@ -101,7 +101,7 @@ Behavior:
 
 - `src` must be an existing regular file;
 - source symlinks are refused instead of followed;
-- destination directories are refused;
+- destination directories and special entries are refused;
 - an existing identical regular file is unchanged unless requested metadata must
   be updated;
 - `mode` overrides `preserve_mode` when both are provided.
@@ -244,6 +244,10 @@ a destination symlink pointing at the source symlink path itself.
 
 Safety rules:
 
+Before mutating the destination, the module preflights destination conflicts for
+the whole walked source tree. This catches predictable type conflicts before any
+directory or symlink is created.
+
 - `src` and `dest` must be absolute paths;
 - `/` is refused as either source or destination;
 - source and destination must not be nested inside each other;
@@ -277,6 +281,10 @@ host-side `ctx.host.fs.copy_file(...)` primitive.
 
 Safety rules:
 
+Before mutating the destination, the module preflights destination conflicts for
+the whole walked source tree. This catches predictable type conflicts before any
+directory or symlink is created.
+
 - `src` and `dest` must be absolute paths;
 - `/` is refused as either source or destination;
 - source and destination must not be nested inside each other;
@@ -285,6 +293,10 @@ Safety rules:
 - `symlinks = "skip"` leaves destination symlink paths untouched;
 - `symlinks = "error"` refuses source symlinks;
 - special source entries are refused unless `skip_special = true`;
+- destination directories are created or verified;
+- destination directories are never replaced by files or links;
+- destination special entries are refused for copied files;
+- destination file/symlink paths may be replaced only when `replace = true`;
 - extra destination entries are not pruned.
 
 `dir_mode` / `file_mode` override source modes. Without overrides,

@@ -274,6 +274,10 @@ if [ -e "$to" ] || [ -L "$to" ]; then
         echo 'copy destination is a directory' >&2
         exit {invalid}
     fi
+    if [ ! -f "$to" ] && [ ! -L "$to" ]; then
+        echo 'copy destination is a special filesystem entry' >&2
+        exit {invalid}
+    fi
     if [ {replace} -ne 1 ]; then
         emit_result unchanged
         exit 0

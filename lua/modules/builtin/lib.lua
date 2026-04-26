@@ -234,6 +234,57 @@ function lib.validate_tree_roots(ctx, src, dest)
 	return nil
 end
 
+function lib.assert_tree_root_destination(ctx, dest)
+	local current = ctx.host.fs.lstat(dest)
+	if current ~= nil and current.kind ~= "dir" then
+		error("tree destination root already exists and is not a directory: " .. dest)
+	end
+end
+
+function lib.assert_tree_destination_dir(ctx, path)
+	local current = ctx.host.fs.lstat(path)
+	if current ~= nil and current.kind ~= "dir" then
+		error("tree destination path must be a directory: " .. path .. " is " .. current.kind)
+	end
+end
+
+function lib.assert_tree_destination_file(ctx, path)
+	local current = ctx.host.fs.lstat(path)
+	if current == nil then
+		return
+	end
+	if current.kind == "dir" then
+		error("tree destination path is a directory where a file is expected: " .. path)
+	end
+	if current.kind ~= "file" and current.kind ~= "symlink" then
+		error("tree destination path is a special filesystem entry where a file is expected: " .. path)
+	end
+end
+
+function lib.assert_tree_destination_symlink(ctx, path, target, replace)
+	local current = ctx.host.fs.lstat(path)
+	if current == nil then
+		return
+	end
+
+	if current.kind == "symlink" then
+		local current_target = ctx.host.fs.read_link(path)
+		if current_target == target then
+			return
+		end
+	end
+
+	if not replace then
+		error("tree destination path already exists and replace is false: " .. path)
+	end
+	if current.kind == "dir" then
+		error("refusing to replace directory with symlink during tree operation: " .. path)
+	end
+	if current.kind ~= "file" and current.kind ~= "symlink" then
+		error("refusing to replace special filesystem entry with symlink during tree operation: " .. path)
+	end
+end
+
 function lib.tree_destination(ctx, dest_root, relative_path)
 	if relative_path == nil or relative_path == "" then
 		return dest_root
