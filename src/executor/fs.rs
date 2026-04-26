@@ -93,35 +93,35 @@ where
     let result_prelude = result_shell_prelude(path)?;
 
     let script = format!(
-        "set -eu
+        r#"set -eu
 {result_prelude}
 path={path}
 parent={parent}
 if [ {create_parents} -eq 1 ]; then
-    mkdir -p -- \"$parent\"
+    mkdir -p -- "$parent"
 fi
-tmp=$(mktemp \"$parent/.wali-write.XXXXXX\")
-cleanup() {{ rm -f -- \"$tmp\"; }}
+tmp=$(mktemp "$parent/.wali-write.XXXXXX")
+cleanup() {{ rm -f -- "$tmp"; }}
 trap cleanup EXIT HUP INT TERM
-base64 -d > \"$tmp\"
-if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
+base64 -d > "$tmp"
+if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     result=created
 else
-    if [ -d \"$path\" ]; then
+    if [ -d "$path" ]; then
         echo 'target path is a directory' >&2
         exit {invalid}
     fi
-    if cmp -s -- \"$tmp\" \"$path\"; then
+    if cmp -s -- "$tmp" "$path"; then
         result=unchanged
         if [ -n {mode} ]; then
-            chmod -- {mode} \"$path\"
+            chmod -- {mode} "$path"
             result=updated
         fi
         if [ -n {owner} ]; then
-            chown -- {owner} \"$path\"
+            chown -- {owner} "$path"
             result=updated
         fi
-        emit_result \"$result\"
+        emit_result "$result"
         exit 0
     fi
     if [ {replace} -ne 1 ]; then
@@ -131,17 +131,17 @@ else
     result=updated
 fi
 if [ -n {mode} ]; then
-    chmod -- {mode} \"$tmp\"
-elif [ \"$result\" = created ]; then
+    chmod -- {mode} "$tmp"
+elif [ "$result" = created ]; then
     umask_value=$(umask)
-    chmod -- $(printf '%o' $(( 0666 & (0777 ^ 0$umask_value) ))) \"$tmp\"
+    chmod -- $(printf '%o' $(( 0666 & (0777 ^ 0$umask_value) ))) "$tmp"
 fi
 if [ -n {owner} ]; then
-    chown -- {owner} \"$tmp\"
+    chown -- {owner} "$tmp"
 fi
-mv -f -- \"$tmp\" \"$path\"
+mv -f -- "$tmp" "$path"
 trap - EXIT HUP INT TERM
-emit_result \"$result\"\n",
+emit_result "$result""#,
         path = operand_shell(path),
         parent = shell_escape(&parent),
         create_parents = i32::from(opts.create_parents),
@@ -168,38 +168,38 @@ where
     let result_prelude = result_shell_prelude(path)?;
 
     let script = format!(
-        "set -eu
+        r#"set -eu
 {result_prelude}
 path={path}
-if [ -e \"$path\" ] || [ -L \"$path\" ]; then
-    if [ ! -d \"$path\" ]; then
+if [ -e "$path" ] || [ -L "$path" ]; then
+    if [ ! -d "$path" ]; then
         echo 'target path already exists and is not a directory' >&2
         exit {invalid}
     fi
     result=unchanged
     if [ -n {mode} ]; then
-        chmod -- {mode} \"$path\"
+        chmod -- {mode} "$path"
         result=updated
     fi
     if [ -n {owner} ]; then
-        chown -- {owner} \"$path\"
+        chown -- {owner} "$path"
         result=updated
     fi
-    emit_result \"$result\"
+    emit_result "$result"
     exit 0
 fi
 if [ {recursive} -eq 1 ]; then
-    mkdir -p -- \"$path\"
+    mkdir -p -- "$path"
 else
-    mkdir -- \"$path\"
+    mkdir -- "$path"
 fi
 if [ -n {mode} ]; then
-    chmod -- {mode} \"$path\"
+    chmod -- {mode} "$path"
 fi
 if [ -n {owner} ]; then
-    chown -- {owner} \"$path\"
+    chown -- {owner} "$path"
 fi
-emit_result created\n",
+emit_result created"#,
         path = operand_shell(path),
         invalid = STATUS_INVALID_TARGET,
         mode = shell_optional(mode.as_deref()),
@@ -221,18 +221,18 @@ where
     let result_prelude = result_shell_prelude(path)?;
 
     let script = format!(
-        "{result_prelude}
+        r#"{result_prelude}
 path={path}
-if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
+if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     emit_result unchanged
     exit 0
 fi
-if [ -d \"$path\" ] && [ ! -L \"$path\" ]; then
+if [ -d "$path" ] && [ ! -L "$path" ]; then
     echo 'target path is a directory' >&2
     exit {invalid}
 fi
-rm -f -- \"$path\"
-emit_result removed\n",
+rm -f -- "$path"
+emit_result removed"#,
         path = operand_shell(path),
         invalid = STATUS_INVALID_TARGET,
     );
@@ -255,28 +255,28 @@ where
     let result_prelude = result_shell_prelude(path)?;
 
     let script = format!(
-        "{result_prelude}
+        r#"{result_prelude}
 path={path}
-case \"$path\" in
+case "$path" in
     ''|'/')
         echo 'refusing to remove empty path or root directory' >&2
         exit {invalid}
         ;;
 esac
-if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
+if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     emit_result unchanged
     exit 0
 fi
-if [ ! -d \"$path\" ] || [ -L \"$path\" ]; then
+if [ ! -d "$path" ] || [ -L "$path" ]; then
     echo 'target path is not a directory' >&2
     exit {invalid}
 fi
 if [ {recursive} -eq 1 ]; then
-    rm -rf -- \"$path\"
+    rm -rf -- "$path"
 else
-    rmdir -- \"$path\"
+    rmdir -- "$path"
 fi
-emit_result removed\n",
+emit_result removed"#,
         path = operand_shell(path),
         invalid = STATUS_INVALID_TARGET,
         recursive = i32::from(opts.recursive),
@@ -307,13 +307,13 @@ where
     };
 
     let script = format!(
-        "parent={parent}
+        r#"parent={parent}
 prefix={prefix}
-template=\"$parent/$prefix\"XXXXXX
+template="$parent/$prefix"XXXXXX
 case {kind} in
-    file) mktemp \"$template\" ;;
-    dir) mktemp -d \"$template\" ;;
-esac\n",
+    file) mktemp "$template" ;;
+    dir) mktemp -d "$template" ;;
+esac"#,
         parent = parent,
         prefix = shell_escape(&prefix),
         kind = shell_escape(kind),
@@ -331,30 +331,30 @@ where
     E: CommandExec<Error = crate::Error>,
 {
     let script = format!(
-        "path={path}
-if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
+        r#"path={path}
+if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     exit {not_found}
 fi
-if [ ! -d \"$path\" ] || [ -L \"$path\" ]; then
+if [ ! -d "$path" ] || [ -L "$path" ]; then
     echo 'target path is not a directory' >&2
     exit {invalid}
 fi
-find \"$path\" -mindepth 1 -maxdepth 1 -exec sh -c '
+find "$path" -mindepth 1 -maxdepth 1 -exec sh -c '
 for entry do
     name=${{entry##*/}}
-    if [ -L \"$entry\" ]; then
+    if [ -L "$entry" ]; then
         kind=symlink
-    elif [ -f \"$entry\" ]; then
+    elif [ -f "$entry" ]; then
         kind=file
-    elif [ -d \"$entry\" ]; then
+    elif [ -d "$entry" ]; then
         kind=dir
     else
         kind=other
     fi
-    printf \"%s\\0%s\\0\" \"$name\" \"$kind\"
+    printf "%s\0%s\0" "$name" "$kind"
 done
 ' sh {{}} +
-",
+"#,
         path = operand_shell(path),
         not_found = STATUS_NOT_FOUND,
         invalid = STATUS_INVALID_TARGET,
@@ -378,11 +378,11 @@ where
     }
 
     let script = format!(
-        "path={path}
-if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
+        r#"path={path}
+if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     exit {not_found}
 fi
-chmod -- {mode} \"$path\"\n",
+chmod -- {mode} "$path""#,
         path = operand_shell(path),
         not_found = STATUS_NOT_FOUND,
         mode = shell_escape(&format!("{:o}", mode.bits())),
@@ -408,11 +408,11 @@ where
         .ok_or_else(|| crate::Error::CommandExec(format!("chown target does not exist: {}", path.as_str())))?;
 
     let script = format!(
-        "path={path}
-if [ ! -e \"$path\" ] && [ ! -L \"$path\" ]; then
+        r#"path={path}
+if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     exit {not_found}
 fi
-chown -- {owner} \"$path\"\n",
+chown -- {owner} "$path""#,
         path = operand_shell(path),
         not_found = STATUS_NOT_FOUND,
         owner = shell_escape(&spec),
@@ -450,20 +450,20 @@ where
     let result_prelude = result_shell_prelude(to)?;
 
     let script = format!(
-        "{result_prelude}
+        r#"{result_prelude}
 from={from}
 to={to}
-if [ ! -e \"$from\" ] && [ ! -L \"$from\" ]; then
+if [ ! -e "$from" ] && [ ! -L "$from" ]; then
     exit {not_found}
 fi
-if [ -e \"$to\" ] || [ -L \"$to\" ]; then
+if [ -e "$to" ] || [ -L "$to" ]; then
     if [ {replace} -ne 1 ]; then
         emit_result unchanged
         exit 0
     fi
 fi
-mv -f -- \"$from\" \"$to\"
-emit_result updated\n",
+mv -f -- "$from" "$to"
+emit_result updated"#,
         from = operand_shell(from),
         to = operand_shell(to),
         not_found = STATUS_NOT_FOUND,
@@ -504,15 +504,15 @@ where
     let result_prelude = result_shell_prelude(link)?;
 
     let script = format!(
-        "{result_prelude}
+        r#"{result_prelude}
 target={target}
 link={link}
-if [ -e \"$link\" ] || [ -L \"$link\" ]; then
+if [ -e "$link" ] || [ -L "$link" ]; then
     echo 'link path already exists' >&2
     exit {invalid}
 fi
-ln -s -- \"$target\" \"$link\"
-emit_result created\n",
+ln -s -- "$target" "$link"
+emit_result created"#,
         target = operand_shell(target),
         link = operand_shell(link),
         invalid = STATUS_INVALID_TARGET,
@@ -530,11 +530,11 @@ where
     E: CommandExec<Error = crate::Error>,
 {
     let script = format!(
-        "path={path}
-if [ ! -L \"$path\" ]; then
+        r#"path={path}
+if [ ! -L "$path" ]; then
     exit {invalid}
 fi
-readlink \"$path\"\n",
+readlink "$path""#,
         path = operand_shell(path),
         invalid = STATUS_INVALID_TARGET,
     );
@@ -662,7 +662,8 @@ fn result_shell_prelude(path: &TargetPath) -> crate::Result<String> {
     let path_json = serde_json::to_string(path.as_str())
         .map_err(|err| crate::Error::CommandExec(format!("failed to encode result path: {err}")))?;
     Ok(format!(
-        "result_path={}\nemit_result() {{ printf '{{\"changes\":[{{\"kind\":\"%s\",\"subject\":\"fs_entry\",\"path\":%s}}]}}\\n' \"$1\" \"$result_path\"; }}",
+        r#"result_path={}
+emit_result() {{ printf '{{"changes":[{{"kind":"%s","subject":"fs_entry","path":%s}}]}}\n' "$1" "$result_path"; }}"#,
         shell_escape(&path_json)
     ))
 }

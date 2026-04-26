@@ -2,14 +2,14 @@ use std::collections::BTreeMap;
 
 use super::path::TargetPath;
 
-pub const IDENTITY_FACTS_SCRIPT: &str = "command id -u
+pub const IDENTITY_FACTS_SCRIPT: &str = r#"command id -u
 command id -g
 command id -G
 command id -un
 command id -gn
-command id -Gn";
+command id -Gn"#;
 
-pub const INITIAL_FACTS_SCRIPT: &str = "command uname -s
+pub const INITIAL_FACTS_SCRIPT: &str = r#"command uname -s
 command uname -m
 command uname -n
 command id -u
@@ -17,7 +17,7 @@ command id -g
 command id -G
 command id -un
 command id -gn
-command id -Gn";
+command id -Gn"#;
 
 pub struct FactCache {
     pub os: Option<String>,

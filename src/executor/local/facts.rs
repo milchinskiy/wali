@@ -26,7 +26,7 @@ impl Facts for LocalExecutor {
             return Err(crate::Error::FactProbe(format!("invalid environment variable name {key:?}")));
         }
 
-        let script = format!("if [ \"${{{key}+x}}\" = x ]; then printf '%s' \"${key}\"; else exit 7; fi");
+        let script = format!(r#"if [ "${{{key}+x}}" = x ]; then printf '%s' "${{{key}}}"; else exit 7; fi"#);
         shell_optional_text(self, script, 7, &format!("environment probe for {key:?}"))
     }
 
@@ -60,7 +60,7 @@ impl Facts for LocalExecutor {
         }
 
         let script = format!(
-            "if command -v {command} >/dev/null 2>&1; then command -v {command}; else exit 7; fi",
+            r#"if command -v {command} >/dev/null 2>&1; then command -v {command}; else exit 7; fi"#,
             command = shell_escape(command),
         );
         let resolved =

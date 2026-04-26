@@ -64,7 +64,7 @@ pub(crate) fn render_request_script(req: &CommandRequest, start_marker: Option<&
     let mut script = String::new();
 
     if let Some(start_marker) = start_marker {
-        script.push_str("printf '%s\\n' ");
+        script.push_str(r#"printf '%s\n' "#);
         script.push_str(&shell_escape(start_marker));
         script.push('\n');
     }
@@ -72,7 +72,8 @@ pub(crate) fn render_request_script(req: &CommandRequest, start_marker: Option<&
     if let Some(cwd) = &req.opts.cwd {
         script.push_str("cd -- ");
         script.push_str(&shell_escape(cwd.as_str()));
-        script.push_str(" || exit 200\n");
+        script.push_str(r#" || exit 200"#);
+        script.push('\n');
     }
 
     for (key, value) in &req.opts.env {
