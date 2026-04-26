@@ -94,6 +94,20 @@ pub struct DirEntry {
     pub kind: FsPathKind,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WalkEntry {
+    pub path: TargetPath,
+    pub relative_path: String,
+    pub kind: FsPathKind,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
+pub struct WalkOpts {
+    pub include_root: bool,
+    pub max_depth: Option<u32>,
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(default)]
 pub struct WriteOpts {

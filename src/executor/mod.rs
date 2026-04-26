@@ -15,7 +15,7 @@ mod ssh;
 pub use self::command::{CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
 pub use self::path::{
     DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
-    WriteOpts,
+    WalkEntry, WalkOpts, WriteOpts,
 };
 pub use self::result::{ChangeKind, ChangeSubject, ExecutionChange, ExecutionResult, ValidationResult};
 
@@ -105,10 +105,15 @@ pub trait Fs {
     /// returns an error if mktemp fails
     fn mktemp(&self, opts: MkTempOpts) -> Result<TargetPath, Self::Error>;
 
-    /// list the contents of a directory
+    /// list the immediate contents of a directory
     /// # Errors
     /// returns an error if listing fails
     fn list_dir(&self, path: &TargetPath) -> Result<Vec<DirEntry>, Self::Error>;
+
+    /// walk a filesystem tree without following symlinks
+    /// # Errors
+    /// returns an error if traversal fails
+    fn walk(&self, path: &TargetPath, opts: WalkOpts) -> Result<Vec<WalkEntry>, Self::Error>;
 
     /// change the permissions of a file or directory
     /// # Errors

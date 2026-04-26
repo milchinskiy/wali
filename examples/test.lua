@@ -44,6 +44,23 @@ return {
             },
         },
 		{
+			id = "touch marker file",
+			module = "wali.builtin.touch",
+			args = {
+				path = "/tmp/wali-demo/marker",
+				mode = "0644",
+			},
+		},
+		{
+			id = "enforce demo file permissions",
+			module = "wali.builtin.permissions",
+			args = {
+				path = "/tmp/wali-demo/hello.txt",
+				expect = "file",
+				mode = "0644",
+			},
+		},
+		{
 			id = "link demo file",
 			module = "wali.builtin.link",
 			args = {

@@ -120,6 +120,55 @@ Safety rules:
 - special filesystem entries are rejected unless `allow_special = true`;
 - symlinks are removed as links, not followed.
 
+
+## `wali.builtin.touch`
+
+Ensures a regular file exists without replacing existing content. This is useful
+for marker files, lock/state files, and files whose content is managed by
+another command.
+
+```lua
+{
+    id = "create marker",
+    module = "wali.builtin.touch",
+    args = {
+        path = "/var/lib/example/initialized",
+        create_parents = true,
+        mode = "0644",
+        owner = { user = "root", group = "root" },
+    },
+}
+```
+
+Behavior:
+
+- absent path creates an empty file;
+- existing regular file is left intact;
+- existing non-file path is rejected;
+- `mode` and `owner` are enforced when provided.
+
+## `wali.builtin.permissions`
+
+Ensures mode and/or owner metadata on an existing file or directory.
+
+```lua
+{
+    id = "secure config",
+    module = "wali.builtin.permissions",
+    args = {
+        path = "/etc/example.conf",
+        expect = "file",
+        mode = "0600",
+        owner = { user = "root", group = "root" },
+    },
+}
+```
+
+`expect` may be `"any"`, `"file"`, or `"dir"`. The module refuses symlinks
+for now because the executor API currently uses lstat-style metadata while
+POSIX chmod/chown symlink-follow behavior is platform-sensitive. Follow/no-follow
+semantics should be added explicitly later rather than guessed.
+
 ## `wali.builtin.command`
 
 Runs an explicitly imperative command or shell script. Use `creates` or
@@ -151,3 +200,29 @@ Shell form:
 ```
 
 `changed = "never"` can be used for read-only commands.
+
+## Executor tree walk foundation
+
+The host filesystem API now exposes:
+
+```lua
+ctx.host.fs.walk(path, {
+    include_root = false,
+    max_depth = nil,
+})
+```
+
+It returns entries with:
+
+```lua
+{
+    path = "/absolute/or/target/path",
+    relative_path = "path/relative/to/root",
+    kind = "file" | "dir" | "symlink" | "other",
+}
+```
+
+The walk does not follow symlinks. This primitive is intentionally separate
+from tree modules; `copy_tree`, `link_tree`, and archive-style modules should
+be designed on top of this traversal contract instead of shelling out directly
+to `cp -a` or `find` inside each module.

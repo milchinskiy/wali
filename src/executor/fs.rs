@@ -6,7 +6,7 @@ use crate::spec::runas::PtyMode;
 use super::shared::{shell_escape, trim_trailing_newlines};
 use super::{
     ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, DirEntry, DirOpts,
-    ExecutionResult, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath,
+    ExecutionResult, FileMode, FsPathKind, Metadata, MkTempKind, MkTempOpts, RemoveDirOpts, RenameOpts, TargetPath, WalkEntry, WalkOpts,
     WriteOpts,
 };
 
@@ -367,6 +367,76 @@ done
     }
 }
 
+pub(crate) fn walk_via_commands<E>(exec: &E, path: &TargetPath, opts: WalkOpts) -> crate::Result<Vec<WalkEntry>>
+where
+    E: CommandExec<Error = crate::Error>,
+{
+    let max_depth = opts
+        .max_depth
+        .map(|depth| depth.to_string())
+        .unwrap_or_default();
+    let min_depth = if opts.include_root { 0 } else { 1 };
+
+    let script = format!(
+        r#"root={path}
+case "$root" in
+    */)
+        if [ "$root" != "/" ]; then
+            root=${{root%/}}
+        fi
+        ;;
+esac
+max_depth={max_depth}
+if [ ! -e "$root" ] && [ ! -L "$root" ]; then
+    exit {not_found}
+fi
+if [ ! -d "$root" ] || [ -L "$root" ]; then
+    echo 'target path is not a directory' >&2
+    exit {invalid}
+fi
+if [ -n "$max_depth" ]; then
+    depth_args="-maxdepth $max_depth"
+else
+    depth_args=
+fi
+find -P "$root" -mindepth {min_depth} $depth_args -exec sh -c '
+root=$1
+shift
+for entry do
+    if [ "$entry" = "$root" ]; then
+        rel=
+    elif [ "$root" = "/" ]; then
+        rel=${{entry#/}}
+    else
+        rel=${{entry#"$root"/}}
+    fi
+    if [ -L "$entry" ]; then
+        kind=symlink
+    elif [ -f "$entry" ]; then
+        kind=file
+    elif [ -d "$entry" ]; then
+        kind=dir
+    else
+        kind=other
+    fi
+    printf "%s\0%s\0%s\0" "$entry" "$rel" "$kind"
+done
+' sh "$root" {{}} +
+"#,
+        path = operand_shell(path),
+        max_depth = shell_escape(&max_depth),
+        min_depth = min_depth,
+        not_found = STATUS_NOT_FOUND,
+        invalid = STATUS_INVALID_TARGET,
+    );
+
+    let output = run_shell(exec, script, None)?;
+    match exit_code(&output) {
+        Some(0) => parse_walk(stdout_bytes(&output)),
+        _ => Err(command_error("walk", path.as_str(), &output)),
+    }
+}
+
 pub(crate) fn chmod_via_commands<E>(exec: &E, path: &TargetPath, mode: FileMode) -> crate::Result<ExecutionResult>
 where
     E: CommandExec<Error = crate::Error>,
@@ -701,6 +771,37 @@ fn parse_list_dir(stdout: &[u8]) -> crate::Result<Vec<DirEntry>> {
         let name = String::from_utf8_lossy(chunk[0]).into_owned();
         let kind = decode_fs_path_kind(&String::from_utf8_lossy(chunk[1]))?;
         entries.push(DirEntry { name, kind });
+    }
+
+    Ok(entries)
+}
+
+fn parse_walk(stdout: &[u8]) -> crate::Result<Vec<WalkEntry>> {
+    if stdout.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut fields = stdout.split(|byte| *byte == 0).collect::<Vec<_>>();
+    if fields.last().is_some_and(|field| field.is_empty()) {
+        fields.pop();
+    }
+
+    if fields.len() % 3 != 0 {
+        return Err(crate::Error::CommandExec(
+            "invalid walk output: missing one or more entry fields".to_owned(),
+        ));
+    }
+
+    let mut entries = Vec::with_capacity(fields.len() / 3);
+    for chunk in fields.chunks_exact(3) {
+        let path = String::from_utf8_lossy(chunk[0]).into_owned();
+        let relative_path = String::from_utf8_lossy(chunk[1]).into_owned();
+        let kind = decode_fs_path_kind(&String::from_utf8_lossy(chunk[2]))?;
+        entries.push(WalkEntry {
+            path: TargetPath::new(path),
+            relative_path,
+            kind,
+        });
     }
 
     Ok(entries)

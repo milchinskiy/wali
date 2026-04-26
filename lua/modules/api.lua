@@ -89,6 +89,10 @@ local apply = function()
 		return self
 	end
 
+	function obj:empty()
+		return #self._changes == 0
+	end
+
 	function obj:build()
 		local message = self._message
 		if message == "" then

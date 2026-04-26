@@ -183,6 +183,17 @@ impl Fs for Backend {
         }
     }
 
+    fn walk(
+        &self,
+        path: &super::TargetPath,
+        opts: super::WalkOpts,
+    ) -> Result<Vec<super::WalkEntry>, Self::Error> {
+        match self {
+            Self::Local(x) => x.walk(path, opts),
+            Self::Ssh(x) => x.walk(path, opts),
+        }
+    }
+
     fn chmod(&self, path: &super::TargetPath, mode: super::FileMode) -> Result<super::ExecutionResult, Self::Error> {
         match self {
             Self::Local(x) => x.chmod(path, mode),

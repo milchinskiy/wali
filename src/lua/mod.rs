@@ -45,6 +45,11 @@ impl LuaRuntime {
             ("wali.builtin.file", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/file.lua"))),
             ("wali.builtin.link", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link.lua"))),
             ("wali.builtin.remove", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/remove.lua"))),
+            ("wali.builtin.touch", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/touch.lua"))),
+            (
+                "wali.builtin.permissions",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/permissions.lua")),
+            ),
             (
                 "wali.builtin.command",
                 include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/command.lua")),
