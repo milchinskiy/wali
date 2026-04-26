@@ -86,35 +86,55 @@
 //! }
 //! ```
 //!
-//! # Example: normalize Lua args and call `apply(...)`
+//! # Example: normalize JSON args
 //!
-//! ```rust,ignore
-//! use mlua::{Function, Lua, LuaSerdeExt, Table, Value as LuaValue};
-//! use crate::module::schema::Schema;
+//! ```rust
+//! use serde_json::json;
+//! use wali::lua::module::schema::{DefaultSlot, Schema};
 //!
-//! fn call_apply(lua: &Lua, module: Table, raw_args: LuaValue) -> mlua::Result<()> {
-//!     let schema_value: LuaValue = module.get("schema")?;
-//!     let schema = Schema::from_lua(lua, schema_value)?;
+//! let schema = Schema::Object {
+//!     required: true,
+//!     default: Default::default(),
+//!     props: [
+//!         (
+//!             "path".to_string(),
+//!             Schema::String {
+//!                 required: true,
+//!                 default: Default::default(),
+//!             },
+//!         ),
+//!         (
+//!             "create_parents".to_string(),
+//!             Schema::Boolean {
+//!                 required: false,
+//!                 default: DefaultSlot::Value(json!(false)),
+//!             },
+//!         ),
+//!     ]
+//!     .into_iter()
+//!     .collect(),
+//! };
 //!
-//!     let normalized_args = schema.normalize_lua(lua, raw_args)?;
+//! let normalized = schema
+//!     .normalize_json(Some(json!({ "path": "/tmp/wali" })))
+//!     .expect("schema normalization should succeed")
+//!     .expect("required object should normalize to a value");
 //!
-//!     let apply: Function = module.get("apply")?;
-//!     apply.call::<()>(normalized_args)?;
-//!     Ok(())
-//! }
+//! assert_eq!(normalized, json!({
+//!     "path": "/tmp/wali",
+//!     "create_parents": false,
+//! }));
 //! ```
 //!
 //! # Example: full Lua module load and normalize
 //!
-//! ```rust,ignore
+//! ```rust
 //! use mlua::{Lua, LuaSerdeExt, Value as LuaValue};
-//! use crate::module::schema::Schema;
+//! use serde_json::json;
+//! use wali::lua::module::schema::Schema;
 //!
 //! let lua = Lua::new();
-//!
-//! // Expose explicit null and array helpers to Lua.
 //! lua.globals().set("null", lua.null())?;
-//! lua.globals().set("array_mt", lua.array_metatable())?;
 //!
 //! let module: mlua::Table = lua.load(r#"
 //!     return {
@@ -127,11 +147,6 @@
 //!                 arg3 = { type = "enum", values = { "a", "b", null }, default = null },
 //!             },
 //!         },
-//!         apply = function(args)
-//!             assert(args.arg1 == "hello")
-//!             assert(args.arg2 == 123)
-//!             assert(args.arg3 == null)
-//!         end,
 //!     }
 //! "#).eval()?;
 //!
@@ -140,9 +155,13 @@
 //! let schema_value: LuaValue = module.get("schema")?;
 //! let schema = Schema::from_lua(&lua, schema_value)?;
 //! let normalized = schema.normalize_lua(&lua, raw_args)?;
+//! let normalized_json: serde_json::Value = lua.from_value(normalized)?;
 //!
-//! let apply: mlua::Function = module.get("apply")?;
-//! apply.call::<()>(normalized)?;
+//! assert_eq!(normalized_json, json!({
+//!     "arg1": "hello",
+//!     "arg2": 123,
+//!     "arg3": null,
+//! }));
 //! # Ok::<(), mlua::Error>(())
 //! ```
 //!
@@ -150,9 +169,10 @@
 //!
 //! `default = null` is different from omitting the `default` field.
 //!
-//! ```rust,ignore
-//! use mlua::{Lua, Value as LuaValue};
-//! use crate::schema::Schema;
+//! ```rust
+//! use mlua::{Lua, LuaSerdeExt, Value as LuaValue};
+//! use serde_json::json;
+//! use wali::lua::module::schema::Schema;
 //!
 //! let lua = Lua::new();
 //! lua.globals().set("null", lua.null())?;
@@ -171,10 +191,11 @@
 //! "#).eval()?;
 //!
 //! let schema = Schema::from_lua(&lua, schema_value)?;
-//! let normalized = schema.normalize_lua(&lua, LuaValue::Nil)?;
+//! let raw_args = lua.to_value(&json!({}))?;
+//! let normalized = schema.normalize_lua(&lua, raw_args)?;
+//! let normalized_json: serde_json::Value = lua.from_value(normalized)?;
 //!
-//! // normalized now contains { mode = null }
-//! # let _ = normalized;
+//! assert_eq!(normalized_json, json!({ "mode": null }));
 //! # Ok::<(), mlua::Error>(())
 //! ```
 //!

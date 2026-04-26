@@ -72,6 +72,7 @@ fn run_wali(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_wali"))
         .args(args)
         .env("NO_COLOR", "1")
+        .env_remove("__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__")
         .output()
         .expect("failed to run wali binary")
 }
@@ -545,4 +546,163 @@ return {{
         })
         .expect("ssh host missing from plan report");
     assert_eq!(ssh_host.pointer("/transport/kind").and_then(Value::as_str), Some("ssh"));
+}
+
+fn run_wali_failure(args: &[&str]) -> std::process::Output {
+    let output = run_wali(args);
+    assert!(
+        !output.status.success(),
+        "wali unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output
+}
+
+fn assert_wali_failure_contains(args: &[&str], needle: &str) {
+    let output = run_wali_failure(args);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains(needle) || stderr.contains(needle),
+        "wali failure did not contain {needle:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn remove_refuses_unsafe_root_path_during_check() {
+    let sandbox = Sandbox::new("remove-root");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "remove root",
+            module = "wali.builtin.remove",
+            args = { path = "/", recursive = true },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        "refusing to remove unsafe path",
+    );
+}
+
+#[test]
+fn tree_roots_reject_nested_source_and_destination_during_check() {
+    let sandbox = Sandbox::new("tree-roots");
+    let src = sandbox.path("src");
+    let nested_dest = src.join("nested/dest");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "nested tree",
+            module = "wali.builtin.copy_tree",
+            args = {{ src = {}, dest = {} }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&src),
+        lua_string(&nested_dest),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        "tree destination must not be inside source",
+    );
+    assert!(!nested_dest.exists(), "check failure must not create destination paths");
+}
+
+#[test]
+fn copy_tree_preflight_rejects_conflicts_before_mutation() {
+    let sandbox = Sandbox::new("copy-preflight");
+    let src = sandbox.path("src");
+    let dest = sandbox.path("dest");
+    std::fs::create_dir_all(&src).expect("failed to create source root");
+    std::fs::write(src.join("conflict"), "source conflict\n").expect("failed to write source conflict file");
+    std::fs::write(src.join("later"), "source later\n").expect("failed to write later source file");
+    std::fs::create_dir_all(dest.join("conflict")).expect("failed to create destination conflict directory");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "copy tree",
+            module = "wali.builtin.copy_tree",
+            args = {{ src = {}, dest = {}, replace = true }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&src),
+        lua_string(&dest),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        "where a file is expected",
+    );
+    assert!(dest.join("conflict").is_dir(), "preflight must not replace existing conflict directory");
+    assert!(
+        !dest.join("later").exists(),
+        "preflight should fail before copying unrelated later entries"
+    );
+}
+
+#[test]
+fn when_skip_is_reported_without_running_task() {
+    let sandbox = Sandbox::new("when-skip");
+    let target = sandbox.path("must-not-exist.txt");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "skipped task",
+            when = {{ env_set = "__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__" }},
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "should not be written\n" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&target),
+    ));
+
+    let report = run_apply(&manifest);
+    let tasks = report
+        .pointer("/hosts/localhost/tasks")
+        .and_then(Value::as_array)
+        .expect("localhost tasks missing from report");
+    let task = tasks
+        .iter()
+        .find(|task| task.get("id").and_then(Value::as_str) == Some("skipped task"))
+        .expect("skipped task missing from report");
+    assert!(
+        task.pointer("/status/skipped")
+            .and_then(Value::as_str)
+            .is_some_and(|reason| reason.contains("when predicate did not match")),
+        "task should be reported as skipped: {task:#}"
+    );
+    assert!(!target.exists(), "skipped task must not write target file");
 }

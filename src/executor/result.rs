@@ -1,3 +1,17 @@
+/// Kind of state transition reported by an executor or module.
+///
+/// `Unchanged` is part of the result contract, not absence of a result. A module
+/// may report explicit unchanged entries when that helps explain why no mutation
+/// was needed.
+///
+/// ```rust
+/// use wali::executor::ChangeKind;
+///
+/// assert!(!ChangeKind::Unchanged.changed());
+/// assert!(ChangeKind::Created.changed());
+/// assert!(ChangeKind::Updated.changed());
+/// assert!(ChangeKind::Removed.changed());
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeKind {
@@ -66,6 +80,21 @@ impl ExecutionChange {
     }
 }
 
+/// Structured result returned by task application.
+///
+/// A result is considered changed when at least one contained change has a
+/// non-`unchanged` kind. Optional `data` is intended for machine-readable report
+/// details such as walk output or tree operation summaries.
+///
+/// ```rust
+/// use wali::executor::{ChangeKind, ExecutionResult};
+///
+/// let unchanged = ExecutionResult::unchanged();
+/// assert!(!unchanged.changed());
+///
+/// let changed = ExecutionResult::fs_entry(ChangeKind::Created, "/tmp/wali-example");
+/// assert!(changed.changed());
+/// ```
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct ExecutionResult {
