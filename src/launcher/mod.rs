@@ -51,6 +51,19 @@ impl Launcher {
         }
     }
 
+    pub fn check(self, report: Reporter<ApplyLayout>) -> crate::Result {
+        let handles = self
+            .workers
+            .into_iter()
+            .map(|worker| {
+                let sender = report.sender();
+                std::thread::spawn(move || worker.check(sender))
+            })
+            .collect::<Vec<_>>();
+
+        join_reported(handles, report)
+    }
+
     pub fn apply(self, report: Reporter<ApplyLayout>) -> crate::Result {
         let handles = self
             .workers
@@ -61,29 +74,36 @@ impl Launcher {
             })
             .collect::<Vec<_>>();
 
-        let mut worker_error = None;
-        for handle in handles {
-            match handle.join() {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    if worker_error.is_none() {
-                        worker_error = Some(error);
-                    }
+        join_reported(handles, report)
+    }
+}
+
+fn join_reported(
+    handles: Vec<std::thread::JoinHandle<crate::Result>>,
+    report: Reporter<ApplyLayout>,
+) -> crate::Result {
+    let mut worker_error = None;
+    for handle in handles {
+        match handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                if worker_error.is_none() {
+                    worker_error = Some(error);
                 }
-                Err(_) => {
-                    if worker_error.is_none() {
-                        worker_error = Some(crate::Error::Reporter("worker thread panicked".into()));
-                    }
+            }
+            Err(_) => {
+                if worker_error.is_none() {
+                    worker_error = Some(crate::Error::Reporter("worker thread panicked".into()));
                 }
             }
         }
-
-        report.join()?;
-
-        if let Some(error) = worker_error {
-            return Err(error);
-        }
-
-        Ok(())
     }
+
+    report.join()?;
+
+    if let Some(error) = worker_error {
+        return Err(error);
+    }
+
+    Ok(())
 }

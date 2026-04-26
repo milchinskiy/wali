@@ -42,9 +42,26 @@ pub enum Event {
     },
 }
 
-#[derive(Default, Debug, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMode {
+    Apply,
+    Check,
+}
+
+#[derive(Debug, serde::Serialize)]
 struct State {
+    mode: RunMode,
     hosts: std::collections::BTreeMap<String, StateHost>,
+}
+
+impl State {
+    fn new(mode: RunMode) -> Self {
+        Self {
+            mode,
+            hosts: std::collections::BTreeMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -188,6 +205,14 @@ pub struct ApplyLayout {
 
 impl ApplyLayout {
     pub fn new(kind: RenderKind) -> Self {
+        Self::with_mode(RunMode::Apply, kind)
+    }
+
+    pub fn check(kind: RenderKind) -> Self {
+        Self::with_mode(RunMode::Check, kind)
+    }
+
+    fn with_mode(mode: RunMode, kind: RenderKind) -> Self {
         let render: Box<dyn super::Renderer<State = State, Event = Event>> = match kind {
             RenderKind::Human => Box::new(HumanRender::default()),
             RenderKind::Text => Box::new(TextRender),
@@ -195,7 +220,7 @@ impl ApplyLayout {
         };
 
         Self {
-            state: State::default(),
+            state: State::new(mode),
             render,
         }
     }
@@ -258,23 +283,47 @@ impl HumanRender {
         Ok(())
     }
 
-    fn task_success(&mut self, host_id: &str, task_id: &str, result: &ExecutionResult) -> crate::Result {
+    fn task_success(
+        &mut self,
+        mode: RunMode,
+        host_id: &str,
+        task_id: &str,
+        result: &ExecutionResult,
+    ) -> crate::Result {
         self.bars.entry(host_id.to_string()).and_modify(|pb| pb.inc(1));
 
         let mut summary = String::new();
-        let state = if result.changed() {
-            warn_string("changed")
-        } else {
-            succ_string("unchanged")
-        };
-        let _ =
-            writeln!(&mut summary, "Task {} completed on {}: {}", task_string(task_id), host_string(host_id), state);
+        match mode {
+            RunMode::Apply => {
+                let state = if result.changed() {
+                    warn_string("changed")
+                } else {
+                    succ_string("unchanged")
+                };
+                let _ = writeln!(
+                    &mut summary,
+                    "Task {} completed on {}: {}",
+                    task_string(task_id),
+                    host_string(host_id),
+                    state
+                );
+            }
+            RunMode::Check => {
+                let _ = writeln!(
+                    &mut summary,
+                    "Task {} checked on {}: {}",
+                    task_string(task_id),
+                    host_string(host_id),
+                    succ_string("ok")
+                );
+            }
+        }
         if let Some(msg) = &result.message
             && !msg.is_empty()
         {
             let _ = writeln!(&mut summary, "{}", msg);
         }
-        if !result.changes.is_empty() {
+        if matches!(mode, RunMode::Apply) && !result.changes.is_empty() {
             for change in &result.changes {
                 let _ = writeln!(&mut summary, "{} {}", change_marker(change.kind), change_label(change));
             }
@@ -331,7 +380,11 @@ impl HumanRender {
     }
 
     fn host_complete(&mut self, host_id: &str, state: &State) -> crate::Result {
-        self.println(format!("Host {} complete", host_string(host_id)).as_str())?;
+        let verb = match state.mode {
+            RunMode::Apply => "complete",
+            RunMode::Check => "check complete",
+        };
+        self.println(format!("Host {} {}", host_string(host_id), verb).as_str())?;
         let failed = state.hosts.get(host_id).map(|host| host.failed() > 0).unwrap_or(false);
         let pb = self
             .bars
@@ -405,7 +458,7 @@ impl super::Renderer for HumanRender {
                 task_id,
                 result,
             } => {
-                self.task_success(host_id, task_id, result)?;
+                self.task_success(state.mode, host_id, task_id, result)?;
                 let host = state
                     .hosts
                     .get_mut(host_id)
@@ -434,7 +487,7 @@ impl super::Renderer for TextRender {
     type State = State;
     type Event = Event;
 
-    fn handle(&mut self, event: &Self::Event, _state: &mut Self::State) -> crate::Result {
+    fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result {
         match event {
             Event::HostSchedule { host_id, tasks_count } => {
                 println!("Host '{}' scheduled {} task(s)", host_id, tasks_count);
@@ -446,9 +499,10 @@ impl super::Renderer for TextRender {
                     println!("Host '{}' connected", host_id);
                 }
             }
-            Event::HostComplete { host_id } => {
-                println!("Host '{}' execution complete", host_id);
-            }
+            Event::HostComplete { host_id } => match state.mode {
+                RunMode::Apply => println!("Host '{}' execution complete", host_id),
+                RunMode::Check => println!("Host '{}' check complete", host_id),
+            },
             Event::TaskSchedule { host_id, task_id } => {
                 println!("Task '{}' scheduled on '{}'", task_id, host_id);
             }
@@ -457,11 +511,22 @@ impl super::Renderer for TextRender {
                 task_id,
                 result,
             } => {
-                let change = if result.changed() { "changed" } else { "unchanged" };
-                if let Some(message) = &result.message {
-                    println!("Task '{}' succeeded on '{}': {}: {}", task_id, host_id, change, message);
-                } else {
-                    println!("Task '{}' succeeded on '{}': {}", task_id, host_id, change);
+                match state.mode {
+                    RunMode::Apply => {
+                        let change = if result.changed() { "changed" } else { "unchanged" };
+                        if let Some(message) = &result.message {
+                            println!("Task '{}' succeeded on '{}': {}: {}", task_id, host_id, change, message);
+                        } else {
+                            println!("Task '{}' succeeded on '{}': {}", task_id, host_id, change);
+                        }
+                    }
+                    RunMode::Check => {
+                        if let Some(message) = &result.message {
+                            println!("Task '{}' checked on '{}': {}", task_id, host_id, message);
+                        } else {
+                            println!("Task '{}' checked on '{}': ok", task_id, host_id);
+                        }
+                    }
                 }
             }
             Event::TaskSkip {

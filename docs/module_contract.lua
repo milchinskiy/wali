@@ -9,6 +9,8 @@
 -- apply     -> receives the full ctx, including mutating filesystem functions,
 --              command execution, random helpers, and sleep_ms.
 --
+-- wali check runs requires + validate only. It never calls apply().
+--
 -- Common ctx fields:
 --   ctx.phase                     "validate" or "apply"
 --   ctx.task.id                   task id
