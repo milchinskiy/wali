@@ -1,5 +1,6 @@
 use crate::spec::runas::{PtyMode, RunAs};
 
+use super::command::valid_env_key;
 use super::facts::ExecIdentityKey;
 use super::{CommandExec, CommandKind, CommandOpts, CommandRequest, CommandStatus, CommandStreams};
 
@@ -27,37 +28,12 @@ pub(crate) fn shell_escape(value: &str) -> String {
     format!("'{escaped}'")
 }
 
-pub(crate) fn valid_env_key(key: &str) -> bool {
-    let mut chars = key.chars();
-    match chars.next() {
-        Some(c) if c == '_' || c.is_ascii_alphabetic() => {}
-        _ => return false,
-    }
-
-    chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
-}
-
 pub(crate) fn trim_trailing_newlines(value: &str) -> String {
     value.trim_end_matches(['\r', '\n']).to_owned()
 }
 
 pub(crate) fn describe_request(req: &CommandRequest) -> String {
-    match &req.kind {
-        CommandKind::Exec { program, args } => {
-            let mut parts = Vec::with_capacity(args.len() + 1);
-            parts.push(program.as_str());
-            parts.extend(args.iter().map(String::as_str));
-            parts.join(" ")
-        }
-        CommandKind::Shell { script } => {
-            let trimmed = script.trim();
-            if trimmed.chars().count() <= 80 {
-                format!("sh -c {}", trimmed)
-            } else {
-                format!("sh -c {}…", trimmed.chars().take(80).collect::<String>())
-            }
-        }
-    }
+    req.description()
 }
 
 pub(crate) fn render_request_script(req: &CommandRequest, start_marker: Option<&str>) -> crate::Result<String> {

@@ -2,9 +2,9 @@ use mlua::{Lua, LuaSerdeExt, String as LuaString, Table, Value as LuaValue};
 use rand::RngExt;
 
 use crate::executor::{
-    Backend, CommandExec, CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams,
-    CopyFileOpts, DirOpts, Facts, FileMode, Fs, MetadataOpts, PathSemantics, RemoveDirOpts, RenameOpts, TargetPath,
-    WalkOpts, WriteOpts,
+    Backend, CommandExec, CommandOutput, CommandRequest, CommandStatus, CommandStreams, CopyFileOpts, DirOpts,
+    ExecCommandInput, Facts, FileMode, Fs, MetadataOpts, PathSemantics, RemoveDirOpts, RenameOpts, ShellCommandInput,
+    TargetPath, WalkOpts, WriteOpts,
 };
 use crate::plan::TaskInstance;
 use crate::spec::account::Owner;
@@ -207,14 +207,9 @@ fn build_command_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
     table.set("exec", {
         let backend = backend.clone();
         lua.create_function(move |lua, req: Table| {
-            let program = required_string(&req, "program")?;
-            let args = optional_string_list(req.get::<Option<Table>>("args")?)?;
-            let opts: CommandOpts = lua.from_value(LuaValue::Table(req.clone()))?;
+            let req: ExecCommandInput = lua.from_value(LuaValue::Table(req))?;
             let output = backend
-                .exec(&CommandRequest {
-                    kind: CommandKind::Exec { program, args },
-                    opts,
-                })
+                .exec(&CommandRequest::from(req))
                 .map_err(mlua::Error::external)?;
             command_output_table(lua, &output)
         })?
@@ -222,15 +217,25 @@ fn build_command_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
 
     table.set("shell", {
         let backend = backend.clone();
-        lua.create_function(move |lua, req: Table| {
-            let script = required_string(&req, "script")?;
-            let opts: CommandOpts = lua.from_value(LuaValue::Table(req.clone()))?;
-            let output = backend
-                .exec(&CommandRequest {
-                    kind: CommandKind::Shell { script },
-                    opts,
-                })
-                .map_err(mlua::Error::external)?;
+        lua.create_function(move |lua, req: LuaValue| {
+            let req = match req {
+                LuaValue::String(script) => CommandRequest {
+                    kind: crate::executor::CommandKind::Shell {
+                        script: script.to_str()?.to_string(),
+                    },
+                    opts: Default::default(),
+                },
+                LuaValue::Table(table) => {
+                    CommandRequest::from(lua.from_value::<ShellCommandInput>(LuaValue::Table(table))?)
+                }
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "ctx.host.cmd.shell expects a script string or request table, got {}",
+                        other.type_name()
+                    )));
+                }
+            };
+            let output = backend.exec(&req).map_err(mlua::Error::external)?;
             command_output_table(lua, &output)
         })?
     })?;
@@ -494,24 +499,6 @@ fn command_status_table(lua: &Lua, status: &CommandStatus) -> mlua::Result<Table
         }
     }
     Ok(table)
-}
-
-fn required_string(table: &Table, key: &str) -> mlua::Result<String> {
-    table
-        .get::<Option<String>>(key)?
-        .ok_or_else(|| mlua::Error::external(format!("missing required field {key:?}")))
-}
-
-fn optional_string_list(table: Option<Table>) -> mlua::Result<Vec<String>> {
-    let Some(table) = table else {
-        return Ok(Vec::new());
-    };
-
-    let mut values = Vec::new();
-    for value in table.sequence_values::<String>() {
-        values.push(value?);
-    }
-    Ok(values)
 }
 
 fn deserialize_table_or_default<T>(lua: &Lua, table: Option<Table>) -> mlua::Result<T>

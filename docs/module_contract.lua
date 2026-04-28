@@ -26,6 +26,7 @@
 --
 -- validate ctx.host.fs exposes only read/probe helpers:
 --   metadata, stat, lstat, exists, read, list_dir, walk, read_link
+--   list_dir output is sorted deterministically by entry name.
 --
 -- apply ctx.host.fs additionally exposes mutation helpers:
 --   write, copy_file, create_dir, remove_file, remove_dir, mktemp, chmod,
@@ -33,6 +34,10 @@
 --
 -- apply ctx.host.cmd exposes command execution helpers:
 --   exec, shell
+--   request env values are maps: { FOO = "bar" }
+--   timeout values are human strings such as "10s" or "2m"
+--   split commands return stdout/stderr; PTY commands return combined output
+--   option/request tables and module result tables reject unknown fields.
 
 return {
 	---@type string name of the module

@@ -36,6 +36,7 @@ pub enum ChangeSubject {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutionChange {
     pub kind: ChangeKind,
     pub subject: ChangeSubject,
@@ -96,7 +97,7 @@ impl ExecutionChange {
 /// assert!(changed.changed());
 /// ```
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ExecutionResult {
     pub changes: Vec<ExecutionChange>,
 
@@ -160,7 +161,7 @@ impl ExecutionResult {
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ValidationResult {
     pub ok: bool,
     pub message: Option<String>,

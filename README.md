@@ -1,9 +1,9 @@
 # wali
 
-wali is a small agentless automation tool written in Rust. Manifests and
-modules are written in embedded Lua. The current implementation focuses on
-local and SSH hosts, strict execution flow, host-aware checks, and
-desired-state filesystem modules.
+wali is a small agentless automation tool written in Rust. Manifests and modules
+are written in embedded Lua. The current implementation focuses on local and SSH
+hosts, strict execution flow, host-aware checks, and desired-state filesystem
+modules.
 
 The project is still in active development. Public contracts may change while
 the executor, module API, and builtin module set are being stabilized.
@@ -12,8 +12,8 @@ the executor, module API, and builtin module set are being stabilized.
 
 A manifest describes hosts and tasks. Each task selects a module and passes
 module arguments. Wali compiles a per-host task plan, connects to each host for
-host-aware commands, evaluates task predicates and module requirements, validates
-module input, and applies changes when requested.
+host-aware commands, evaluates task predicates and module requirements,
+validates module input, and applies changes when requested.
 
 The CLI has three layers:
 
@@ -103,8 +103,8 @@ tasks = {
 ```
 
 The namespace is a public selector for the manifest, not something module
-authors need to know. After a task resolves to one effective module source,
-wali creates a fresh Lua runtime for that task, adds only that source root to
+authors need to know. After a task resolves to one effective module source, wali
+creates a fresh Lua runtime for that task, adds only that source root to
 `package.path`, and loads the source-local module name. Internal imports remain
 ordinary Lua imports:
 
@@ -173,10 +173,11 @@ order is:
 when -> requires -> schema normalization -> validate -> apply
 ```
 
-`validate` receives a read/probe-only context. `apply` receives the full context,
-including mutation APIs. See [`docs/module_contract.lua`](docs/module_contract.lua)
-for the compact API reference and [`docs/module-developers.md`](docs/module-developers.md)
-for authoring guidance.
+`validate` receives a read/probe-only context. `apply` receives the full
+context, including mutation APIs. See
+[`docs/module_contract.lua`](docs/module_contract.lua) for the compact API
+reference and [`docs/module-developers.md`](docs/module-developers.md) for
+authoring guidance.
 
 ## Development checks
 

@@ -1,9 +1,9 @@
 # Project philosophy
 
-This document records wali's design direction. It is not a frozen
-specification; it exists to prevent drift as the implementation grows.
-Operational module-authoring details belong in `docs/module-developers.md`.
-Builtin-specific behavior belongs in `docs/builtin-modules.md`.
+This document records wali's design direction. It is not a frozen specification;
+it exists to prevent drift as the implementation grows. Operational
+module-authoring details belong in `docs/module-developers.md`. Builtin-specific
+behavior belongs in `docs/builtin-modules.md`.
 
 ## Goal
 

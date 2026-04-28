@@ -13,6 +13,7 @@ pub enum User {
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Owner {
     pub user: Option<User>,
     pub group: Option<Group>,

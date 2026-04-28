@@ -2,11 +2,11 @@ use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::executor::shared::{describe_request, render_request_script, shell_escape, valid_env_key};
+use crate::executor::shared::{describe_request, render_request_script, shell_escape};
 use crate::launcher::SecretKey;
 use crate::spec::runas::{PtyMode, RunAs, RunAsEnv, RunAsVia};
 
-use super::command::CommandRequest;
+use super::command::{CommandRequest, valid_env_key};
 
 static MARKER_COUNTER: AtomicU64 = AtomicU64::new(1);
 

@@ -29,7 +29,11 @@ impl ModuleGit {
     fn source_id(&self) -> crate::Result<String> {
         let url = self.checked_url()?;
         let git_ref = self.checked_ref()?;
-        let submodules = if self.submodules { "submodules=1" } else { "submodules=0" };
+        let submodules = if self.submodules {
+            "submodules=1"
+        } else {
+            "submodules=0"
+        };
         Ok(format!("source-v1-{}", stable_hash128(&[url, git_ref, submodules])))
     }
 
@@ -38,7 +42,9 @@ impl ModuleGit {
     }
 
     fn lock_path(&self) -> crate::Result<PathBuf> {
-        Ok(git_cache_root().join("locks").join(format!("{}.lock", self.source_id()?)))
+        Ok(git_cache_root()
+            .join("locks")
+            .join(format!("{}.lock", self.source_id()?)))
     }
 
     fn source_metadata(&self) -> crate::Result<String> {
@@ -53,7 +59,9 @@ impl ModuleGit {
     fn checked_url(&self) -> crate::Result<&str> {
         let url = self.url.trim();
         if url != self.url.as_str() {
-            return Err(crate::Error::InvalidManifest("module git source url must not contain surrounding whitespace".into()));
+            return Err(crate::Error::InvalidManifest(
+                "module git source url must not contain surrounding whitespace".into(),
+            ));
         }
         if url.is_empty() {
             return Err(crate::Error::InvalidManifest("module git source has empty url".into()));
@@ -293,7 +301,6 @@ impl Drop for ModuleGitLock {
         let _ = std::fs::remove_dir_all(&self.path);
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -847,10 +854,9 @@ fn ensure_source_metadata(repo: &Path, expected: &str) -> crate::Result {
             "module git cache metadata does not match requested source: {}",
             path.display()
         ))),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(crate::Error::ModuleSource(format!(
-            "module git cache metadata is missing: {}",
-            path.display()
-        ))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(crate::Error::ModuleSource(format!("module git cache metadata is missing: {}", path.display())))
+        }
         Err(error) => Err(error.into()),
     }
 }

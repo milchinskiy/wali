@@ -19,6 +19,8 @@ impl CommandExec for LocalExecutor {
     type Error = crate::Error;
 
     fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error> {
+        req.validate()?;
+
         if let Some(run_as) = self.run_as() {
             return exec_local_run_as(self, run_as, req);
         }
@@ -52,16 +54,20 @@ fn exec_local_run_as(
     builder.args(&plan.argv[1..]);
     builder.set_controlling_tty(true);
 
-    let mut child = pair.slave.spawn_command(builder).map_err(|err| {
+    let master = pair.master;
+    let slave = pair.slave;
+    let mut child = slave.spawn_command(builder).map_err(|err| {
         crate::Error::CommandExec(format!("failed to spawn local run_as command for {}: {err}", desc))
     })?;
+    drop(slave);
 
-    let reader = pair.master.try_clone_reader().map_err(|err| {
+    let reader = master.try_clone_reader().map_err(|err| {
         crate::Error::CommandExec(format!("failed to clone local PTY reader for run_as {}: {err}", desc))
     })?;
-    let writer = pair.master.take_writer().map_err(|err| {
+    let writer = master.take_writer().map_err(|err| {
         crate::Error::CommandExec(format!("failed to take local PTY writer for run_as {}: {err}", desc))
     })?;
+    drop(master);
 
     let (tx, rx) = mpsc::channel();
     let reader_desc = desc.clone();
@@ -253,20 +259,24 @@ fn exec_local_pty(req: &CommandRequest) -> crate::Result<CommandOutput> {
     let mut builder = build_local_pty_command(req);
     builder.set_controlling_tty(true);
 
-    let mut child = pair.slave.spawn_command(builder).map_err(|err| {
+    let master = pair.master;
+    let slave = pair.slave;
+    let mut child = slave.spawn_command(builder).map_err(|err| {
         crate::Error::CommandExec(format!("failed to spawn local PTY command for {}: {err}", describe_request(req)))
     })?;
+    drop(slave);
 
-    let reader = pair.master.try_clone_reader().map_err(|err| {
+    let reader = master.try_clone_reader().map_err(|err| {
         crate::Error::CommandExec(format!("failed to clone local PTY reader for {}: {err}", describe_request(req)))
     })?;
     let writer = if req.opts.stdin.is_some() {
-        Some(pair.master.take_writer().map_err(|err| {
+        Some(master.take_writer().map_err(|err| {
             crate::Error::CommandExec(format!("failed to clone local PTY writer for {}: {err}", describe_request(req)))
         })?)
     } else {
         None
     };
+    drop(master);
 
     let stdin_handle = spawn_pty_stdin(writer, req.opts.stdin.clone(), describe_request(req));
     let output_handle = thread::spawn(move || -> std::io::Result<Vec<u8>> {

@@ -14,6 +14,8 @@ impl CommandExec for SshExecutor {
     type Error = crate::Error;
 
     fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error> {
+        req.validate()?;
+
         let _command_guard = self.command_guard();
         let _session_mode = SessionModeGuard::enter(&self.state.session)?;
 

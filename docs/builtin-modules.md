@@ -24,8 +24,8 @@ not the target kind.
 directories are created, while non-directory source entries are represented as
 symlinks.
 
-`wali.builtin.copy_file` is explicitly file-scoped because the source must be
-an existing regular file. `wali.builtin.copy_tree` composes that file primitive
+`wali.builtin.copy_file` is explicitly file-scoped because the source must be an
+existing regular file. `wali.builtin.copy_tree` composes that file primitive
 with deterministic tree walking.
 
 ## `wali.builtin.dir`
@@ -249,7 +249,6 @@ directory or symlink is created.
 - source `other` entries are refused unless `allow_special = true`;
 - extra destination entries are not pruned.
 
-
 ## `wali.builtin.copy_tree`
 
 Copies a source directory tree into a destination directory on the same target
@@ -293,8 +292,8 @@ directory or symlink is created.
 
 `dir_mode` / `file_mode` override source modes. Without overrides,
 `preserve_mode = true` preserves mode bits from the source entries.
-`preserve_owner = true` applies numeric source uid/gid to destination entries and
-therefore usually requires suitable privileges.
+`preserve_owner = true` applies numeric source uid/gid to destination entries
+and therefore usually requires suitable privileges.
 
 ## `wali.builtin.command`
 
@@ -326,15 +325,16 @@ Shell form:
 }
 ```
 
-`changed = "never"` can be used for read-only commands.
+`timeout` is a human-readable string such as `"10s"` or `"2m"`. `env` is a
+string map, for example `{ FOO = "bar" }`. `changed = "never"` can be used for
+read-only commands.
 
 ## Tree traversal primitive
 
 `wali.builtin.copy_tree` and `wali.builtin.link_tree` are built on
 `ctx.host.fs.walk(...)`, the host filesystem traversal primitive exposed to
 custom modules. Wali does not provide a separate `wali.builtin.walk` task
-module; tree inspection is a module-authoring concern rather than desired
-state by itself.
+module; tree inspection is a module-authoring concern rather than desired state
+by itself.
 
-For the full `ctx.host.fs.walk(...)` API contract, see
-`module-developers.md`.
+For the full `ctx.host.fs.walk(...)` API contract, see `module-developers.md`.

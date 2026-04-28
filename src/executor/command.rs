@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use super::path::TargetPath;
@@ -36,6 +36,42 @@ pub struct CommandRequest {
     pub opts: CommandOpts,
 }
 
+impl CommandRequest {
+    #[must_use]
+    pub fn description(&self) -> String {
+        match &self.kind {
+            CommandKind::Exec { program, args } => {
+                let mut parts = Vec::with_capacity(args.len() + 1);
+                parts.push(program.as_str());
+                parts.extend(args.iter().map(String::as_str));
+                parts.join(" ")
+            }
+            CommandKind::Shell { script } => {
+                let trimmed = script.trim();
+                if trimmed.chars().count() <= 80 {
+                    format!("sh -c {trimmed}")
+                } else {
+                    format!("sh -c {}…", trimmed.chars().take(80).collect::<String>())
+                }
+            }
+        }
+    }
+
+    pub fn validate(&self) -> crate::Result {
+        match &self.kind {
+            CommandKind::Exec { program, .. } if program.trim().is_empty() => {
+                return Err(crate::Error::CommandExec("command program must not be empty".to_owned()));
+            }
+            CommandKind::Shell { script } if script.trim().is_empty() => {
+                return Err(crate::Error::CommandExec("shell script must not be empty".to_owned()));
+            }
+            _ => {}
+        }
+
+        self.opts.validate_for(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandKind {
     Exec { program: String, args: Vec<String> },
@@ -43,35 +79,118 @@ pub enum CommandKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CommandOpts {
     pub cwd: Option<TargetPath>,
-    #[serde(default, deserialize_with = "deserialize_env_pairs")]
-    pub env: Vec<(String, String)>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
     pub stdin: Option<Vec<u8>>,
-    #[serde(default, deserialize_with = "deserialize_optional_timeout_secs")]
+    #[serde(default, with = "serde_ext_duration::opt::human")]
     pub timeout: Option<Duration>,
     pub pty: PtyMode,
 }
 
-fn deserialize_env_pairs<'de, D>(deserializer: D) -> Result<Vec<(String, String)>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let env = Option::<std::collections::BTreeMap<String, String>>::deserialize(deserializer)?;
-    Ok(env.unwrap_or_default().into_iter().collect())
+impl CommandOpts {
+    pub fn validate_for(&self, req: &CommandRequest) -> crate::Result {
+        if self.timeout.is_some_and(|timeout| timeout.is_zero()) {
+            return Err(crate::Error::CommandExec(format!(
+                "command timeout must be greater than zero for {}",
+                req.description()
+            )));
+        }
+
+        for (key, value) in &self.env {
+            if !valid_env_key(key) {
+                return Err(crate::Error::CommandExec(format!(
+                    "invalid environment variable name {key:?} for {}",
+                    req.description()
+                )));
+            }
+            if value.contains('\0') {
+                return Err(crate::Error::CommandExec(format!(
+                    "environment variable {key:?} contains a NUL byte for {}",
+                    req.description()
+                )));
+            }
+        }
+
+        Ok(())
+    }
 }
 
-fn deserialize_optional_timeout_secs<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let seconds = Option::<f64>::deserialize(deserializer)?;
-    match seconds {
-        None => Ok(None),
-        Some(seconds) if seconds.is_finite() && seconds >= 0.0 => Ok(Some(Duration::from_secs_f64(seconds))),
-        Some(seconds) => {
-            Err(serde::de::Error::custom(format!("timeout must be a finite non-negative number, got {seconds}")))
+pub fn valid_env_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    match chars.next() {
+        Some(c) if c == '_' || c.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+
+    chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecCommandInput {
+    pub program: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub cwd: Option<TargetPath>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    #[serde(default)]
+    pub stdin: Option<Vec<u8>>,
+    #[serde(default, with = "serde_ext_duration::opt::human")]
+    pub timeout: Option<Duration>,
+    #[serde(default)]
+    pub pty: PtyMode,
+}
+
+impl From<ExecCommandInput> for CommandRequest {
+    fn from(input: ExecCommandInput) -> Self {
+        Self {
+            kind: CommandKind::Exec {
+                program: input.program,
+                args: input.args,
+            },
+            opts: CommandOpts {
+                cwd: input.cwd,
+                env: input.env,
+                stdin: input.stdin,
+                timeout: input.timeout,
+                pty: input.pty,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShellCommandInput {
+    pub script: String,
+    #[serde(default)]
+    pub cwd: Option<TargetPath>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    #[serde(default)]
+    pub stdin: Option<Vec<u8>>,
+    #[serde(default, with = "serde_ext_duration::opt::human")]
+    pub timeout: Option<Duration>,
+    #[serde(default)]
+    pub pty: PtyMode,
+}
+
+impl From<ShellCommandInput> for CommandRequest {
+    fn from(input: ShellCommandInput) -> Self {
+        Self {
+            kind: CommandKind::Shell { script: input.script },
+            opts: CommandOpts {
+                cwd: input.cwd,
+                env: input.env,
+                stdin: input.stdin,
+                timeout: input.timeout,
+                pty: input.pty,
+            },
         }
     }
 }

@@ -106,7 +106,7 @@ pub struct WalkEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct MetadataOpts {
     pub follow: bool,
 }
@@ -130,7 +130,7 @@ pub enum WalkOrder {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct WalkOpts {
     pub include_root: bool,
     pub max_depth: Option<u32>,
@@ -138,7 +138,7 @@ pub struct WalkOpts {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct WriteOpts {
     pub create_parents: bool,
     pub mode: Option<FileMode>,
@@ -158,7 +158,7 @@ impl Default for WriteOpts {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct CopyFileOpts {
     pub create_parents: bool,
     pub mode: Option<FileMode>,
@@ -180,7 +180,7 @@ impl Default for CopyFileOpts {
 }
 
 #[derive(Default, Debug, Clone, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct DirOpts {
     pub recursive: bool,
     pub mode: Option<FileMode>,
@@ -188,13 +188,13 @@ pub struct DirOpts {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct RemoveDirOpts {
     pub recursive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct RenameOpts {
     pub replace: bool,
 }
@@ -214,7 +214,7 @@ pub enum MkTempKind {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct MkTempOpts {
     pub kind: MkTempKind,
     pub parent_dir: Option<TargetPath>,

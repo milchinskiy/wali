@@ -6,8 +6,8 @@ keeps the detailed authoring and source-loading contract in one place.
 
 ## Module source contract
 
-A manifest may add one or more module sources. A source is either a local path or
-a Git repository; it may also have an optional manifest-local namespace.
+A manifest may add one or more module sources. A source is either a local path
+or a Git repository; it may also have an optional manifest-local namespace.
 
 Local source:
 
@@ -54,7 +54,8 @@ file/init.lua            -> file
 internal/utils/tool.lua  -> internal.utils.tool
 ```
 
-`file.lua` and `file/init.lua` in the same source are ambiguous and are rejected.
+`file.lua` and `file/init.lua` in the same source are ambiguous and are
+rejected.
 
 ## Namespaces and task module names
 
@@ -98,8 +99,8 @@ Name rules:
 
 - task module names and namespaces are dotted Lua-style identifiers;
 - each segment must match `[A-Za-z_][A-Za-z0-9_]*`;
-- empty segments, surrounding whitespace, path separators, dashes, and shell-like
-  punctuation are invalid;
+- empty segments, surrounding whitespace, path separators, dashes, and
+  shell-like punctuation are invalid;
 - `wali` and `wali.*` are reserved for wali itself;
 - namespaces must be unique in one manifest;
 - namespace prefixes must not overlap, so `repo` and `repo.lib` cannot both be
@@ -249,8 +250,9 @@ schema = {
 }
 ```
 
-Manifest-facing objects reject unknown fields, and module object schemas reject
-unknown task arguments. A typo should fail instead of being ignored.
+Manifest-facing objects, Lua host API option tables, and module result tables
+reject unknown fields. Module object schemas reject unknown task arguments. A
+typo should fail instead of being ignored.
 
 For POSIX modes, prefer strings such as `"0644"` in module arguments and convert
 them inside the module or a shared helper. Decimal mode values are hard to read
@@ -439,12 +441,40 @@ planning and `order = "post"` for child-before-parent planning.
 Command execution is available during apply:
 
 ```lua
-ctx.host.cmd.exec({ program = "systemctl", args = { "reload", "nginx" } })
+ctx.host.cmd.exec({
+    program = "systemctl",
+    args = { "reload", "nginx" },
+    env = { FOO = "bar" },
+    timeout = "10s",
+})
 ctx.host.cmd.shell("printf '%s\n' hello")
+ctx.host.cmd.shell({ script = "printf '%s\n' hello", timeout = "10s" })
 ```
 
 Prefer `exec` with explicit `program` and `args` for user-controlled values. Use
-`shell` only when shell features are actually needed.
+`shell` only when shell features are actually needed. Command request tables
+reject unknown fields. Environment variables are passed as a string map and
+names must match `[A-Za-z_][A-Za-z0-9_]*`. Empty programs, empty shell scripts,
+and zero-duration timeouts are rejected.
+
+Command output uses split streams by default:
+
+```lua
+local out = ctx.host.cmd.exec({ program = "sh", args = { "-c", "printf out; printf err >&2" } })
+-- out.stdout == "out"
+-- out.stderr == "err"
+-- out.output == nil
+```
+
+When PTY mode is required, stdout and stderr are merged by the terminal and Wali
+returns a single combined output field:
+
+```lua
+local out = ctx.host.cmd.shell({ script = "printf combined", pty = "require" })
+-- out.output == "combined"
+-- out.stdout == nil
+-- out.stderr == nil
+```
 
 If a module requires an external command, declare it in `requires`:
 

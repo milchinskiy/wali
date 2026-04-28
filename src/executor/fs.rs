@@ -1016,7 +1016,25 @@ fn parse_list_dir(stdout: &[u8]) -> crate::Result<Vec<DirEntry>> {
         entries.push(DirEntry { name, kind });
     }
 
+    order_dir_entries(&mut entries);
     Ok(entries)
+}
+
+fn order_dir_entries(entries: &mut [DirEntry]) {
+    entries.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| fs_kind_order(left.kind).cmp(&fs_kind_order(right.kind)))
+    });
+}
+
+fn fs_kind_order(kind: FsPathKind) -> u8 {
+    match kind {
+        FsPathKind::Dir => 0,
+        FsPathKind::File => 1,
+        FsPathKind::Symlink => 2,
+        FsPathKind::Other => 3,
+    }
 }
 
 fn parse_walk(stdout: &[u8], order: WalkOrder) -> crate::Result<Vec<WalkEntry>> {

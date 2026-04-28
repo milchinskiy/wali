@@ -1091,13 +1091,11 @@ return {{
         .filter(|entry| entry.path().is_dir())
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .collect::<Vec<_>>();
-    assert_eq!(
-        cache_roots.len(),
-        2,
-        "repos with the same leaf directory and ref must not share one git checkout"
-    );
+    assert_eq!(cache_roots.len(), 2, "repos with the same leaf directory and ref must not share one git checkout");
     assert!(
-        cache_roots.iter().all(|name| name.starts_with("source-v1-") && name.len() <= 42),
+        cache_roots
+            .iter()
+            .all(|name| name.starts_with("source-v1-") && name.len() <= 42),
         "git checkout cache names should be short stable source ids: {cache_roots:?}"
     );
 
@@ -1110,7 +1108,6 @@ return {{
     assert_eq!(std::fs::read_to_string(&target_a).expect("failed to read repo a target"), "from repo a\n");
     assert_eq!(std::fs::read_to_string(&target_b).expect("failed to read repo b target"), "from repo b\n");
 }
-
 
 #[test]
 fn git_module_cache_lock_blocks_concurrent_mutation() {
@@ -1157,7 +1154,9 @@ return {{
         .expect("git checkout was not created")
         .file_name();
 
-    let lock = cache.join("git/locks").join(format!("{}.lock", checkout_id.to_string_lossy()));
+    let lock = cache
+        .join("git/locks")
+        .join(format!("{}.lock", checkout_id.to_string_lossy()));
     std::fs::create_dir_all(&lock).expect("failed to create simulated git cache lock");
     std::fs::write(lock.join("owner"), "pid = test\n").expect("failed to write simulated lock owner");
 
@@ -1227,10 +1226,7 @@ return {{
         .filter_map(Result::ok)
         .filter(|entry| entry.path().is_dir())
         .count();
-    assert_eq!(
-        count, 2,
-        "the same url/ref with and without submodules must not share one materialized checkout"
-    );
+    assert_eq!(count, 2, "the same url/ref with and without submodules must not share one materialized checkout");
 }
 
 #[test]
@@ -1330,7 +1326,6 @@ return {{
     assert_eq!(std::fs::read_to_string(&target_b).expect("failed to read git target b"), "from git namespace b\n");
 }
 
-
 #[test]
 fn git_module_source_rejects_surrounding_url_and_ref_whitespace() {
     for (name, git_source, needle) in [
@@ -1358,10 +1353,7 @@ return {{
             git_source
         ));
 
-        assert_wali_failure_contains(
-            &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-            needle,
-        );
+        assert_wali_failure_contains(&["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")], needle);
     }
 }
 
@@ -1624,6 +1616,478 @@ return {{
     }
 }
 
+#[test]
+fn lua_host_api_unknown_option_fields_are_rejected() {
+    let cases = [
+        (
+            "write-option-typo",
+            r#"return {
+    apply = function(ctx, args)
+        return ctx.host.fs.write(args.target, "x\n", { create_parent = true })
+    end,
+}"#,
+        ),
+        (
+            "copy-option-typo",
+            r#"return {
+    apply = function(ctx, args)
+        return ctx.host.fs.copy_file(args.source, args.target, { create_parent = true })
+    end,
+}"#,
+        ),
+        (
+            "exec-option-typo",
+            r#"return {
+    apply = function(ctx, args)
+        ctx.host.cmd.exec({ program = "true", timeout_secs = 1 })
+        return nil
+    end,
+}"#,
+        ),
+        (
+            "shell-option-typo",
+            r#"return {
+    apply = function(ctx, args)
+        ctx.host.cmd.shell({ script = "true", timeout_secs = 1 })
+        return nil
+    end,
+}"#,
+        ),
+        (
+            "owner-option-typo",
+            r#"return {
+    apply = function(ctx, args)
+        return ctx.host.fs.chown(args.target, { user = "root", groups = "root" })
+    end,
+}"#,
+        ),
+    ];
+
+    for (name, module) in cases {
+        let sandbox = Sandbox::new(name);
+        let modules = sandbox.mkdir("modules");
+        let source = sandbox.path("source.txt");
+        let target = sandbox.path("target.txt");
+        std::fs::write(&source, "source\n").expect("failed to write source file");
+        std::fs::write(&target, "target\n").expect("failed to write target file");
+        std::fs::write(modules.join("bad.lua"), module).expect("failed to write bad module");
+
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "bad", module = "bad", args = {{ source = {}, target = {} }} }},
+    }},
+}}
+"#,
+            lua_string(&modules),
+            lua_string(&source),
+            lua_string(&target),
+        ));
+
+        assert_wali_failure_contains(
+            &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+            "unknown field",
+        );
+    }
+}
+
+#[test]
+fn lua_module_result_unknown_fields_are_rejected() {
+    let cases = [
+        (
+            "validation-result-typo",
+            "check",
+            r#"return {
+    validate = function(ctx, args)
+        return { ok = true, mesage = "typo" }
+    end,
+    apply = function(ctx, args)
+        return nil
+    end,
+}"#,
+            "invalid validation result",
+        ),
+        (
+            "apply-result-typo",
+            "apply",
+            r#"return {
+    apply = function(ctx, args)
+        return { changes = {}, changez = {} }
+    end,
+}"#,
+            "invalid apply result",
+        ),
+    ];
+
+    for (name, command, module, needle) in cases {
+        let sandbox = Sandbox::new(name);
+        let modules = sandbox.mkdir("modules");
+        std::fs::write(modules.join("bad_result.lua"), module).expect("failed to write bad result module");
+
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "bad result", module = "bad_result", args = {{}} }},
+    }},
+}}
+"#,
+            lua_string(&modules),
+        ));
+
+        assert_wali_failure_contains(&["--json", command, manifest.to_str().expect("non-utf8 manifest path")], needle);
+    }
+}
+
+#[test]
+fn shell_accepts_script_string_and_request_table() {
+    let sandbox = Sandbox::new("shell-call-shapes");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(
+        modules.join("shell_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        local a = ctx.host.cmd.shell("printf alpha")
+        local b = ctx.host.cmd.shell({ script = "printf beta" })
+        return api.result.apply()
+            :command("updated", "shell probe")
+            :data({ string = a.stdout, table = b.stdout })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write shell probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "shell probe", module = "shell_probe", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    let report = run_apply(&manifest);
+    let result = task_result(&report, "shell probe");
+    assert_eq!(result.pointer("/data/string").and_then(Value::as_str), Some("alpha"));
+    assert_eq!(result.pointer("/data/table").and_then(Value::as_str), Some("beta"));
+}
+
+#[test]
+fn command_env_maps_are_supported() {
+    let sandbox = Sandbox::new("command-env-map");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(
+        modules.join("env_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        local exec_out = ctx.host.cmd.exec({
+            program = "sh",
+            args = { "-c", "printf '%s' \"$WALI_EXEC_ENV\"" },
+            env = { WALI_EXEC_ENV = "exec-env" },
+        })
+        local shell_out = ctx.host.cmd.shell({
+            script = "printf '%s' \"$WALI_SHELL_ENV\"",
+            env = { WALI_SHELL_ENV = "shell-env" },
+        })
+        return api.result.apply()
+            :command("updated", "env probe")
+            :data({ exec = exec_out.stdout, shell = shell_out.stdout })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write env probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "env probe", module = "env_probe", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    let report = run_apply(&manifest);
+    let result = task_result(&report, "env probe");
+    assert_eq!(result.pointer("/data/exec").and_then(Value::as_str), Some("exec-env"));
+    assert_eq!(result.pointer("/data/shell").and_then(Value::as_str), Some("shell-env"));
+}
+
+#[test]
+fn command_requests_reject_invalid_values() {
+    let cases = [
+        (
+            "invalid-env-key",
+            r#"return {
+    apply = function(ctx, args)
+        ctx.host.cmd.exec({ program = "true", env = { ["BAD-NAME"] = "x" } })
+        return nil
+    end,
+}"#,
+            "invalid environment variable name",
+        ),
+        (
+            "empty-program",
+            r#"return {
+    apply = function(ctx, args)
+        ctx.host.cmd.exec({ program = "" })
+        return nil
+    end,
+}"#,
+            "program must not be empty",
+        ),
+        (
+            "empty-shell-script",
+            r#"return {
+    apply = function(ctx, args)
+        ctx.host.cmd.shell({ script = "   " })
+        return nil
+    end,
+}"#,
+            "shell script must not be empty",
+        ),
+        (
+            "zero-timeout",
+            r#"return {
+    apply = function(ctx, args)
+        ctx.host.cmd.shell({ script = "true", timeout = "0s" })
+        return nil
+    end,
+}"#,
+            "timeout must be greater than zero",
+        ),
+    ];
+
+    for (name, module, needle) in cases {
+        let sandbox = Sandbox::new(name);
+        let modules = sandbox.mkdir("modules");
+        std::fs::write(modules.join("bad_command.lua"), module).expect("failed to write bad command module");
+
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "bad command", module = "bad_command", args = {{}} }},
+    }},
+}}
+"#,
+            lua_string(&modules),
+        ));
+
+        assert_wali_failure_contains(&["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")], needle);
+    }
+}
+
+#[test]
+fn command_output_uses_split_streams_or_combined_pty_output() {
+    let sandbox = Sandbox::new("command-output-shape");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(
+        modules.join("output_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        local split = ctx.host.cmd.shell("printf out; printf err >&2")
+        local combined = ctx.host.cmd.shell({ script = "printf combined", pty = "require" })
+        return api.result.apply()
+            :command("updated", "output probe")
+            :data({
+                split_stdout = split.stdout,
+                split_stderr = split.stderr,
+                split_output = split.output,
+                combined_stdout = combined.stdout,
+                combined_stderr = combined.stderr,
+                combined_output = combined.output,
+            })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write output probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "output probe", module = "output_probe", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    let report = run_apply(&manifest);
+    let result = task_result(&report, "output probe");
+    assert_eq!(result.pointer("/data/split_stdout").and_then(Value::as_str), Some("out"));
+    assert_eq!(result.pointer("/data/split_stderr").and_then(Value::as_str), Some("err"));
+    assert!(result.pointer("/data/split_output").is_none());
+    assert!(result.pointer("/data/combined_stdout").is_none());
+    assert!(result.pointer("/data/combined_stderr").is_none());
+    assert_eq!(result.pointer("/data/combined_output").and_then(Value::as_str), Some("combined"));
+}
+
+#[test]
+fn builtin_command_uses_string_timeout_contract() {
+    let sandbox = Sandbox::new("builtin-command-timeout");
+    let ok_marker = sandbox.path("ok-marker");
+    let ok_manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "string timeout",
+            module = "wali.builtin.command",
+            args = {{ script = {}, timeout = "1s", creates = {} }},
+        }},
+    }},
+}}
+"#,
+        lua_quote(&format!("printf ok > {}", ok_marker.display())),
+        lua_string(&ok_marker),
+    ));
+
+    let report = run_apply(&ok_manifest);
+    assert_task_changed(&report, "string timeout");
+    assert_eq!(std::fs::read_to_string(&ok_marker).unwrap(), "ok");
+
+    let bad_manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "numeric timeout",
+            module = "wali.builtin.command",
+            args = { script = "true", timeout = 1 },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &[
+            "--json",
+            "check",
+            bad_manifest.to_str().expect("non-utf8 manifest path"),
+        ],
+        "Invalid module input data",
+    );
+}
+
+#[test]
+fn list_dir_returns_entries_in_deterministic_order() {
+    let sandbox = Sandbox::new("list-dir-order");
+    let modules = sandbox.mkdir("modules");
+    let tree = sandbox.mkdir("tree");
+    std::fs::write(tree.join("z.txt"), "z\n").expect("failed to write z file");
+    std::fs::write(tree.join("a.txt"), "a\n").expect("failed to write a file");
+    std::fs::create_dir_all(tree.join("m-dir")).expect("failed to create m-dir");
+
+    std::fs::write(
+        modules.join("list_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        return api.result.apply()
+            :command("unchanged", "list probe")
+            :data({ entries = ctx.host.fs.list_dir(args.path) })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write list probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "list probe", module = "list_probe", args = {{ path = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+        lua_string(&tree),
+    ));
+
+    let report = run_apply(&manifest);
+    let result = task_result(&report, "list probe");
+    let names = result
+        .pointer("/data/entries")
+        .and_then(Value::as_array)
+        .expect("list_dir result should include entries")
+        .iter()
+        .map(|entry| entry.get("name").and_then(Value::as_str).unwrap_or("<missing>"))
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["a.txt", "m-dir", "z.txt"]);
+}
 #[test]
 fn remove_refuses_unsafe_root_path_during_check() {
     let sandbox = Sandbox::new("remove-root");

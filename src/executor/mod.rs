@@ -12,7 +12,10 @@ mod run_as;
 mod shared;
 mod ssh;
 
-pub use self::command::{CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams};
+pub use self::command::{
+    CommandKind, CommandOpts, CommandOutput, CommandRequest, CommandStatus, CommandStreams, ExecCommandInput,
+    ShellCommandInput,
+};
 pub use self::path::{
     CopyFileOpts, DirEntry, DirOpts, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts,
     RemoveDirOpts, RenameOpts, TargetPath, WalkEntry, WalkOpts, WalkOrder, WriteOpts,

@@ -14,7 +14,7 @@ return {
 			cwd = { type = "string" },
 			env = { type = "map", value = { type = "string" } },
 			stdin = { type = "string" },
-			timeout = { type = "number" },
+			timeout = { type = "string" },
 			pty = { type = "enum", values = { "never", "auto", "require" }, default = "auto" },
 			creates = { type = "string" },
 			removes = { type = "string" },
@@ -28,6 +28,12 @@ return {
 		end
 		if args.program ~= nil and args.script ~= nil then
 			return lib.validation_error("program and script are mutually exclusive")
+		end
+		if args.program ~= nil and args.program:match("%S") == nil then
+			return lib.validation_error("program must not be empty")
+		end
+		if args.script ~= nil and args.script:match("%S") == nil then
+			return lib.validation_error("script must not be empty")
 		end
 		return nil
 	end,
