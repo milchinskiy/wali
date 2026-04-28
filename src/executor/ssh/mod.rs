@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::launcher::secrets::SecretVault;
 use crate::spec::runas::RunAs;
@@ -23,6 +24,7 @@ struct SharedState {
     session: ssh2::Session,
     facts: std::sync::Mutex<FactCache>,
     command_lock: std::sync::Mutex<()>,
+    default_command_timeout: Option<Duration>,
 }
 
 impl ExecutorBinder for SshExecutor {
@@ -35,6 +37,11 @@ impl ExecutorBinder for SshExecutor {
 }
 
 impl SshExecutor {
+    #[must_use]
+    pub fn default_command_timeout(&self) -> Option<Duration> {
+        self.state.default_command_timeout
+    }
+
     fn command_guard(&self) -> std::sync::MutexGuard<'_, ()> {
         self.state
             .command_lock

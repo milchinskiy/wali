@@ -38,6 +38,15 @@ pub struct CommandRequest {
 
 impl CommandRequest {
     #[must_use]
+    pub fn with_default_timeout(&self, default_timeout: Option<Duration>) -> Self {
+        let mut req = self.clone();
+        if req.opts.timeout.is_none() {
+            req.opts.timeout = default_timeout;
+        }
+        req
+    }
+
+    #[must_use]
     pub fn description(&self) -> String {
         match &self.kind {
             CommandKind::Exec { program, args } => {

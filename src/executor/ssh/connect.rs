@@ -14,7 +14,12 @@ use crate::spec::runas::RunAs;
 use super::SharedState;
 
 impl super::SshExecutor {
-    pub fn connect(id: String, secrets: Arc<SecretVault>, ssh: &Connection) -> crate::Result<Self> {
+    pub fn connect(
+        id: String,
+        secrets: Arc<SecretVault>,
+        ssh: &Connection,
+        default_command_timeout: Option<Duration>,
+    ) -> crate::Result<Self> {
         let tcp = connect_tcp(ssh)?;
 
         let mut session = ssh2::Session::new()?;
@@ -51,6 +56,7 @@ impl super::SshExecutor {
                 session,
                 facts: std::sync::Mutex::new(facts),
                 command_lock: std::sync::Mutex::new(()),
+                default_command_timeout,
             }),
             run_as: None,
         })

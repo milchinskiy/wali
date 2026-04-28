@@ -43,6 +43,9 @@ wali --json-pretty apply manifest.lua
 
 ## Minimal manifest
 
+Hosts may set `command_timeout = "30s"` to provide a default timeout for all
+commands on that host. Per-command `timeout` values override the host default.
+
 ```lua
 return {
     hosts = {

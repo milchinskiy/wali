@@ -325,7 +325,8 @@ Shell form:
 }
 ```
 
-`timeout` is a human-readable string such as `"10s"` or `"2m"`. `env` is a
+`timeout` is a human-readable string such as `"10s"` or `"2m"`. When omitted,
+the host-level `command_timeout` default is used if configured. `env` is a
 string map, for example `{ FOO = "bar" }`. `changed = "never"` can be used for
 read-only commands.
 

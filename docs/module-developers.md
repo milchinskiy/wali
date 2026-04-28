@@ -527,6 +527,10 @@ reject unknown fields. Environment variables are passed as a string map and
 names must match `[A-Za-z_][A-Za-z0-9_]*`. Empty programs, empty shell scripts,
 and zero-duration timeouts are rejected.
 
+If a command request omits `timeout`, Wali uses the host-level
+`command_timeout` default when it is configured. An explicit request timeout
+always overrides the host default.
+
 Command output uses split streams by default:
 
 ```lua

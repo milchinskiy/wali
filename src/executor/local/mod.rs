@@ -1,5 +1,6 @@
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::launcher::secrets::SecretVault;
 use crate::spec::runas::RunAs;
@@ -21,10 +22,15 @@ struct SharedState {
     id: String,
     secrets: Arc<SecretVault>,
     facts: std::sync::Mutex<FactCache>,
+    default_command_timeout: Option<Duration>,
 }
 
 impl LocalExecutor {
-    pub fn connect(id: String, secrets: Arc<SecretVault>) -> crate::Result<Self> {
+    pub fn connect(
+        id: String,
+        secrets: Arc<SecretVault>,
+        default_command_timeout: Option<Duration>,
+    ) -> crate::Result<Self> {
         let facts = collect_initial_facts()?;
 
         Ok(Self {
@@ -32,6 +38,7 @@ impl LocalExecutor {
                 id,
                 secrets,
                 facts: std::sync::Mutex::new(facts),
+                default_command_timeout,
             }),
             run_as: None,
         })
@@ -40,6 +47,11 @@ impl LocalExecutor {
     #[must_use]
     pub fn run_as(&self) -> Option<&RunAs> {
         self.run_as.as_ref()
+    }
+
+    #[must_use]
+    pub fn default_command_timeout(&self) -> Option<Duration> {
+        self.state.default_command_timeout
     }
 }
 

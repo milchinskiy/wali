@@ -36,6 +36,7 @@
 --   exec, shell
 --   request env values are maps: { FOO = "bar" }
 --   timeout values are human strings such as "10s" or "2m"
+--   when omitted, host.command_timeout is used if configured
 --   split commands return stdout/stderr; PTY commands return combined output
 --   option/request tables and module result tables reject unknown fields.
 

@@ -12,14 +12,15 @@ use super::SshExecutor;
 
 impl CommandExec for SshExecutor {
     fn exec(&self, req: &CommandRequest) -> crate::Result<CommandOutput> {
+        let req = req.with_default_timeout(self.default_command_timeout());
         req.validate()?;
 
         let _command_guard = self.command_guard();
         let _session_mode = SessionModeGuard::enter(&self.state.session)?;
 
         match self.run_as() {
-            Some(run_as) => exec_ssh_run_as(self, run_as, req),
-            None => exec_ssh_request(&self.state.session, req),
+            Some(run_as) => exec_ssh_run_as(self, run_as, &req),
+            None => exec_ssh_request(&self.state.session, &req),
         }
     }
 }

@@ -73,6 +73,12 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
         if !host_id_set.insert(host.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Host id '{}' is not unique", host.id)));
         }
+        if host.command_timeout.is_some_and(|timeout| timeout.is_zero()) {
+            return Err(crate::Error::InvalidManifest(format!(
+                "Host '{}' command_timeout must be greater than zero",
+                host.id
+            )));
+        }
     }
 
     let mut task_id_set = std::collections::HashSet::with_capacity(manifest.tasks.len());

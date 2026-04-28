@@ -17,15 +17,16 @@ use super::LocalExecutor;
 
 impl CommandExec for LocalExecutor {
     fn exec(&self, req: &CommandRequest) -> crate::Result<CommandOutput> {
+        let req = req.with_default_timeout(self.default_command_timeout());
         req.validate()?;
 
         if let Some(run_as) = self.run_as() {
-            return exec_local_run_as(self, run_as, req);
+            return exec_local_run_as(self, run_as, &req);
         }
 
         match effective_pty(req.opts.pty.clone()) {
-            EffectivePty::Disabled => exec_local_piped(req),
-            EffectivePty::Enabled => exec_local_pty(req),
+            EffectivePty::Disabled => exec_local_piped(&req),
+            EffectivePty::Enabled => exec_local_pty(&req),
         }
     }
 }

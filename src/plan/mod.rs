@@ -6,6 +6,7 @@ use crate::spec::predicate;
 use crate::spec::runas::RunAs;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Plan {
@@ -19,6 +20,7 @@ pub struct Plan {
 pub struct HostPlan {
     pub id: String,
     pub transport: Transport,
+    pub command_timeout: Option<Duration>,
     pub modules: Vec<crate::manifest::modules::ModuleMount>,
     pub tasks: Vec<TaskInstance>,
 }
@@ -251,6 +253,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                 id: host.id.clone(),
                 modules: module_mounts.clone(),
                 transport: host.transport.clone(),
+                command_timeout: host.command_timeout,
                 tasks,
             })
         })

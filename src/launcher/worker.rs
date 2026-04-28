@@ -205,7 +205,12 @@ impl Worker {
     }
 
     fn connect(&self) -> crate::Result<Backend> {
-        Backend::connect(self.plan.id.clone(), Arc::clone(&self.secrets), &self.plan.transport)
+        Backend::connect(
+            self.plan.id.clone(),
+            Arc::clone(&self.secrets),
+            &self.plan.transport,
+            self.plan.command_timeout,
+        )
     }
 
     fn task_runtime(&self, include_path: Option<&std::path::Path>) -> crate::Result<crate::lua::LuaRuntime> {

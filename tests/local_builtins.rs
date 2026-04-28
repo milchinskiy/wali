@@ -68,6 +68,21 @@ fn lua_quote(value: &str) -> String {
     out
 }
 
+fn shell_quote_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('\'');
+    for ch in value.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
 fn run_wali(args: &[&str]) -> std::process::Output {
     run_wali_with_env(args, &[])
 }
@@ -100,6 +115,17 @@ fn run_wali_json_with_env(args: &[&str], envs: &[(&str, &Path)]) -> Value {
     serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
         panic!(
             "failed to parse wali JSON output: {error}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })
+}
+
+fn run_wali_failure_json(args: &[&str]) -> Value {
+    let output = run_wali_failure(args);
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "failed to parse wali failure JSON output: {error}\nstdout:\n{}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         )
@@ -254,6 +280,127 @@ return {{
     assert_eq!(apply.get("mode").and_then(Value::as_str), Some("apply"));
     assert_task_changed(&apply, "phase guard");
     assert_eq!(std::fs::read_to_string(&target).expect("failed to read created file"), "created by apply\n");
+}
+
+#[test]
+fn host_command_timeout_is_default_for_builtin_command() {
+    let sandbox = Sandbox::new("host-command-timeout-default");
+    let marker = sandbox.path("must-not-exist.txt");
+    let script = format!("sleep 2; printf done > {}", shell_quote_path(&marker));
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local", command_timeout = "1s" }},
+    }},
+    tasks = {{
+        {{
+            id = "slow command",
+            module = "wali.builtin.command",
+            args = {{ script = {} }},
+        }},
+    }},
+}}
+"#,
+        lua_quote(&script),
+    ));
+
+    let report = run_wali_failure_json(&["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")]);
+    let tasks = report
+        .pointer("/hosts/localhost/tasks")
+        .and_then(Value::as_array)
+        .expect("localhost tasks missing from report");
+    let task = tasks
+        .iter()
+        .find(|task| task.get("id").and_then(Value::as_str) == Some("slow command"))
+        .expect("slow command task missing from report");
+    assert!(
+        task.pointer("/status/fail")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("Command timeout")),
+        "timeout failure should be represented as a clean task failure in JSON: {task:#}"
+    );
+    assert!(!marker.exists(), "timed out command must not finish its script");
+}
+
+#[test]
+fn explicit_command_timeout_overrides_host_default() {
+    let sandbox = Sandbox::new("host-command-timeout-override");
+    let marker = sandbox.path("created.txt");
+    let script = format!("sleep 2; printf done > {}", shell_quote_path(&marker));
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local", command_timeout = "1s" }},
+    }},
+    tasks = {{
+        {{
+            id = "slow but allowed command",
+            module = "wali.builtin.command",
+            args = {{
+                script = {},
+                timeout = "3s",
+            }},
+        }},
+    }},
+}}
+"#,
+        lua_quote(&script),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "slow but allowed command");
+    assert_eq!(std::fs::read_to_string(&marker).expect("failed to read marker"), "done");
+}
+
+#[test]
+fn check_does_not_run_builtin_command_even_with_host_timeout() {
+    let sandbox = Sandbox::new("check-command-timeout");
+    let marker = sandbox.path("must-not-exist.txt");
+    let script = format!("sleep 2; printf done > {}", shell_quote_path(&marker));
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local", command_timeout = "1s" }},
+    }},
+    tasks = {{
+        {{
+            id = "checked command",
+            module = "wali.builtin.command",
+            args = {{ script = {} }},
+        }},
+    }},
+}}
+"#,
+        lua_quote(&script),
+    ));
+
+    let report = run_check(&manifest);
+    assert_eq!(report.get("mode").and_then(Value::as_str), Some("check"));
+    assert_task_unchanged(&report, "checked command");
+    assert!(!marker.exists(), "check must not run builtin command apply logic");
+}
+
+#[test]
+fn host_command_timeout_must_be_positive() {
+    let sandbox = Sandbox::new("host-command-timeout-zero");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local", command_timeout = "0s" },
+    },
+    tasks = {},
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "command_timeout must be greater than zero",
+    );
 }
 
 #[test]
