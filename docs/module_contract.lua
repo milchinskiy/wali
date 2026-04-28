@@ -139,7 +139,6 @@ return {
 --   wali.builtin.link
 --   wali.builtin.remove
 --   wali.builtin.touch
---   wali.builtin.walk
 --   wali.builtin.link_tree
 --   wali.builtin.copy_tree
 --   wali.builtin.permissions

@@ -214,28 +214,6 @@ By default, `follow = true`, so a symlink to a file or directory is resolved and
 then refuse symlinks because portable no-follow chmod/chown semantics are not
 available through the current executor contract.
 
-## `wali.builtin.walk`
-
-Inspects a filesystem tree and returns deterministic `ctx.host.fs.walk(...)`
-output as structured result data. This module does not mutate the host; it is
-intended for validating traversal behavior before implementing tree mutation
-modules.
-
-```lua
-{
-    id = "inspect demo tree",
-    module = "wali.builtin.walk",
-    args = {
-        path = "/tmp/wali-demo",
-        include_root = true,
-        order = "pre",
-    },
-}
-```
-
-`order` may be `"pre"`, `"post"`, or `"native"`. The task result is always
-unchanged and includes `data.entries` in JSON reports.
-
 ## `wali.builtin.link_tree`
 
 Mirrors a source directory tree into a destination directory by creating
@@ -350,51 +328,13 @@ Shell form:
 
 `changed = "never"` can be used for read-only commands.
 
-## Executor tree walk foundation
+## Tree traversal primitive
 
-The host filesystem API now exposes:
+`wali.builtin.copy_tree` and `wali.builtin.link_tree` are built on
+`ctx.host.fs.walk(...)`, the host filesystem traversal primitive exposed to
+custom modules. Wali does not provide a separate `wali.builtin.walk` task
+module; tree inspection is a module-authoring concern rather than desired
+state by itself.
 
-```lua
-ctx.host.fs.walk(path, {
-    include_root = false,
-    max_depth = nil,
-    order = "pre",
-})
-```
-
-`order` may be `"pre"`, `"post"`, or `"native"`. The default is `"pre"`,
-which returns deterministic parent-before-child order. Use `"post"` when a
-caller needs child-before-parent order, for example deletion planning. Use
-`"native"` only when debugging backend traversal behavior.
-
-It returns entries with lstat-style metadata:
-
-```lua
-{
-    path = "/absolute/or/target/path",
-    relative_path = "path/relative/to/root",
-    depth = 1,
-    kind = "file" | "dir" | "symlink" | "other",
-    link_target = nil,
-    metadata = {
-        kind = "file" | "dir" | "symlink" | "other",
-        size = 123,
-        link_target = nil,
-        uid = 0,
-        gid = 0,
-        mode = 420,
-        accessed_at = 1710000000.0,
-        modified_at = 1710000000.0,
-        changed_at = 1710000000.0,
-        created_at = nil,
-    },
-}
-```
-
-`ctx.host.fs.stat(path)` follows symlinks. `ctx.host.fs.lstat(path)` and
-`ctx.host.fs.walk(...)` inspect the path itself and never follow symlinks.
-
-The walk primitive is intentionally separate from tree modules; `copy_tree`,
-`link_tree`, and archive-style modules should be designed on top of this
-traversal contract instead of shelling out directly to `cp -a` or `find` inside
-each module.
+For the full `ctx.host.fs.walk(...)` API contract, see
+`module-developers.md`.

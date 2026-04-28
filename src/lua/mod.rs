@@ -53,7 +53,6 @@ impl LuaRuntime {
                 include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/remove.lua")),
             ),
             ("wali.builtin.touch", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/touch.lua"))),
-            ("wali.builtin.walk", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/walk.lua"))),
             (
                 "wali.builtin.link_tree",
                 include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link_tree.lua")),

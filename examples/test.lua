@@ -116,16 +116,6 @@ return {
 				symlinks = "preserve",
 			},
 		},
-		{
-			id = "inspect demo tree",
-			module = "wali.builtin.walk",
-			args = {
-				path = "/tmp/wali-demo",
-				include_root = true,
-				order = "pre",
-			},
-		},
-
         {
             id = "test custom module",
             module = "custom1.test_module",

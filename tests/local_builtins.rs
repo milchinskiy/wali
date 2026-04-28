@@ -384,12 +384,42 @@ fn local_tree_modules_are_deterministic_and_idempotent() {
 
     let copied = sandbox.path("copied");
     let linked = sandbox.path("linked");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(
+        modules.join("tree_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    schema = {
+        type = "object",
+        required = true,
+        props = {
+            path = { type = "string", required = true },
+        },
+    },
+
+    apply = function(ctx, args)
+        local entries = ctx.host.fs.walk(args.path, { include_root = true, order = "pre" })
+        return api.result
+            .apply()
+            :unchanged(args.path, "tree inspected")
+            :data({ entries = entries })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write tree probe module");
 
     let manifest = sandbox.write_manifest(&format!(
         r#"
 return {{
     hosts = {{
         {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
     }},
     tasks = {{
         {{
@@ -403,13 +433,14 @@ return {{
             args = {{ src = {}, dest = {}, replace = true }},
         }},
         {{
-            id = "walk copied",
-            module = "wali.builtin.walk",
-            args = {{ path = {}, include_root = true, order = "pre" }},
+            id = "probe copied",
+            module = "tree_probe",
+            args = {{ path = {} }},
         }},
     }},
 }}
 "#,
+        lua_string(&modules),
         lua_string(&src),
         lua_string(&copied),
         lua_string(&src),
@@ -420,7 +451,7 @@ return {{
     let first = run_apply(&manifest);
     assert_task_changed(&first, "copy tree");
     assert_task_changed(&first, "link tree");
-    assert_task_unchanged(&first, "walk copied");
+    assert_task_unchanged(&first, "probe copied");
 
     assert_eq!(std::fs::read_to_string(copied.join("root.txt")).unwrap(), "root\n");
     assert_eq!(std::fs::read_to_string(copied.join("nested/child.txt")).unwrap(), "child\n");
@@ -429,7 +460,7 @@ return {{
     assert_eq!(std::fs::read_link(linked.join("root.txt")).unwrap(), src.join("root.txt"));
     assert_eq!(std::fs::read_link(linked.join("nested/child.txt")).unwrap(), src.join("nested/child.txt"));
 
-    let walk = task_result(&first, "walk copied");
+    let walk = task_result(&first, "probe copied");
     let entries = walk
         .pointer("/data/entries")
         .and_then(Value::as_array)
@@ -452,7 +483,7 @@ return {{
     let second = run_apply(&manifest);
     assert_task_unchanged(&second, "copy tree");
     assert_task_unchanged(&second, "link tree");
-    assert_task_unchanged(&second, "walk copied");
+    assert_task_unchanged(&second, "probe copied");
 }
 
 fn run_plan(manifest: &Path) -> Value {

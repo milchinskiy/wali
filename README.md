@@ -159,7 +159,6 @@ wali.builtin.link_tree
 wali.builtin.permissions
 wali.builtin.remove
 wali.builtin.touch
-wali.builtin.walk
 ```
 
 See [`docs/builtin-modules.md`](docs/builtin-modules.md) for module-specific

@@ -610,7 +610,6 @@ fn is_builtin_task_module(name: &str) -> bool {
             | "wali.builtin.permissions"
             | "wali.builtin.remove"
             | "wali.builtin.touch"
-            | "wali.builtin.walk"
     )
 }
 
