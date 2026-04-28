@@ -6,11 +6,11 @@ use crate::spec::runas::RunAs;
 
 use super::ExecutorBinder;
 use super::facts::{FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
+use super::fs::CommandFsExecutor;
+use super::path_semantics::PosixPathExecutor;
 
 mod command;
 mod facts;
-mod fs;
-mod path;
 
 #[derive(Clone)]
 pub struct LocalExecutor {
@@ -69,3 +69,6 @@ fn collect_initial_facts() -> crate::Result<FactCache> {
 
     parse_initial_facts(&String::from_utf8_lossy(&output.stdout))
 }
+
+impl CommandFsExecutor for LocalExecutor {}
+impl PosixPathExecutor for LocalExecutor {}

@@ -6,12 +6,79 @@ use crate::spec::runas::PtyMode;
 use super::shared::{shell_escape, trim_trailing_newlines};
 use super::{
     ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, CopyFileOpts, DirEntry,
-    DirOpts, ExecutionResult, FileMode, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts,
+    DirOpts, ExecutionResult, FileMode, Fs, FsPathKind, Metadata, MetadataOpts, MkTempKind, MkTempOpts, RemoveDirOpts,
     RenameOpts, TargetPath, WalkEntry, WalkOpts, WalkOrder, WriteOpts,
 };
 
 const STATUS_NOT_FOUND: i32 = 7;
 const STATUS_INVALID_TARGET: i32 = 8;
+
+pub(crate) trait CommandFsExecutor: CommandExec {}
+
+impl<T> Fs for T
+where
+    T: CommandFsExecutor,
+{
+    fn metadata(&self, path: &TargetPath, opts: MetadataOpts) -> crate::Result<Option<Metadata>> {
+        metadata_via_commands(self, path, opts)
+    }
+
+    fn read(&self, path: &TargetPath) -> crate::Result<Vec<u8>> {
+        read_via_commands(self, path)
+    }
+
+    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> crate::Result<ExecutionResult> {
+        write_via_commands(self, path, content, opts)
+    }
+
+    fn copy_file(&self, from: &TargetPath, to: &TargetPath, opts: CopyFileOpts) -> crate::Result<ExecutionResult> {
+        copy_file_via_commands(self, from, to, opts)
+    }
+
+    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> crate::Result<ExecutionResult> {
+        create_dir_via_commands(self, path, opts)
+    }
+
+    fn remove_file(&self, path: &TargetPath) -> crate::Result<ExecutionResult> {
+        remove_file_via_commands(self, path)
+    }
+
+    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> crate::Result<ExecutionResult> {
+        remove_dir_via_commands(self, path, opts)
+    }
+
+    fn mktemp(&self, opts: MkTempOpts) -> crate::Result<TargetPath> {
+        mktemp_via_commands(self, opts)
+    }
+
+    fn list_dir(&self, path: &TargetPath) -> crate::Result<Vec<DirEntry>> {
+        list_dir_via_commands(self, path)
+    }
+
+    fn walk(&self, path: &TargetPath, opts: WalkOpts) -> crate::Result<Vec<WalkEntry>> {
+        walk_via_commands(self, path, opts)
+    }
+
+    fn chmod(&self, path: &TargetPath, mode: FileMode) -> crate::Result<ExecutionResult> {
+        chmod_via_commands(self, path, mode)
+    }
+
+    fn chown(&self, path: &TargetPath, owner: Owner) -> crate::Result<ExecutionResult> {
+        chown_via_commands(self, path, owner)
+    }
+
+    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> crate::Result<ExecutionResult> {
+        rename_via_commands(self, from, to, opts)
+    }
+
+    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> crate::Result<ExecutionResult> {
+        symlink_via_commands(self, target, link)
+    }
+
+    fn read_link(&self, path: &TargetPath) -> crate::Result<TargetPath> {
+        read_link_via_commands(self, path)
+    }
+}
 
 pub(crate) fn metadata_via_commands<E>(
     exec: &E,
@@ -19,7 +86,7 @@ pub(crate) fn metadata_via_commands<E>(
     opts: MetadataOpts,
 ) -> crate::Result<Option<Metadata>>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let stat_flag = if opts.follow { "-L " } else { "" };
     let exists_check = if opts.follow {
@@ -90,7 +157,7 @@ printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0' \
 
 pub(crate) fn read_via_commands<E>(exec: &E, path: &TargetPath) -> crate::Result<Vec<u8>>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let script = format!(
         r#"p={path}
@@ -121,7 +188,7 @@ pub(crate) fn write_via_commands<E>(
     opts: WriteOpts,
 ) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let parent = parent_path_string(path);
     let owner = render_owner_spec(&opts.owner)?;
@@ -220,7 +287,7 @@ pub(crate) fn copy_file_via_commands<E>(
     opts: CopyFileOpts,
 ) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     if from == to {
         return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, to.clone()));
@@ -347,7 +414,7 @@ emit_result "$result""#,
 
 pub(crate) fn create_dir_via_commands<E>(exec: &E, path: &TargetPath, opts: DirOpts) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let owner = render_owner_spec(&opts.owner)?;
     let mode = opts.mode.map(|value| format!("{:o}", value.bits()));
@@ -411,7 +478,7 @@ emit_result created"#,
 
 pub(crate) fn remove_file_via_commands<E>(exec: &E, path: &TargetPath) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let result_prelude = result_shell_prelude(path)?;
 
@@ -445,7 +512,7 @@ pub(crate) fn remove_dir_via_commands<E>(
     opts: RemoveDirOpts,
 ) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let result_prelude = result_shell_prelude(path)?;
 
@@ -486,7 +553,7 @@ emit_result removed"#,
 
 pub(crate) fn mktemp_via_commands<E>(exec: &E, opts: MkTempOpts) -> crate::Result<TargetPath>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let prefix = opts.prefix.unwrap_or_else(|| "wali.".to_owned());
     if prefix.contains('/') {
@@ -523,7 +590,7 @@ esac"#,
 
 pub(crate) fn list_dir_via_commands<E>(exec: &E, path: &TargetPath) -> crate::Result<Vec<DirEntry>>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let script = format!(
         r#"path={path}
@@ -564,7 +631,7 @@ done
 
 pub(crate) fn walk_via_commands<E>(exec: &E, path: &TargetPath, opts: WalkOpts) -> crate::Result<Vec<WalkEntry>>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let max_depth = opts.max_depth.map(|depth| depth.to_string()).unwrap_or_default();
     let min_depth = if opts.include_root { 0 } else { 1 };
@@ -649,7 +716,7 @@ done
 
 pub(crate) fn chmod_via_commands<E>(exec: &E, path: &TargetPath, mode: FileMode) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let before = metadata_via_commands(exec, path, MetadataOpts { follow: true })?
         .ok_or_else(|| crate::Error::CommandExec(format!("chmod target does not exist: {}", path.as_str())))?;
@@ -677,7 +744,7 @@ chmod -- {mode} "$path""#,
 
 pub(crate) fn chown_via_commands<E>(exec: &E, path: &TargetPath, owner: Owner) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let spec = render_owner_spec(&Some(owner.clone()))?;
     let Some(spec) = spec else {
@@ -721,7 +788,7 @@ pub(crate) fn rename_via_commands<E>(
     opts: RenameOpts,
 ) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     if from == to {
         return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, from.clone()));
@@ -766,7 +833,7 @@ pub(crate) fn symlink_via_commands<E>(
     link: &TargetPath,
 ) -> crate::Result<ExecutionResult>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     if let Ok(existing) = read_link_via_commands(exec, link) {
         if existing == *target {
@@ -807,7 +874,7 @@ emit_result created"#,
 
 pub(crate) fn read_link_via_commands<E>(exec: &E, path: &TargetPath) -> crate::Result<TargetPath>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let script = format!(
         r#"path={path}
@@ -828,7 +895,7 @@ readlink "$path""#,
 
 fn run_shell<E>(exec: &E, script: String, stdin: Option<Vec<u8>>) -> crate::Result<CommandOutput>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     exec.shell(
         script,

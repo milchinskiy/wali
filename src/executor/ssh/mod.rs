@@ -5,12 +5,12 @@ use crate::spec::runas::RunAs;
 
 use super::ExecutorBinder;
 use super::facts::FactCache;
+use super::fs::CommandFsExecutor;
+use super::path_semantics::PosixPathExecutor;
 
 mod command;
 mod connect;
 mod facts;
-mod fs;
-mod path;
 
 #[derive(Clone)]
 pub struct SshExecutor {
@@ -43,3 +43,6 @@ impl SshExecutor {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
+
+impl CommandFsExecutor for SshExecutor {}
+impl PosixPathExecutor for SshExecutor {}

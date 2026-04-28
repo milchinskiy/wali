@@ -34,153 +34,146 @@ pub trait ExecutorBinder {
 }
 
 pub trait Facts {
-    type Error;
-
     /// returns the current operating system
-    fn os(&self) -> Result<String, Self::Error>;
+    fn os(&self) -> crate::Result<String>;
 
     /// returns the current architecture
-    fn arch(&self) -> Result<String, Self::Error>;
+    fn arch(&self) -> crate::Result<String>;
 
     /// returns the current hostname
-    fn hostname(&self) -> Result<String, Self::Error>;
+    fn hostname(&self) -> crate::Result<String>;
 
     /// returns the value of an environment variable
-    fn env(&self, key: &str) -> Result<Option<String>, Self::Error>;
+    fn env(&self, key: &str) -> crate::Result<Option<String>>;
 
     /// returns the current user id
-    fn uid(&self) -> Result<u32, Self::Error>;
+    fn uid(&self) -> crate::Result<u32>;
 
     /// returns the current group id
-    fn gid(&self) -> Result<u32, Self::Error>;
+    fn gid(&self) -> crate::Result<u32>;
 
     /// returns user's group ids
-    fn gids(&self) -> Result<Vec<u32>, Self::Error>;
+    fn gids(&self) -> crate::Result<Vec<u32>>;
 
     /// returns the current username
-    fn user(&self) -> Result<String, Self::Error>;
+    fn user(&self) -> crate::Result<String>;
 
     /// returns the current group
-    fn group(&self) -> Result<String, Self::Error>;
+    fn group(&self) -> crate::Result<String>;
 
     /// returns the current user's groups
-    fn groups(&self) -> Result<Vec<String>, Self::Error>;
+    fn groups(&self) -> crate::Result<Vec<String>>;
 
     /// returns the path to a command
-    fn which(&self, command: &str) -> Result<Option<TargetPath>, Self::Error>;
+    fn which(&self, command: &str) -> crate::Result<Option<TargetPath>>;
 }
 
 pub trait Fs {
-    type Error;
-
     /// inspect filesystem metadata
     ///
     /// `MetadataOpts::default()` follows symlinks, matching POSIX `stat`.
     /// Use `lstat` when the path itself must be inspected without following links.
     /// # Errors
     /// returns an error if an error occurs during the lookup
-    fn metadata(&self, path: &TargetPath, opts: MetadataOpts) -> Result<Option<Metadata>, Self::Error>;
+    fn metadata(&self, path: &TargetPath, opts: MetadataOpts) -> crate::Result<Option<Metadata>>;
 
     /// `stat` behavior: inspect the target and follow symlinks
     /// # Errors
     /// returns an error if an error occurs during the lookup
-    fn stat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error> {
+    fn stat(&self, path: &TargetPath) -> crate::Result<Option<Metadata>> {
         self.metadata(path, MetadataOpts { follow: true })
     }
 
     /// `lstat` behavior: inspect the path itself and do not follow symlinks
     /// # Errors
     /// returns an error if an error occurs during the lookup
-    fn lstat(&self, path: &TargetPath) -> Result<Option<Metadata>, Self::Error> {
+    fn lstat(&self, path: &TargetPath) -> crate::Result<Option<Metadata>> {
         self.metadata(path, MetadataOpts { follow: false })
     }
 
     /// read the contents of a file
     /// # Errors
     /// returns an error if an error occurs during the read
-    fn read(&self, path: &TargetPath) -> Result<Vec<u8>, Self::Error>;
+    fn read(&self, path: &TargetPath) -> crate::Result<Vec<u8>>;
 
     /// write the contents to the file
     /// # Errors
     /// returns an error if write fails
-    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> Result<ExecutionResult, Self::Error>;
+    fn write(&self, path: &TargetPath, content: &[u8], opts: WriteOpts) -> crate::Result<ExecutionResult>;
 
     /// copy a regular file on the same target host
     /// # Errors
     /// returns an error if the source cannot be copied
-    fn copy_file(&self, from: &TargetPath, to: &TargetPath, opts: CopyFileOpts)
-    -> Result<ExecutionResult, Self::Error>;
+    fn copy_file(&self, from: &TargetPath, to: &TargetPath, opts: CopyFileOpts) -> crate::Result<ExecutionResult>;
 
     /// create a directory
     /// # Errors
     /// returns an error if dir creation fails
-    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> Result<ExecutionResult, Self::Error>;
+    fn create_dir(&self, path: &TargetPath, opts: DirOpts) -> crate::Result<ExecutionResult>;
 
     /// remove a file
     /// # Errors
     /// returns an error if removal fails
-    fn remove_file(&self, path: &TargetPath) -> Result<ExecutionResult, Self::Error>;
+    fn remove_file(&self, path: &TargetPath) -> crate::Result<ExecutionResult>;
 
     /// remove a directory
     /// # Errors
     /// returns an error if removal fails
-    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> Result<ExecutionResult, Self::Error>;
+    fn remove_dir(&self, path: &TargetPath, opts: RemoveDirOpts) -> crate::Result<ExecutionResult>;
 
     /// create a temporary file or directory
     /// # Errors
     /// returns an error if mktemp fails
-    fn mktemp(&self, opts: MkTempOpts) -> Result<TargetPath, Self::Error>;
+    fn mktemp(&self, opts: MkTempOpts) -> crate::Result<TargetPath>;
 
     /// list the immediate contents of a directory
     /// # Errors
     /// returns an error if listing fails
-    fn list_dir(&self, path: &TargetPath) -> Result<Vec<DirEntry>, Self::Error>;
+    fn list_dir(&self, path: &TargetPath) -> crate::Result<Vec<DirEntry>>;
 
     /// walk a filesystem tree without following symlinks
     /// # Errors
     /// returns an error if traversal fails
-    fn walk(&self, path: &TargetPath, opts: WalkOpts) -> Result<Vec<WalkEntry>, Self::Error>;
+    fn walk(&self, path: &TargetPath, opts: WalkOpts) -> crate::Result<Vec<WalkEntry>>;
 
     /// change the permissions of a file or directory
     /// # Errors
     /// returns an error if chmod fails
-    fn chmod(&self, path: &TargetPath, mode: FileMode) -> Result<ExecutionResult, Self::Error>;
+    fn chmod(&self, path: &TargetPath, mode: FileMode) -> crate::Result<ExecutionResult>;
 
     /// change the owner of a file or directory
     /// # Errors
     /// returns an error if chown fails
-    fn chown(&self, path: &TargetPath, owner: Owner) -> Result<ExecutionResult, Self::Error>;
+    fn chown(&self, path: &TargetPath, owner: Owner) -> crate::Result<ExecutionResult>;
 
     /// rename a file or directory
     /// # Errors
     /// returns an error if rename fails
-    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> Result<ExecutionResult, Self::Error>;
+    fn rename(&self, from: &TargetPath, to: &TargetPath, opts: RenameOpts) -> crate::Result<ExecutionResult>;
 
     /// create a symlink
     /// # Errors
     /// returns an error if symlink fails
-    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> Result<ExecutionResult, Self::Error>;
+    fn symlink(&self, target: &TargetPath, link: &TargetPath) -> crate::Result<ExecutionResult>;
 
     /// read a symlink
     /// # Errors
     /// returns an error if readlink fails
-    fn read_link(&self, path: &TargetPath) -> Result<TargetPath, Self::Error>;
+    fn read_link(&self, path: &TargetPath) -> crate::Result<TargetPath>;
 
     /// check if a path exists
     /// # Errors
     /// returns an error if stat fails
-    fn exists(&self, path: &TargetPath) -> Result<bool, Self::Error> {
+    fn exists(&self, path: &TargetPath) -> crate::Result<bool> {
         Ok(self.lstat(path)?.is_some())
     }
 }
 
 pub trait CommandExec {
-    type Error;
-
     /// execute a command
     /// # Errors
     /// returns an error if the command cannot be executed
-    fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error>;
+    fn exec(&self, req: &CommandRequest) -> crate::Result<CommandOutput>;
 
     /// execute a command
     /// # Errors
@@ -190,7 +183,7 @@ pub trait CommandExec {
         program: impl Into<String>,
         args: impl IntoIterator<Item = impl Into<String>>,
         opts: CommandOpts,
-    ) -> Result<CommandOutput, Self::Error> {
+    ) -> crate::Result<CommandOutput> {
         let req = CommandRequest {
             kind: CommandKind::Exec {
                 program: program.into(),
@@ -204,7 +197,7 @@ pub trait CommandExec {
     /// execute a shell
     /// # Errors
     /// returns an error if the shell cannot be executed
-    fn shell(&self, script: impl Into<String>, opts: CommandOpts) -> Result<CommandOutput, Self::Error> {
+    fn shell(&self, script: impl Into<String>, opts: CommandOpts) -> crate::Result<CommandOutput> {
         let req = CommandRequest {
             kind: CommandKind::Shell { script: script.into() },
             opts,
@@ -228,16 +221,6 @@ pub trait PathSemantics {
     fn strip_prefix(&self, base: &TargetPath, path: &TargetPath) -> Option<TargetPath>;
 }
 
-pub trait Executor:
-    Facts<Error = crate::Error> + Fs<Error = crate::Error> + CommandExec<Error = crate::Error> + PathSemantics + Send
-{
-}
+pub trait Executor: Facts + Fs + CommandExec + PathSemantics + Send {}
 
-impl<T> Executor for T where
-    T: Facts<Error = crate::Error>
-        + Fs<Error = crate::Error>
-        + CommandExec<Error = crate::Error>
-        + PathSemantics
-        + Send
-{
-}
+impl<T> Executor for T where T: Facts + Fs + CommandExec + PathSemantics + Send {}

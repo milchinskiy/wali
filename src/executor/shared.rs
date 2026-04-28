@@ -89,7 +89,7 @@ pub(crate) fn render_shell_command(req: &CommandRequest) -> crate::Result<String
 
 pub(crate) fn shell_required_text<E>(exec: &E, script: impl Into<String>, context: &str) -> crate::Result<String>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let output = exec.shell(
         script.into(),
@@ -119,7 +119,7 @@ pub(crate) fn shell_optional_text<E>(
     context: &str,
 ) -> crate::Result<Option<String>>
 where
-    E: CommandExec<Error = crate::Error>,
+    E: CommandExec,
 {
     let output = exec.shell(
         script.into(),

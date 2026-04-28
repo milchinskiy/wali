@@ -16,9 +16,7 @@ use crate::executor::{
 use super::LocalExecutor;
 
 impl CommandExec for LocalExecutor {
-    type Error = crate::Error;
-
-    fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error> {
+    fn exec(&self, req: &CommandRequest) -> crate::Result<CommandOutput> {
         req.validate()?;
 
         if let Some(run_as) = self.run_as() {

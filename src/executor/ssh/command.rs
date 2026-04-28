@@ -11,9 +11,7 @@ use crate::executor::{CommandExec, CommandOutput, CommandRequest, CommandStatus,
 use super::SshExecutor;
 
 impl CommandExec for SshExecutor {
-    type Error = crate::Error;
-
-    fn exec(&self, req: &CommandRequest) -> Result<CommandOutput, Self::Error> {
+    fn exec(&self, req: &CommandRequest) -> crate::Result<CommandOutput> {
         req.validate()?;
 
         let _command_guard = self.command_guard();

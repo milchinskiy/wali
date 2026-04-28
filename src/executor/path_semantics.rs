@@ -1,4 +1,35 @@
-use super::TargetPath;
+use super::{PathSemantics, TargetPath};
+
+pub(crate) trait PosixPathExecutor {}
+
+impl<T> PathSemantics for T
+where
+    T: PosixPathExecutor,
+{
+    fn join(&self, base: &TargetPath, child: &str) -> TargetPath {
+        join_posix(base, child)
+    }
+
+    fn normalize(&self, path: &TargetPath) -> TargetPath {
+        normalize_posix(path)
+    }
+
+    fn parent(&self, path: &TargetPath) -> Option<TargetPath> {
+        parent_posix(path)
+    }
+
+    fn is_absolute(&self, path: &TargetPath) -> bool {
+        is_absolute_posix(path)
+    }
+
+    fn basename(&self, path: &TargetPath) -> Option<String> {
+        basename_posix(path)
+    }
+
+    fn strip_prefix(&self, base: &TargetPath, path: &TargetPath) -> Option<TargetPath> {
+        strip_prefix_posix(base, path)
+    }
+}
 
 pub(crate) fn join_posix(base: &TargetPath, child: &str) -> TargetPath {
     if child.starts_with('/') {
