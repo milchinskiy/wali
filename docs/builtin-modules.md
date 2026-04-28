@@ -1,38 +1,17 @@
 # Builtin modules
 
 Builtin modules live under the reserved `wali.builtin.*` namespace. User modules
-should not use this namespace.
+should not use this namespace. Unknown `wali.*` task modules are rejected during
+manifest/preflight validation.
 
-The builtin module philosophy is:
+This document is the module-specific reference for current builtins: accepted
+arguments, behavior, and safety notes. The shared Lua phase and custom module
+contracts are described in `module-developers.md`; the design rationale is in
+`philosophy.md`.
 
-- builtin modules describe desired state whenever possible;
-- low-level host operations remain available through `ctx.host.*`, but builtin
-  modules should expose stable resources rather than syscall-shaped wrappers;
-- each builtin module must be idempotent by default;
-- each builtin module must return a structured `ExecutionResult` with concrete
-  changes;
-- shared Lua behavior belongs in `wali.builtin.lib`, not duplicated across
-  modules.
-
-
-## Lua phase contract
-
-Builtin modules follow the same phase contract expected from user modules:
-
-```text
-requires -> host capability check
-validate -> read/probe-only argument and context validation
-apply    -> mutation allowed
-```
-
-`validate()` receives `ctx.phase == "validate"` and cannot access mutating
-filesystem functions, `ctx.host.cmd`, `ctx.rand`, or `ctx.sleep_ms`. It can use
-read/probe filesystem helpers such as `stat`, `lstat`, `exists`, `read`,
-`list_dir`, `walk`, and `read_link`.
-
-`apply()` receives `ctx.phase == "apply"` and has the full host API. This makes
-future `wali check` / dry validation workflows meaningful because module
-validation cannot accidentally change the host.
+General builtin expectations are stable across this file: prefer desired state,
+be idempotent by default, validate unsafe input before mutation, and return
+structured `ExecutionResult` changes.
 
 ## Naming note: `link` versus `copy_file`
 
