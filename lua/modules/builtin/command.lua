@@ -67,10 +67,7 @@ return {
 			detail = lib.command_detail("shell", req.script)
 		end
 
-		if not output.ok then
-			local msg = lib.output_text(output) or lib.status_text(output.status)
-			error(msg)
-		end
+		lib.assert_command_ok(output, detail)
 
 		local result = lib.result.apply()
 		if args.changed == "never" then

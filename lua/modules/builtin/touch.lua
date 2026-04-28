@@ -10,14 +10,8 @@ return {
 		props = {
 			path = { type = "string", required = true },
 			create_parents = { type = "boolean", default = false },
-			mode = { type = "string" },
-			owner = {
-				type = "object",
-				props = {
-					user = { type = "any" },
-					group = { type = "any" },
-				},
-			},
+			mode = lib.schema.mode(),
+			owner = lib.schema.owner(),
 		},
 	},
 

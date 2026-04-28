@@ -160,7 +160,7 @@ mutable because they are resolved by Git at fetch time.
 A module file returns one Lua table:
 
 ```lua
-local api = require("wali.api")
+local lib = require("wali.builtin.lib")
 
 return {
     name = "example file",
@@ -172,13 +172,13 @@ return {
         props = {
             path = { type = "string", required = true },
             content = { type = "string", required = true },
-            mode = { type = "string", default = "0644" },
+            mode = lib.schema.mode("0644"),
         },
     },
 
     validate = function(ctx, args)
         if args.path == "/" then
-            return api.result.validation():fail("path must not be /"):build()
+            return lib.validation_error("path must not be /")
         end
         return nil
     end,
@@ -186,7 +186,7 @@ return {
     apply = function(ctx, args)
         return ctx.host.fs.write(args.path, args.content, {
             create_parents = true,
-            mode = tonumber(args.mode, 8),
+            mode = lib.mode_bits(args.mode),
         })
     end,
 }
@@ -207,6 +207,76 @@ return {
 
 `apply` is required for a module used by `wali apply`. `requires`, `schema`, and
 `validate` are optional, but serious modules should normally use all three.
+
+## Shared helper library
+
+Custom modules may import `wali.builtin.lib` when they want the same small helper
+surface used by the builtin modules:
+
+```lua
+local lib = require("wali.builtin.lib")
+```
+
+The helper library is intentionally plain Lua. It does not hide host operations;
+it provides reusable validation, schema fragments, result builders, and common
+filesystem policies. The most useful public helpers are:
+
+- `lib.result.apply()` and `lib.result.validation()` builders, plus
+  `lib.validation_ok()` and `lib.validation_error(message)`;
+- `lib.schema.mode()` and `lib.schema.owner()` schema fragments for manifest
+  fields that later become executor mode/owner option tables;
+- `lib.mode_bits("0644")`, `lib.owner(table)`, `lib.validate_mode_owner(args)`,
+  `lib.mode_owner_opts(args)`, and `lib.apply_mode_owner(ctx, result, path, args)`;
+- `lib.validate_absolute_path(ctx, path, field)`,
+  `lib.validate_safe_remove_path(ctx, path)`, and
+  `lib.validate_tree_roots(ctx, src, dest)` for common path-safety checks;
+- `lib.output_text(output)`, `lib.status_text(status)`,
+  `lib.command_error(output, detail)`, and `lib.assert_command_ok(output, detail)`
+  for command modules;
+- `lib.is_file(metadata)`, `lib.is_dir(metadata)`, and
+  `lib.is_symlink(metadata)` for readable metadata predicates.
+
+Helpers that mutate host state, such as `apply_mode_owner`, `ensure_dir`, and
+`ensure_symlink`, explicitly require `ctx.phase == "apply"`. Validation code
+should use only read/probe helpers and should return validation results rather
+than changing host state.
+
+Owner values accepted by helper validation are either non-empty names or
+non-negative numeric ids:
+
+```lua
+owner = { user = "root", group = "root" }
+owner = { user = 0, group = 0 }
+```
+
+POSIX modes are accepted as octal strings in manifests and converted with
+`lib.mode_bits` before passing options to `ctx.host.fs.*`:
+
+```lua
+local lib = require("wali.builtin.lib")
+
+schema = {
+    type = "object",
+    required = true,
+    props = {
+        path = { type = "string", required = true },
+        mode = lib.schema.mode(),
+        owner = lib.schema.owner(),
+    },
+}
+
+validate = function(_, args)
+    return lib.validate_mode_owner(args)
+end
+
+apply = function(ctx, args)
+    return ctx.host.fs.write(args.path, "managed\n", {
+        create_parents = true,
+        mode = lib.mode_bits(args.mode),
+        owner = lib.owner(args.owner),
+    })
+end
+```
 
 ## Schema
 

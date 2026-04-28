@@ -149,3 +149,25 @@ return {
 --   wali.builtin.permissions
 --   wali.builtin.command
 -- Shared builtin Lua helpers are available as wali.builtin.lib.
+
+-- Shared helper library for custom modules:
+--   local lib = require("wali.builtin.lib")
+--
+-- Stable helper groups:
+--   lib.result.apply(), lib.result.validation()
+--   lib.validation_ok(message?), lib.validation_error(message)
+--   lib.schema.mode(), lib.schema.owner()
+--   lib.mode_bits("0644"), lib.owner({ user = "root", group = 0 })
+--   lib.validate_mode_owner(args, spec?)
+--   lib.mode_owner_opts(args, spec?)
+--   lib.apply_mode_owner(ctx, result, path, args, spec?) -- apply phase only
+--   lib.validate_absolute_path(ctx, path, field?)
+--   lib.validate_safe_remove_path(ctx, path)
+--   lib.validate_tree_roots(ctx, src, dest)
+--   lib.output_text(output), lib.status_text(status)
+--   lib.command_error(output, detail?), lib.assert_command_ok(output, detail?)
+--   lib.is_file(metadata), lib.is_dir(metadata), lib.is_symlink(metadata)
+--
+-- Helpers are not magic: they only compose the public ctx.host.* primitives.
+-- Prefer them for ordinary modules so manifests use readable mode strings and
+-- validation/apply error messages remain consistent with wali builtins.

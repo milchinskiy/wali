@@ -13,14 +13,8 @@ return {
 			content = { type = "string" },
 			create_parents = { type = "boolean", default = false },
 			replace = { type = "boolean", default = true },
-			mode = { type = "string" },
-			owner = {
-				type = "object",
-				props = {
-					user = { type = "any" },
-					group = { type = "any" },
-				},
-			},
+			mode = lib.schema.mode(),
+			owner = lib.schema.owner(),
 		},
 	},
 

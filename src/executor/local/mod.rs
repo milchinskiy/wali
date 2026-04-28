@@ -5,12 +5,11 @@ use crate::launcher::secrets::SecretVault;
 use crate::spec::runas::RunAs;
 
 use super::ExecutorBinder;
-use super::facts::{FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
+use super::facts::{CommandFactProbe, FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
 use super::fs::CommandFsExecutor;
 use super::path_semantics::PosixPathExecutor;
 
 mod command;
-mod facts;
 
 #[derive(Clone)]
 pub struct LocalExecutor {
@@ -68,6 +67,16 @@ fn collect_initial_facts() -> crate::Result<FactCache> {
     }
 
     parse_initial_facts(&String::from_utf8_lossy(&output.stdout))
+}
+
+impl CommandFactProbe for LocalExecutor {
+    fn fact_cache(&self) -> &std::sync::Mutex<FactCache> {
+        &self.state.facts
+    }
+
+    fn run_as_ref(&self) -> Option<&RunAs> {
+        self.run_as()
+    }
 }
 
 impl CommandFsExecutor for LocalExecutor {}

@@ -4,8 +4,58 @@ local lib = {}
 
 lib.result = api.result
 
+lib.schema = {}
+
+local function deepcopy(value)
+	if type(value) ~= "table" then
+		return value
+	end
+
+	local out = {}
+	for key, item in pairs(value) do
+		out[deepcopy(key)] = deepcopy(item)
+	end
+	return out
+end
+
+function lib.schema.mode(default)
+	local schema = { type = "string" }
+	if default ~= nil then
+		schema.default = default
+	end
+	return schema
+end
+
+function lib.schema.owner(default)
+	local schema = {
+		type = "object",
+		props = {
+			user = { type = "any" },
+			group = { type = "any" },
+		},
+	}
+	if default ~= nil then
+		schema.default = default
+	end
+	return schema
+end
+
+function lib.schema.owner_props()
+	return deepcopy(lib.schema.owner().props)
+end
+
+function lib.validation_ok(message)
+	return api.result.validation():ok(message):build()
+end
+
 function lib.validation_error(message)
-	return api.result.validation():fail(message):build()
+	return api.result.validation():fail(tostring(message or "validation failed")):build()
+end
+
+function lib.require_apply(ctx, helper)
+	if ctx == nil or ctx.phase ~= "apply" then
+		error((helper or "helper") .. " requires apply phase")
+	end
 end
 
 function lib.mode_bits(value)
@@ -14,7 +64,7 @@ function lib.mode_bits(value)
 	end
 
 	if type(value) ~= "string" then
-		error("mode must be an octal string, for example \"0644\"")
+		error('mode must be an octal string, for example "0644"')
 	end
 
 	local text = value
@@ -52,6 +102,32 @@ function lib.validate_mode(value)
 	return lib.validation_error(err)
 end
 
+local function validate_owner_part(value, field)
+	if value == nil then
+		return nil
+	end
+
+	local kind = type(value)
+	if kind == "string" then
+		if value == "" then
+			error(field .. " must not be empty")
+		end
+		if value:find(":", 1, true) ~= nil then
+			error(field .. " must not contain ':'")
+		end
+		return value
+	end
+
+	if kind == "number" then
+		if value < 0 or value % 1 ~= 0 then
+			error(field .. " numeric id must be a non-negative integer")
+		end
+		return value
+	end
+
+	error(field .. " must be a user/group name string or numeric id")
+end
+
 function lib.owner(value)
 	if value == nil then
 		return nil
@@ -59,10 +135,16 @@ function lib.owner(value)
 	if type(value) ~= "table" then
 		error("owner must be an object")
 	end
-	if value.user == nil and value.group == nil then
+
+	local owner = {
+		user = validate_owner_part(value.user, "owner.user"),
+		group = validate_owner_part(value.group, "owner.group"),
+	}
+
+	if owner.user == nil and owner.group == nil then
 		return nil
 	end
-	return value
+	return owner
 end
 
 function lib.validate_owner(value, field)
@@ -111,6 +193,7 @@ function lib.mode_owner_opts(args, spec)
 end
 
 function lib.apply_mode_owner(ctx, result, path, args, spec)
+	lib.require_apply(ctx, "apply_mode_owner")
 	local mode_field, owner_field = mode_owner_fields(spec)
 
 	if args[mode_field] ~= nil then
@@ -223,11 +306,26 @@ function lib.status_text(status)
 	return "unknown status"
 end
 
+function lib.command_error(output, detail)
+	local message = lib.output_text(output) or lib.status_text(output and output.status)
+	if detail ~= nil and detail ~= "" then
+		return detail .. ": " .. message
+	end
+	return message
+end
+
+function lib.assert_command_ok(output, detail)
+	if output ~= nil and output.ok then
+		return output
+	end
+	error(lib.command_error(output, detail))
+end
+
 function lib.command_detail(kind, value)
 	if kind == "shell" then
 		return value
 	end
-	if #value.args == 0 then
+	if value.args == nil or #value.args == 0 then
 		return value.program
 	end
 	return value.program .. " " .. table.concat(value.args, " ")
@@ -282,6 +380,18 @@ function lib.validate_tree_roots(ctx, src, dest)
 		return lib.validation_error("tree source must not be inside destination")
 	end
 	return nil
+end
+
+function lib.is_file(metadata)
+	return metadata ~= nil and metadata.kind == "file"
+end
+
+function lib.is_dir(metadata)
+	return metadata ~= nil and metadata.kind == "dir"
+end
+
+function lib.is_symlink(metadata)
+	return metadata ~= nil and metadata.kind == "symlink"
 end
 
 local function assert_expected_dir(path, current, label)
@@ -355,6 +465,7 @@ function lib.tree_destination(ctx, dest_root, relative_path)
 end
 
 function lib.ensure_dir(ctx, result, path, opts)
+	lib.require_apply(ctx, "ensure_dir")
 	local current = ctx.host.fs.lstat(path)
 	if current == nil then
 		result:merge(ctx.host.fs.create_dir(path, opts or { recursive = true }))
@@ -367,6 +478,7 @@ function lib.ensure_dir(ctx, result, path, opts)
 end
 
 function lib.ensure_symlink(ctx, result, link_path, target_path, replace)
+	lib.require_apply(ctx, "ensure_symlink")
 	local current = ctx.host.fs.lstat(link_path)
 	if current == nil then
 		result:merge(ctx.host.fs.symlink(target_path, link_path))

@@ -53,15 +53,9 @@ return {
 			dest = { type = "string", required = true },
 			replace = { type = "boolean", default = false },
 			allow_special = { type = "boolean", default = false },
-			max_depth = { type = "number" },
-			dir_mode = { type = "string" },
-			dir_owner = {
-				type = "object",
-				props = {
-					user = { type = "any" },
-					group = { type = "any" },
-				},
-			},
+			max_depth = { type = "integer" },
+			dir_mode = lib.schema.mode(),
+			dir_owner = lib.schema.owner(),
 		},
 	},
 
@@ -113,20 +107,17 @@ return {
 		end
 
 		local counts = count_plan(entries)
-		local message = string.format(
-			"linked tree %s -> %s: %d dirs, %d links",
-			src,
-			dest,
-			counts.dir,
-			counts.link
-		)
-		return result:message(message):data({
-			src = src,
-			dest = dest,
-			replace = args.replace,
-			allow_special = args.allow_special,
-			max_depth = args.max_depth,
-			counts = counts,
-		}):build()
+		local message = string.format("linked tree %s -> %s: %d dirs, %d links", src, dest, counts.dir, counts.link)
+		return result
+			:message(message)
+			:data({
+				src = src,
+				dest = dest,
+				replace = args.replace,
+				allow_special = args.allow_special,
+				max_depth = args.max_depth,
+				counts = counts,
+			})
+			:build()
 	end,
 }

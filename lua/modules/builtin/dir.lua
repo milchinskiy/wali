@@ -12,14 +12,8 @@ return {
 			state = { type = "enum", values = { "present", "absent" }, default = "present" },
 			parents = { type = "boolean", default = true },
 			recursive = { type = "boolean", default = false },
-			mode = { type = "string" },
-			owner = {
-				type = "object",
-				props = {
-					user = { type = "any" },
-					group = { type = "any" },
-				},
-			},
+			mode = lib.schema.mode(),
+			owner = lib.schema.owner(),
 		},
 	},
 

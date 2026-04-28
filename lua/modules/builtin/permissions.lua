@@ -11,14 +11,8 @@ return {
 			path = { type = "string", required = true },
 			follow = { type = "boolean", default = true },
 			expect = { type = "enum", values = { "any", "file", "dir" }, default = "any" },
-			mode = { type = "string" },
-			owner = {
-				type = "object",
-				props = {
-					user = { type = "any" },
-					group = { type = "any" },
-				},
-			},
+			mode = lib.schema.mode(),
+			owner = lib.schema.owner(),
 		},
 	},
 
@@ -51,7 +45,14 @@ return {
 			error("refusing to manage special filesystem entry permissions: " .. args.path)
 		end
 		if args.expect ~= "any" and current.kind ~= args.expect then
-			error("permissions target kind mismatch for " .. args.path .. ": expected " .. args.expect .. ", got " .. current.kind)
+			error(
+				"permissions target kind mismatch for "
+					.. args.path
+					.. ": expected "
+					.. args.expect
+					.. ", got "
+					.. current.kind
+			)
 		end
 
 		local result = lib.result.apply()

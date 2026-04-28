@@ -46,23 +46,11 @@ return {
 			preserve_owner = { type = "boolean", default = false },
 			symlinks = { type = "enum", values = { "preserve", "skip", "error" }, default = "preserve" },
 			skip_special = { type = "boolean", default = false },
-			max_depth = { type = "number" },
-			dir_mode = { type = "string" },
-			file_mode = { type = "string" },
-			dir_owner = {
-				type = "object",
-				props = {
-					user = { type = "any" },
-					group = { type = "any" },
-				},
-			},
-			file_owner = {
-				type = "object",
-				props = {
-					user = { type = "any" },
-					group = { type = "any" },
-				},
-			},
+			max_depth = { type = "integer" },
+			dir_mode = lib.schema.mode(),
+			file_mode = lib.schema.mode(),
+			dir_owner = lib.schema.owner(),
+			file_owner = lib.schema.owner(),
 		},
 	},
 
@@ -152,16 +140,19 @@ return {
 			counts.file,
 			counts.symlink
 		)
-		return result:message(message):data({
-			src = src,
-			dest = dest,
-			replace = args.replace,
-			preserve_mode = args.preserve_mode,
-			preserve_owner = args.preserve_owner,
-			symlinks = args.symlinks,
-			skip_special = args.skip_special,
-			max_depth = args.max_depth,
-			counts = counts,
-		}):build()
+		return result
+			:message(message)
+			:data({
+				src = src,
+				dest = dest,
+				replace = args.replace,
+				preserve_mode = args.preserve_mode,
+				preserve_owner = args.preserve_owner,
+				symlinks = args.symlinks,
+				skip_special = args.skip_special,
+				max_depth = args.max_depth,
+				counts = counts,
+			})
+			:build()
 	end,
 }

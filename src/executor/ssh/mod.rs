@@ -4,13 +4,12 @@ use crate::launcher::secrets::SecretVault;
 use crate::spec::runas::RunAs;
 
 use super::ExecutorBinder;
-use super::facts::FactCache;
+use super::facts::{CommandFactProbe, FactCache};
 use super::fs::CommandFsExecutor;
 use super::path_semantics::PosixPathExecutor;
 
 mod command;
 mod connect;
-mod facts;
 
 #[derive(Clone)]
 pub struct SshExecutor {
@@ -41,6 +40,16 @@ impl SshExecutor {
             .command_lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+impl CommandFactProbe for SshExecutor {
+    fn fact_cache(&self) -> &std::sync::Mutex<FactCache> {
+        &self.state.facts
+    }
+
+    fn run_as_ref(&self) -> Option<&RunAs> {
+        self.run_as()
     }
 }
 
