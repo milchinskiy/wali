@@ -484,12 +484,31 @@ requires = { command = "tar" }
 
 ## Path handling
 
-Use host path helpers instead of manual string concatenation:
+Use host path helpers instead of manual string concatenation or fragile prefix checks:
 
 ```lua
 ctx.host.path.join(root, relative)
-ctx.host.path.parent(path)
 ctx.host.path.normalize(path)
+ctx.host.path.parent(path)
+ctx.host.path.is_absolute(path)
+ctx.host.path.basename(path)
+ctx.host.path.strip_prefix(base, path)
+```
+
+`strip_prefix(base, path)` is lexical, normalized, and segment-aware. It returns
+the relative suffix when `path` is exactly `base` or below `base`, and returns
+`nil` otherwise:
+
+```lua
+ctx.host.path.strip_prefix("/tmp/app", "/tmp/app/file")  -- "file"
+ctx.host.path.strip_prefix("/tmp/app", "/tmp/app")       -- "."
+ctx.host.path.strip_prefix("/tmp/app", "/tmp/app2/file") -- nil
+```
+
+That makes containment checks a one-liner without unsafe string-prefix logic:
+
+```lua
+local inside = ctx.host.path.strip_prefix(parent, candidate) ~= nil
 ```
 
 For destructive operations, normalize and reject unsafe paths explicitly. At

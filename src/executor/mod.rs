@@ -220,6 +220,12 @@ pub trait PathSemantics {
     fn normalize(&self, path: &TargetPath) -> TargetPath;
     /// get the parent of a path
     fn parent(&self, path: &TargetPath) -> Option<TargetPath>;
+    /// return whether a path is absolute under the backend path semantics
+    fn is_absolute(&self, path: &TargetPath) -> bool;
+    /// return the final path segment after lexical normalization
+    fn basename(&self, path: &TargetPath) -> Option<String>;
+    /// strip a normalized path prefix using path-segment boundaries
+    fn strip_prefix(&self, base: &TargetPath, path: &TargetPath) -> Option<TargetPath>;
 }
 
 pub trait Executor:

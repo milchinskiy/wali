@@ -233,16 +233,12 @@ function lib.command_detail(kind, value)
 	return value.program .. " " .. table.concat(value.args, " ")
 end
 
-function lib.is_absolute_path(path)
-	return type(path) == "string" and path:sub(1, 1) == "/"
-end
-
-function lib.validate_absolute_path(path, field)
+function lib.validate_absolute_path(ctx, path, field)
 	field = field or "path"
 	if path == nil or path == "" then
 		return lib.validation_error(field .. " must not be empty")
 	end
-	if not lib.is_absolute_path(path) then
+	if not ctx.host.path.is_absolute(path) then
 		return lib.validation_error(field .. " must be absolute")
 	end
 	return nil
@@ -261,22 +257,12 @@ function lib.validate_safe_remove_path(ctx, path)
 	return nil
 end
 
-function lib.is_same_or_child(parent, path)
-	if parent == path then
-		return true
-	end
-	if parent == "/" then
-		return path:sub(1, 1) == "/"
-	end
-	return path:sub(1, #parent + 1) == parent .. "/"
-end
-
 function lib.validate_tree_roots(ctx, src, dest)
-	local src_error = lib.validate_absolute_path(src, "src")
+	local src_error = lib.validate_absolute_path(ctx, src, "src")
 	if src_error ~= nil then
 		return src_error
 	end
-	local dest_error = lib.validate_absolute_path(dest, "dest")
+	local dest_error = lib.validate_absolute_path(ctx, dest, "dest")
 	if dest_error ~= nil then
 		return dest_error
 	end
@@ -289,10 +275,10 @@ function lib.validate_tree_roots(ctx, src, dest)
 	if normalized_dest == "/" then
 		return lib.validation_error("refusing to use / as a tree destination")
 	end
-	if lib.is_same_or_child(normalized_src, normalized_dest) then
+	if ctx.host.path.strip_prefix(normalized_src, normalized_dest) ~= nil then
 		return lib.validation_error("tree destination must not be inside source")
 	end
-	if lib.is_same_or_child(normalized_dest, normalized_src) then
+	if ctx.host.path.strip_prefix(normalized_dest, normalized_src) ~= nil then
 		return lib.validation_error("tree source must not be inside destination")
 	end
 	return nil

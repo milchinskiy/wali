@@ -22,7 +22,7 @@
 --   ctx.host.id                   host id
 --   ctx.host.transport            "local" or "ssh"
 --   ctx.host.facts.*              os/arch/hostname/env/user/group/which/etc
---   ctx.host.path.*               join/normalize/parent
+--   ctx.host.path.*               join/normalize/parent/is_absolute/basename/strip_prefix
 --
 -- validate ctx.host.fs exposes only read/probe helpers:
 --   metadata, stat, lstat, exists, read, list_dir, walk, read_link

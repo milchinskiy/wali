@@ -455,10 +455,29 @@ fn build_path_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
         lua.create_function(move |_, path: String| Ok(backend.normalize(&TargetPath::from(path)).to_string()))?
     })?;
 
-    table.set(
-        "parent",
+    table.set("parent", {
+        let backend = backend.clone();
         lua.create_function(move |_, path: String| {
             Ok(backend.parent(&TargetPath::from(path)).map(|value| value.to_string()))
+        })?
+    })?;
+
+    table.set("is_absolute", {
+        let backend = backend.clone();
+        lua.create_function(move |_, path: String| Ok(backend.is_absolute(&TargetPath::from(path))))?
+    })?;
+
+    table.set("basename", {
+        let backend = backend.clone();
+        lua.create_function(move |_, path: String| Ok(backend.basename(&TargetPath::from(path))))?
+    })?;
+
+    table.set(
+        "strip_prefix",
+        lua.create_function(move |_, (base, path): (String, String)| {
+            Ok(backend
+                .strip_prefix(&TargetPath::from(base), &TargetPath::from(path))
+                .map(|value| value.to_string()))
         })?,
     )?;
 

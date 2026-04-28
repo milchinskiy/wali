@@ -294,4 +294,25 @@ impl PathSemantics for Backend {
             Self::Ssh(x) => x.parent(path),
         }
     }
+
+    fn is_absolute(&self, path: &super::TargetPath) -> bool {
+        match self {
+            Self::Local(x) => x.is_absolute(path),
+            Self::Ssh(x) => x.is_absolute(path),
+        }
+    }
+
+    fn basename(&self, path: &super::TargetPath) -> Option<String> {
+        match self {
+            Self::Local(x) => x.basename(path),
+            Self::Ssh(x) => x.basename(path),
+        }
+    }
+
+    fn strip_prefix(&self, base: &super::TargetPath, path: &super::TargetPath) -> Option<super::TargetPath> {
+        match self {
+            Self::Local(x) => x.strip_prefix(base, path),
+            Self::Ssh(x) => x.strip_prefix(base, path),
+        }
+    }
 }
