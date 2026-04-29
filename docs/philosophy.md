@@ -205,7 +205,10 @@ Important properties to test:
 - unsafe paths are rejected;
 - tree conflict preflight happens before mutation;
 - when-skip and requires-failure are reported correctly;
-- task ordering and dependency errors are deterministic.
+- task ordering and dependency errors are deterministic;
+- runtime dependency semantics are deterministic: failed or skipped tasks block
+  only declared dependents, while independent tasks continue
+  on the same host.
 
 Doc-tests are useful for critical Rust contracts such as schema normalization,
 run_as defaults, and execution result serialization. They should be small and

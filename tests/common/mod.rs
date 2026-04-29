@@ -278,3 +278,33 @@ pub fn assert_wali_failure_contains_with_env(args: &[&str], envs: &[(&str, &Path
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+pub fn task<'a>(report: &'a Value, task_id: &str) -> &'a Value {
+    let tasks = report
+        .pointer("/hosts/localhost/tasks")
+        .and_then(Value::as_array)
+        .expect("report does not contain localhost tasks");
+
+    tasks
+        .iter()
+        .find(|task| task.get("id").and_then(Value::as_str) == Some(task_id))
+        .unwrap_or_else(|| panic!("task {task_id:?} not found in report: {report:#}"))
+}
+
+pub fn assert_task_failed_contains(report: &Value, task_id: &str, needle: &str) {
+    let task = task(report, task_id);
+    let error = task
+        .pointer("/status/fail")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("task {task_id:?} did not fail: {task:#}"));
+    assert!(error.contains(needle), "task {task_id:?} failure did not contain {needle:?}: {error}");
+}
+
+pub fn assert_task_skipped_contains(report: &Value, task_id: &str, needle: &str) {
+    let task = task(report, task_id);
+    let reason = task
+        .pointer("/status/skipped")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("task {task_id:?} was not skipped: {task:#}"));
+    assert!(reason.contains(needle), "task {task_id:?} skip reason did not contain {needle:?}: {reason}");
+}

@@ -79,6 +79,12 @@ return {
 }
 ```
 
+Task dependencies are execution dependencies, not only ordering hints. A task with
+`depends_on` runs only when every declared dependency completed successfully on
+the same host. If a dependency fails or is skipped, its dependents are skipped
+with a dependency-specific reason, while unrelated later tasks continue to run.
+`check` and `apply` use the same dependency semantics.
+
 ## Custom modules
 
 A manifest may load custom modules from local directories or Git repositories.

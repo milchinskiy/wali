@@ -16,7 +16,7 @@
 --   ctx.task.id                   task id
 --   ctx.task.module               module name
 --   ctx.task.tags                 task tags
---   ctx.task.depends_on           task dependency ids
+--   ctx.task.depends_on           task dependency ids; dependencies must succeed before this task runs
 --   ctx.vars                      task variables
 --   ctx.run_as                    optional effective run_as spec
 --   ctx.host.id                   host id

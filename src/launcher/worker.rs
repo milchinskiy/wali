@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::executor::{Backend, ExecutionResult, ExecutorBinder};
@@ -16,6 +17,13 @@ pub struct Worker {
 pub enum ExecutionMode {
     Check,
     Apply,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TaskOutcome {
+    Succeeded,
+    Skipped(String),
+    Failed(String),
 }
 
 impl ExecutionMode {
@@ -40,21 +48,6 @@ impl Worker {
 
     pub fn id(&self) -> &str {
         &self.plan.id
-    }
-
-    pub fn validate(&self) -> crate::Result {
-        let backend = self.connect()?;
-
-        for task in &self.plan.tasks {
-            let bound = backend.bind(task.run_as.clone());
-            if self.skip_reason(task, &bound)?.is_some() {
-                continue;
-            }
-
-            self.run_task(task, bound, ExecutionMode::Check)?;
-        }
-
-        Ok(())
     }
 
     pub fn check(&self, sender: ReportSender<Event>) -> crate::Result {
@@ -88,57 +81,56 @@ impl Worker {
             }
         };
 
-        let mut runtime_error = None;
+        let mut first_error = None;
+        let mut outcomes = BTreeMap::new();
+
         for task in &self.plan.tasks {
             sender.send(Event::TaskSchedule {
                 host_id: self.plan.id.clone(),
                 task_id: task.id.clone(),
             })?;
 
-            if runtime_error.is_some() {
-                sender.send(Event::TaskSkip {
-                    host_id: self.plan.id.clone(),
-                    task_id: task.id.clone(),
-                    reason: Some("previous task failed".to_string()),
-                })?;
+            if let Some(reason) = self.dependency_skip_reason(task, &outcomes)? {
+                self.report_task_skip(&sender, task, reason.clone())?;
+                outcomes.insert(task.id.clone(), TaskOutcome::Skipped(reason));
                 continue;
             }
 
             let bound = backend.bind(task.run_as.clone());
             match self.skip_reason(task, &bound) {
                 Ok(Some(reason)) => {
-                    sender.send(Event::TaskSkip {
-                        host_id: self.plan.id.clone(),
-                        task_id: task.id.clone(),
-                        reason: Some(reason),
-                    })?;
+                    self.report_task_skip(&sender, task, reason.clone())?;
+                    outcomes.insert(task.id.clone(), TaskOutcome::Skipped(reason));
                     continue;
                 }
                 Ok(None) => {}
                 Err(error) => {
-                    sender.send(Event::TaskFail {
-                        host_id: self.plan.id.clone(),
-                        task_id: task.id.clone(),
-                        error: error.to_string(),
-                    })?;
-                    runtime_error = Some(error);
+                    let message = error.to_string();
+                    self.report_task_fail(&sender, task, message.clone())?;
+                    outcomes.insert(task.id.clone(), TaskOutcome::Failed(message));
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
                     continue;
                 }
             }
 
             match self.run_task(task, bound, mode) {
-                Ok(result) => sender.send(Event::TaskSuccess {
-                    host_id: self.plan.id.clone(),
-                    task_id: task.id.clone(),
-                    result,
-                })?,
-                Err(error) => {
-                    sender.send(Event::TaskFail {
+                Ok(result) => {
+                    sender.send(Event::TaskSuccess {
                         host_id: self.plan.id.clone(),
                         task_id: task.id.clone(),
-                        error: error.to_string(),
+                        result,
                     })?;
-                    runtime_error = Some(error);
+                    outcomes.insert(task.id.clone(), TaskOutcome::Succeeded);
+                }
+                Err(error) => {
+                    let message = error.to_string();
+                    self.report_task_fail(&sender, task, message.clone())?;
+                    outcomes.insert(task.id.clone(), TaskOutcome::Failed(message));
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
                 }
             }
         }
@@ -147,11 +139,53 @@ impl Worker {
             host_id: self.plan.id.clone(),
         })?;
 
-        if let Some(error) = runtime_error {
+        if let Some(error) = first_error {
             return Err(error);
         }
 
         Ok(())
+    }
+
+    fn dependency_skip_reason(
+        &self,
+        task: &TaskInstance,
+        outcomes: &BTreeMap<String, TaskOutcome>,
+    ) -> crate::Result<Option<String>> {
+        for dependency in &task.depends_on {
+            match outcomes.get(dependency) {
+                Some(TaskOutcome::Succeeded) => {}
+                Some(TaskOutcome::Skipped(reason)) => {
+                    return Ok(Some(format!("dependency '{}' was skipped: {}", dependency, reason)));
+                }
+                Some(TaskOutcome::Failed(error)) => {
+                    return Ok(Some(format!("dependency '{}' failed: {}", dependency, error)));
+                }
+                None => {
+                    return Err(crate::Error::InvalidManifest(format!(
+                        "task '{}' depends on task '{}' which has no recorded outcome",
+                        task.id, dependency
+                    )));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn report_task_skip(&self, sender: &ReportSender<Event>, task: &TaskInstance, reason: String) -> crate::Result {
+        sender.send(Event::TaskSkip {
+            host_id: self.plan.id.clone(),
+            task_id: task.id.clone(),
+            reason: Some(reason),
+        })
+    }
+
+    fn report_task_fail(&self, sender: &ReportSender<Event>, task: &TaskInstance, error: String) -> crate::Result {
+        sender.send(Event::TaskFail {
+            host_id: self.plan.id.clone(),
+            task_id: task.id.clone(),
+            error,
+        })
     }
 
     fn run_task(&self, task: &TaskInstance, backend: Backend, mode: ExecutionMode) -> crate::Result<ExecutionResult> {
