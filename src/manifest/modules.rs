@@ -1,11 +1,8 @@
 use std::ffi::{OsStr, OsString};
-use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
-
-use serde::de::{self, Deserialize, Deserializer};
 
 const DEFAULT_MODULE_GIT_TIMEOUT: Duration = Duration::from_secs(300);
 const GIT_WAIT_INTERVAL: Duration = Duration::from_millis(10);
@@ -327,16 +324,15 @@ impl Drop for ModuleGitLock {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Module {
+    #[serde(default)]
     namespace: Option<String>,
-    source: ModuleSource,
-}
-
-#[derive(Debug, Clone)]
-enum ModuleSource {
-    Path(PathBuf),
-    Git(Box<ModuleGit>),
+    #[serde(default)]
+    path: Option<PathBuf>,
+    #[serde(default)]
+    git: Option<Box<ModuleGit>>,
 }
 
 #[derive(Debug, Clone)]
@@ -352,46 +348,15 @@ pub struct ResolvedModule {
     pub local_name: String,
 }
 
-#[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ModuleDef {
-    #[serde(default)]
-    namespace: Option<String>,
-    #[serde(default)]
-    path: Option<PathBuf>,
-    #[serde(default)]
-    git: Option<Box<ModuleGit>>,
-}
-
-impl<'de> Deserialize<'de> for Module {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let def = ModuleDef::deserialize(deserializer)?;
-        let source = match (def.path, def.git) {
-            (Some(path), None) => ModuleSource::Path(path),
-            (None, Some(git)) => ModuleSource::Git(git),
-            (None, None) => return Err(de::Error::custom("module source must define exactly one of 'path' or 'git'")),
-            (Some(_), Some(_)) => {
-                return Err(de::Error::custom("module source must define exactly one of 'path' or 'git'"));
-            }
-        };
-
-        Ok(Self {
-            namespace: def.namespace,
-            source,
-        })
-    }
-}
-
 impl std::fmt::Display for Module {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match (&self.namespace, &self.source) {
-            (Some(namespace), ModuleSource::Path(path)) => write!(f, "{namespace}:{}", path.display()),
-            (None, ModuleSource::Path(path)) => write!(f, "{}", path.display()),
-            (Some(namespace), ModuleSource::Git(git)) => write!(f, "{namespace}:{}#ref={}", git.url, git.git_ref),
-            (None, ModuleSource::Git(git)) => write!(f, "{}#ref={}", git.url, git.git_ref),
+        match (&self.namespace, self.path.as_deref(), self.git.as_deref()) {
+            (Some(namespace), Some(path), None) => write!(f, "{namespace}:{}", path.display()),
+            (None, Some(path), None) => write!(f, "{}", path.display()),
+            (Some(namespace), None, Some(git)) => write!(f, "{namespace}:{}#ref={}", git.url, git.git_ref),
+            (None, None, Some(git)) => write!(f, "{}#ref={}", git.url, git.git_ref),
+            (Some(namespace), _, _) => write!(f, "{namespace}:<invalid module source>"),
+            (None, _, _) => write!(f, "<invalid module source>"),
         }
     }
 }
@@ -402,17 +367,17 @@ impl Module {
     }
 
     pub fn include_path(&self) -> crate::Result<PathBuf> {
-        match &self.source {
-            ModuleSource::Path(path) => Ok(path.clone()),
-            ModuleSource::Git(git) => git.include_path(),
+        match (self.path.as_ref(), self.git.as_deref()) {
+            (Some(path), None) => Ok(path.clone()),
+            (None, Some(git)) => git.include_path(),
+            _ => Err(crate::Error::InvalidManifest(
+                "module source must define exactly one of 'path' or 'git'".into(),
+            )),
         }
     }
 
     fn git(&self) -> Option<&ModuleGit> {
-        match &self.source {
-            ModuleSource::Path(_) => None,
-            ModuleSource::Git(git) => Some(git),
-        }
+        self.git.as_deref()
     }
 
     pub fn mount(&self) -> crate::Result<ModuleMount> {
@@ -424,14 +389,18 @@ impl Module {
     }
 
     fn prepare(&self) -> crate::Result {
-        match &self.source {
-            ModuleSource::Path(_) => Ok(()),
-            ModuleSource::Git(git) => git.prepare(),
+        match self.git.as_deref() {
+            Some(git) => git.prepare(),
+            None => Ok(()),
         }
     }
 
     pub fn canonicalize_local_path(&mut self, root_path: &Path) -> crate::Result {
-        let ModuleSource::Path(path) = &mut self.source else {
+        if self.git.is_some() {
+            return Ok(());
+        }
+
+        let Some(path) = &mut self.path else {
             return Ok(());
         };
 
@@ -463,8 +432,14 @@ impl Module {
 pub fn validate_sources(modules: &[Module]) -> crate::Result {
     let mut namespaces = Vec::new();
     for module in modules {
-        if let Some(git) = module.git() {
-            git.validate()?;
+        match (module.path.as_ref(), module.git()) {
+            (Some(_), None) => {}
+            (None, Some(git)) => git.validate()?,
+            _ => {
+                return Err(crate::Error::InvalidManifest(
+                    "module source must define exactly one of 'path' or 'git'".into(),
+                ));
+            }
         }
 
         let Some(namespace) = module.namespace() else {
@@ -489,10 +464,6 @@ pub fn validate_sources(modules: &[Module]) -> crate::Result {
     }
 
     Ok(())
-}
-
-pub fn validate_task_module_name(name: &str) -> crate::Result {
-    validate_module_name(name, "task module name")
 }
 
 pub fn validate_task_modules(modules: &[ModuleMount], tasks: &[crate::manifest::task::Task]) -> crate::Result {
@@ -544,7 +515,7 @@ pub fn validate_prepared_mounts(modules: &[ModuleMount]) -> crate::Result {
 }
 
 pub fn resolve_task_module(modules: &[ModuleMount], name: &str) -> crate::Result<ResolvedModule> {
-    validate_task_module_name(name)?;
+    validate_module_name(name, "task module name")?;
 
     if name == "wali" || name.starts_with("wali.") {
         if is_builtin_task_module(name) {
@@ -607,7 +578,7 @@ fn validate_namespace(namespace: &str) -> crate::Result {
     Ok(())
 }
 
-fn validate_module_name(name: &str, kind: &str) -> crate::Result {
+pub fn validate_module_name(name: &str, kind: &str) -> crate::Result {
     if name.is_empty() {
         return Err(crate::Error::InvalidManifest(format!("{kind} must not be empty")));
     }
@@ -975,12 +946,13 @@ where
         .map(|arg| arg.as_ref().to_os_string())
         .collect::<Vec<_>>();
     let desc = describe_git_command(&args);
+    let mut stdout = GitCapture::new("stdout", &desc)?;
+    let mut stderr = GitCapture::new("stderr", &desc)?;
+
     let mut command = git_command(&args);
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command.stdout(stdout.stdio(&desc)?).stderr(stderr.stdio(&desc)?);
 
     let mut child = command.spawn().map_err(|error| git_exec_error(&desc, error))?;
-    let stdout = spawn_git_reader("stdout", child.stdout.take(), desc.clone());
-    let stderr = spawn_git_reader("stderr", child.stderr.take(), desc.clone());
     let started = Instant::now();
 
     let status = loop {
@@ -989,8 +961,6 @@ where
             Ok(None) if started.elapsed() >= timeout => {
                 let _ = child.kill();
                 let _ = child.wait();
-                let _ = join_git_reader(stdout, "stdout", &desc);
-                let _ = join_git_reader(stderr, "stderr", &desc);
                 return Err(crate::Error::ModuleSource(format!(
                     "git command timed out after {}: {desc}",
                     format_duration(timeout)
@@ -1000,8 +970,6 @@ where
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                let _ = join_git_reader(stdout, "stdout", &desc);
-                let _ = join_git_reader(stderr, "stderr", &desc);
                 return Err(crate::Error::ModuleSource(format!("failed to wait for git command {desc}: {error}")));
             }
         }
@@ -1009,8 +977,8 @@ where
 
     Ok(Output {
         status,
-        stdout: join_git_reader(stdout, "stdout", &desc)?,
-        stderr: join_git_reader(stderr, "stderr", &desc)?,
+        stdout: stdout.read("stdout", &desc)?,
+        stderr: stderr.read("stderr", &desc)?,
     })
 }
 
@@ -1020,32 +988,60 @@ fn git_command(args: &[OsString]) -> Command {
     command
 }
 
-fn spawn_git_reader(
-    stream_name: &'static str,
-    stream: Option<impl Read + Send + 'static>,
-    desc: String,
-) -> thread::JoinHandle<std::io::Result<Vec<u8>>> {
-    thread::spawn(move || {
-        let Some(mut stream) = stream else {
-            return Ok(Vec::new());
-        };
-        let mut bytes = Vec::new();
-        stream.read_to_end(&mut bytes).map_err(|error| {
-            std::io::Error::new(error.kind(), format!("failed to read git {stream_name} for {desc}: {error}"))
-        })?;
-        Ok(bytes)
-    })
+struct GitCapture {
+    path: PathBuf,
+    file: Option<std::fs::File>,
 }
 
-fn join_git_reader(
-    reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
-    stream_name: &str,
-    desc: &str,
-) -> crate::Result<Vec<u8>> {
-    match reader.join() {
-        Ok(Ok(bytes)) => Ok(bytes),
-        Ok(Err(error)) => Err(crate::Error::ModuleSource(error.to_string())),
-        Err(_) => Err(crate::Error::ModuleSource(format!("git {stream_name} reader thread panicked for {desc}"))),
+impl GitCapture {
+    fn new(stream_name: &str, desc: &str) -> crate::Result<Self> {
+        let temp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+
+        for attempt in 0..100 {
+            let path = temp_dir.join(format!("wali-git-{pid}-{nanos}-{stream_name}-{attempt}.log"));
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(file) => {
+                    return Ok(Self {
+                        path,
+                        file: Some(file),
+                    });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => {
+                    return Err(crate::Error::ModuleSource(format!(
+                        "failed to create git {stream_name} capture for {desc}: {error}"
+                    )));
+                }
+            }
+        }
+
+        Err(crate::Error::ModuleSource(format!(
+            "failed to create unique git {stream_name} capture for {desc}"
+        )))
+    }
+
+    fn stdio(&mut self, desc: &str) -> crate::Result<Stdio> {
+        let file = self.file.take().ok_or_else(|| {
+            crate::Error::ModuleSource(format!("git capture file was already consumed for {desc}"))
+        })?;
+        Ok(Stdio::from(file))
+    }
+
+    fn read(&self, stream_name: &str, desc: &str) -> crate::Result<Vec<u8>> {
+        std::fs::read(&self.path).map_err(|error| {
+            crate::Error::ModuleSource(format!("failed to read git {stream_name} capture for {desc}: {error}"))
+        })
+    }
+}
+
+impl Drop for GitCapture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 

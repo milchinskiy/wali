@@ -157,9 +157,11 @@ execution finishes. This prevents another wali process from resetting or
 cleaning the same checkout while task runtimes are loading module files.
 
 Every system `git` process is run with `GIT_TERMINAL_PROMPT=0`, null stdin, and
-a bounded timeout. A timeout kills the Git child process, waits for it, and
-fails source preparation with a `Module source error` that names the timed-out
-Git command.
+a bounded timeout. Git stdout and stderr are captured through temporary files,
+not pipe-reader threads, so inherited output handles from helpers or grandchild
+processes cannot block timeout return. A timeout kills the Git child process,
+waits for it, and fails source preparation with a `Module source error` that
+names the timed-out Git command.
 
 Pin a commit for reproducible module code. Branch names are intentionally
 mutable because they are resolved by Git at fetch time.

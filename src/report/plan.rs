@@ -101,7 +101,7 @@ impl PlanTask {
             id: task.id.clone(),
             module: task.module.clone(),
             tags: task.tags.iter().cloned().collect(),
-            depends_on: task.depends_on.iter().cloned().collect(),
+            depends_on: task.depends_on.to_vec(),
             run_as: task.run_as.as_ref().map(PlanRunAs::from_run_as),
             has_when: task.when.is_some(),
         }

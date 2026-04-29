@@ -218,3 +218,40 @@ return {
         "unknown field",
     );
 }
+
+#[test]
+fn module_source_must_define_exactly_one_source_kind() {
+    let sandbox = Sandbox::new("module-source-exactly-one");
+    let modules = sandbox.mkdir("modules");
+
+    for module_source in [
+        r#"{ namespace = "repo" }"#.to_string(),
+        format!(
+            r#"{{
+                path = {},
+                git = {{
+                    url = "https://example.invalid/wali/mods.git",
+                    ref = "main"
+                }}
+            }}"#,
+            lua_string(&modules)
+        ),
+    ] {
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+return {{
+    modules = {{
+        {},
+    }},
+    tasks = {{}},
+}}
+"#,
+            module_source
+        ));
+
+        assert_wali_failure_contains(
+            &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+            "module source must define exactly one of 'path' or 'git'",
+        );
+    }
+}

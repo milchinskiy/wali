@@ -76,6 +76,8 @@ convergence. Git cache locks must protect checkouts for the full `check` or
 `apply` execution, because module files may be loaded after the initial fetch.
 Every Git child process must be bounded by timeout, must not read from
 interactive stdin, and must not prompt through Git's terminal credential flow.
+Output capture must not depend on pipe-reader threads that can be held open by
+Git helpers or grandchild processes after the direct Git child is killed.
 
 `plan` remains compile-only: no Git fetches, no host access, no network access.
 

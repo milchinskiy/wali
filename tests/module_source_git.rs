@@ -34,6 +34,39 @@ return {
     );
 }
 
+
+#[test]
+fn git_module_source_timeout_is_not_blocked_by_inherited_output_handles() {
+    let sandbox = Sandbox::new("git-timeout-inherited-output");
+    let fake_bin = sandbox.mkdir("fake-bin");
+    write_fake_git(
+        &fake_bin,
+        "#!/bin/sh\n(sh -c 'sleep 30') &\nwhile :; do :; done\n",
+    );
+
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    modules = {
+        { git = {
+            url = "https://example.invalid/wali/mods.git",
+            ref = "main",
+            timeout = "100ms",
+        } },
+    },
+    tasks = {},
+}
+"#,
+    );
+
+    assert_wali_failure_contains_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("PATH", &fake_bin), ("WALI_MODULES_CACHE", &cache)],
+        "git command timed out after 100ms",
+    );
+}
+
 #[test]
 fn plan_does_not_run_git_even_when_git_timeout_is_configured() {
     let sandbox = Sandbox::new("git-plan-timeout");

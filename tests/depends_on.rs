@@ -228,3 +228,192 @@ return {{
         "independent still runs\n"
     );
 }
+
+#[test]
+fn duplicate_dependency_entries_are_rejected() {
+    let sandbox = Sandbox::new("depends-duplicate");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        { id = "first", module = "wali.builtin.command", args = { program = "true" } },
+        {
+            id = "second",
+            depends_on = { "first", "first" },
+            module = "wali.builtin.command",
+            args = { program = "true" },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "duplicate dependency 'first'",
+    );
+}
+
+#[test]
+fn self_dependency_is_rejected() {
+    let sandbox = Sandbox::new("depends-self");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "loop",
+            depends_on = { "loop" },
+            module = "wali.builtin.command",
+            args = { program = "true" },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "cannot depend on itself",
+    );
+}
+
+#[test]
+fn unknown_dependency_is_rejected() {
+    let sandbox = Sandbox::new("depends-unknown");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "dependent",
+            depends_on = { "missing" },
+            module = "wali.builtin.command",
+            args = { program = "true" },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "depends on non-existent task 'missing'",
+    );
+}
+
+#[test]
+fn dependency_filtered_out_for_host_is_rejected_with_host_context() {
+    let sandbox = Sandbox::new("depends-filtered-host");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+        { id = "other", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "root",
+            host = { id = "localhost" },
+            module = "wali.builtin.command",
+            args = { program = "true" },
+        },
+        {
+            id = "dependent",
+            host = { id = "other" },
+            depends_on = { "root" },
+            module = "wali.builtin.command",
+            args = { program = "true" },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "task 'dependent' depends on task 'root' which is not scheduled for host 'other'",
+    );
+}
+
+#[test]
+fn dependency_cycle_is_rejected() {
+    let sandbox = Sandbox::new("depends-cycle");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "alpha",
+            depends_on = { "beta" },
+            module = "wali.builtin.command",
+            args = { program = "true" },
+        },
+        {
+            id = "beta",
+            depends_on = { "alpha" },
+            module = "wali.builtin.command",
+            args = { program = "true" },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "cyclic dependency detected among tasks",
+    );
+}
+
+#[test]
+fn dependency_skip_reason_uses_manifest_dependency_order() {
+    let sandbox = Sandbox::new("depends-order");
+    let dependent = sandbox.path("dependent.txt");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "skip z",
+            when = {{ env_set = "__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__" }},
+            module = "wali.builtin.command",
+            args = {{ program = "true" }},
+        }},
+        {{
+            id = "fail a",
+            module = "wali.builtin.command",
+            args = {{ script = "exit 9" }},
+        }},
+        {{
+            id = "dependent",
+            depends_on = {{ "skip z", "fail a" }},
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "must not be written\n" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&dependent),
+    ));
+
+    let report = run_wali_failure_json(&["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")]);
+    assert_task_skipped_contains(&report, "dependent", "dependency 'skip z' was skipped");
+    assert!(!dependent.exists(), "dependent task must not run after skipped dependency");
+}

@@ -94,21 +94,30 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
     modules::validate_sources(&manifest.modules)?;
 
     for task in &manifest.tasks {
-        modules::validate_task_module_name(&task.module)?;
+        modules::validate_module_name(&task.module, "task module name")?;
 
         if task.module == "wali" || task.module.starts_with("wali.") {
             modules::resolve_task_module(&[] as &[modules::ModuleMount], &task.module)?;
         }
 
         if let Some(depends_on) = &task.depends_on {
-            if depends_on.contains(&task.id) {
-                return Err(crate::Error::InvalidManifest(format!("Task '{}' cannot depend on itself", task.id)));
-            }
-            if let Some(selfid) = depends_on.iter().find(|d| !task_id_set.contains(*d)) {
-                return Err(crate::Error::InvalidManifest(format!(
-                    "Task '{}' depends on non-existent task '{}'",
-                    task.id, selfid
-                )));
+            let mut seen = std::collections::HashSet::with_capacity(depends_on.len());
+            for dependency in depends_on {
+                if dependency == &task.id {
+                    return Err(crate::Error::InvalidManifest(format!("Task '{}' cannot depend on itself", task.id)));
+                }
+                if !seen.insert(dependency) {
+                    return Err(crate::Error::InvalidManifest(format!(
+                        "Task '{}' declares duplicate dependency '{}'",
+                        task.id, dependency
+                    )));
+                }
+                if !task_id_set.contains(dependency) {
+                    return Err(crate::Error::InvalidManifest(format!(
+                        "Task '{}' depends on non-existent task '{}'",
+                        task.id, dependency
+                    )));
+                }
             }
         }
 

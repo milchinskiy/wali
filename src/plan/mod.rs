@@ -204,7 +204,7 @@ pub struct TaskInstance {
     pub id: String,
     pub tags: BTreeSet<String>,
     pub vars: BTreeMap<String, String>,
-    pub depends_on: BTreeSet<String>,
+    pub depends_on: Vec<String>,
     pub when: Option<predicate::When>,
     pub run_as: Option<RunAs>,
     pub module: String,
@@ -231,7 +231,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                         id: task.id.clone(),
                         tags: task.tags.clone().unwrap_or_default(),
                         vars: host.vars.clone(),
-                        depends_on: task.depends_on.clone().unwrap_or_default().into_iter().collect(),
+                        depends_on: task.depends_on.clone().unwrap_or_default(),
                         when: task.when.clone(),
                         run_as: match &task.run_as {
                             None => None,
@@ -247,7 +247,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                     })
                 })
                 .collect::<crate::Result<Vec<_>>>()?;
-            let tasks = order_tasks(tasks)?;
+            let tasks = order_tasks(&host.id, tasks)?;
 
             Ok(HostPlan {
                 id: host.id.clone(),
@@ -282,7 +282,7 @@ fn task_matches_host(task: &task::Task, host: &host::Host) -> bool {
 /// https://en.wikipedia.org/wiki/Topological_sorting
 /// # Errors
 /// * `InvalidManifest` if there are cycles or invalid dependencies
-fn order_tasks(tasks: Vec<TaskInstance>) -> crate::Result<Vec<TaskInstance>> {
+fn order_tasks(host_id: &str, tasks: Vec<TaskInstance>) -> crate::Result<Vec<TaskInstance>> {
     let mut by_id = BTreeMap::new();
     for (idx, task) in tasks.iter().enumerate() {
         if by_id.insert(task.id.clone(), idx).is_some() {
@@ -291,15 +291,25 @@ fn order_tasks(tasks: Vec<TaskInstance>) -> crate::Result<Vec<TaskInstance>> {
     }
 
     for task in &tasks {
+        let mut seen = BTreeSet::new();
         for dep in &task.depends_on {
+            if !seen.insert(dep) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "task '{}' declares duplicate dependency '{}' for host '{}'",
+                    task.id, dep, host_id
+                )));
+            }
             if !by_id.contains_key(dep) {
                 return Err(crate::Error::InvalidManifest(format!(
-                    "task '{}' depends on unknown task '{}'",
-                    task.id, dep
+                    "task '{}' depends on task '{}' which is not scheduled for host '{}'",
+                    task.id, dep, host_id
                 )));
             }
             if dep == &task.id {
-                return Err(crate::Error::InvalidManifest(format!("task '{}' depends on itself", task.id)));
+                return Err(crate::Error::InvalidManifest(format!(
+                    "task '{}' depends on itself for host '{}'",
+                    task.id, host_id
+                )));
             }
         }
     }
