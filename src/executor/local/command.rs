@@ -92,11 +92,11 @@ fn exec_local_run_as(
             return Err(crate::Error::CommandTimeout(format!("local run_as command timed out: {desc}")));
         }
 
-        if final_status.is_none() {
-            if let Some(status) = child.try_wait()? {
-                final_status = Some(CommandStatus::Exited(status.exit_code() as i32));
-                exit_drain_deadline = Some(Instant::now() + LOCAL_PTY_EXIT_DRAIN);
-            }
+        if final_status.is_none()
+            && let Some(status) = child.try_wait()?
+        {
+            final_status = Some(CommandStatus::Exited(status.exit_code() as i32));
+            exit_drain_deadline = Some(Instant::now() + LOCAL_PTY_EXIT_DRAIN);
         }
 
         match rx.recv_timeout(LOCAL_WAIT_INTERVAL) {
@@ -305,17 +305,15 @@ fn exec_local_pty(req: &CommandRequest) -> crate::Result<CommandOutput> {
             return Err(crate::Error::CommandTimeout(format!("local PTY command timed out: {desc}")));
         }
 
-        if final_status.is_none() {
-            if let Some(status) = child.try_wait()? {
-                final_status = Some(CommandStatus::Exited(status.exit_code() as i32));
-                exit_drain_deadline = Some(Instant::now() + LOCAL_PTY_EXIT_DRAIN);
-            }
+        if final_status.is_none()
+            && let Some(status) = child.try_wait()?
+        {
+            final_status = Some(CommandStatus::Exited(status.exit_code() as i32));
+            exit_drain_deadline = Some(Instant::now() + LOCAL_PTY_EXIT_DRAIN);
         }
 
-        if !stdin_done {
-            if let Some(receiver) = &stdin_rx {
-                stdin_done = poll_pty_stdin(receiver, &desc)?.is_some();
-            }
+        if !stdin_done && let Some(receiver) = &stdin_rx {
+            stdin_done = poll_pty_stdin(receiver, &desc)?.is_some();
         }
 
         match output_rx.recv_timeout(LOCAL_WAIT_INTERVAL) {

@@ -32,7 +32,7 @@ impl ModuleGit {
         Ok(path)
     }
 
-    fn source_id(&self) -> crate::Result<String> {
+    pub(super) fn source_id(&self) -> crate::Result<String> {
         let url = self.checked_url()?;
         let git_ref = self.checked_ref()?;
         let submodules = if self.submodules {
@@ -53,7 +53,7 @@ impl ModuleGit {
             .join(format!("{}.lock", self.source_id()?)))
     }
 
-    fn source_metadata(&self) -> crate::Result<String> {
+    pub(super) fn source_metadata(&self) -> crate::Result<String> {
         Ok(format!(
             "version = 1\nurl = {}\nref = {}\nsubmodules = {}\n",
             self.checked_url()?,
@@ -137,7 +137,7 @@ impl ModuleGit {
         Ok(Some(path))
     }
 
-    fn validate(&self) -> crate::Result {
+    pub(super) fn validate(&self) -> crate::Result {
         self.checked_url()?;
         self.checked_ref()?;
         self.checked_path()?;
@@ -157,7 +157,7 @@ impl ModuleGit {
         self.timeout.unwrap_or(DEFAULT_MODULE_GIT_TIMEOUT)
     }
 
-    fn prepare(&self) -> crate::Result {
+    pub(super) fn prepare(&self) -> crate::Result {
         self.validate()?;
 
         let timeout = self.operation_timeout();
@@ -281,7 +281,7 @@ pub struct ModuleGitLock {
 }
 
 impl ModuleGitLock {
-    fn acquire(git: &ModuleGit) -> crate::Result<Self> {
+    pub(super) fn acquire(git: &ModuleGit) -> crate::Result<Self> {
         let lock_path = git.lock_path()?;
 
         let parent = lock_path.parent().ok_or_else(|| {
@@ -410,389 +410,6 @@ impl Drop for ModuleGitLock {
         let _ = std::fs::remove_dir_all(&self.path);
     }
 }
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Module {
-    #[serde(default)]
-    namespace: Option<String>,
-    #[serde(default)]
-    path: Option<PathBuf>,
-    #[serde(default)]
-    git: Option<Box<ModuleGit>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ModuleMount {
-    pub namespace: Option<String>,
-    pub include_path: PathBuf,
-    pub label: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct ResolvedModule {
-    pub include_path: Option<PathBuf>,
-    pub local_name: String,
-}
-
-impl std::fmt::Display for Module {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match (&self.namespace, self.path.as_deref(), self.git.as_deref()) {
-            (Some(namespace), Some(path), None) => write!(f, "{namespace}:{}", path.display()),
-            (None, Some(path), None) => write!(f, "{}", path.display()),
-            (Some(namespace), None, Some(git)) => write!(f, "{namespace}:{}#ref={}", git.url, git.git_ref),
-            (None, None, Some(git)) => write!(f, "{}#ref={}", git.url, git.git_ref),
-            (Some(namespace), _, _) => write!(f, "{namespace}:<invalid module source>"),
-            (None, _, _) => write!(f, "<invalid module source>"),
-        }
-    }
-}
-
-impl Module {
-    pub fn namespace(&self) -> Option<&str> {
-        self.namespace.as_deref()
-    }
-
-    pub fn include_path(&self) -> crate::Result<PathBuf> {
-        match (self.path.as_ref(), self.git.as_deref()) {
-            (Some(path), None) => Ok(path.clone()),
-            (None, Some(git)) => git.include_path(),
-            _ => Err(crate::Error::InvalidManifest("module source must define exactly one of 'path' or 'git'".into())),
-        }
-    }
-
-    fn git(&self) -> Option<&ModuleGit> {
-        self.git.as_deref()
-    }
-
-    pub fn mount(&self) -> crate::Result<ModuleMount> {
-        Ok(ModuleMount {
-            namespace: self.namespace.clone(),
-            include_path: self.include_path()?,
-            label: self.to_string(),
-        })
-    }
-
-    fn prepare(&self) -> crate::Result {
-        match self.git.as_deref() {
-            Some(git) => git.prepare(),
-            None => Ok(()),
-        }
-    }
-
-    pub fn canonicalize_local_path(&mut self, root_path: &Path) -> crate::Result {
-        if self.git.is_some() {
-            return Ok(());
-        }
-
-        let Some(path) = &mut self.path else {
-            return Ok(());
-        };
-
-        let original = path.clone();
-        let candidate = if original.is_relative() {
-            root_path.join(&original)
-        } else {
-            original.clone()
-        };
-
-        let canonical = candidate.canonicalize().map_err(|error| {
-            crate::Error::InvalidManifest(format!("invalid module include path '{}': {error}", original.display()))
-        })?;
-
-        if !canonical.is_dir() {
-            return Err(crate::Error::InvalidManifest(format!(
-                "module include path '{}' is not a directory",
-                original.display()
-            )));
-        }
-
-        ensure_source_root_safe(&canonical, &original.display().to_string())?;
-
-        *path = canonical;
-        Ok(())
-    }
-}
-
-pub fn validate_sources(modules: &[Module]) -> crate::Result {
-    let mut namespaces = Vec::new();
-    for module in modules {
-        match (module.path.as_ref(), module.git()) {
-            (Some(_), None) => {}
-            (None, Some(git)) => git.validate()?,
-            _ => {
-                return Err(crate::Error::InvalidManifest(
-                    "module source must define exactly one of 'path' or 'git'".into(),
-                ));
-            }
-        }
-
-        let Some(namespace) = module.namespace() else {
-            continue;
-        };
-        validate_namespace(namespace)?;
-        namespaces.push(namespace.to_string());
-    }
-
-    namespaces.sort();
-    for pair in namespaces.windows(2) {
-        let left = &pair[0];
-        let right = &pair[1];
-        if left == right {
-            return Err(crate::Error::InvalidManifest(format!("module namespace '{left}' is not unique")));
-        }
-        if right.starts_with(left) && right.as_bytes().get(left.len()) == Some(&b'.') {
-            return Err(crate::Error::InvalidManifest(format!(
-                "module namespace '{right}' overlaps with namespace '{left}'"
-            )));
-        }
-    }
-
-    Ok(())
-}
-
-pub fn validate_task_modules(modules: &[ModuleMount], tasks: &[crate::manifest::task::Task]) -> crate::Result {
-    for task in tasks {
-        resolve_task_module(modules, &task.module).map_err(|error| match error {
-            crate::Error::InvalidManifest(message) => crate::Error::InvalidManifest(format!(
-                "task '{}' has invalid module '{}': {message}",
-                task.id, task.module
-            )),
-            other => other,
-        })?;
-    }
-    Ok(())
-}
-
-pub fn prepare_sources(modules: &[Module]) -> crate::Result<Vec<ModuleGitLock>> {
-    let mut locks = Vec::new();
-    let mut prepared_sources = std::collections::BTreeMap::new();
-
-    for module in modules {
-        let Some(git) = module.git() else {
-            continue;
-        };
-        let source_id = git.source_id()?;
-        let metadata = git.source_metadata()?;
-
-        if let Some(previous) = prepared_sources.get(&source_id) {
-            if previous != &metadata {
-                return Err(crate::Error::ModuleSource(format!(
-                    "module git source id collision for {source_id}; refusing to share one checkout"
-                )));
-            }
-            continue;
-        }
-
-        locks.push(ModuleGitLock::acquire(git)?);
-        module.prepare()?;
-        prepared_sources.insert(source_id, metadata);
-    }
-
-    Ok(locks)
-}
-
-pub fn validate_prepared_mounts(modules: &[ModuleMount]) -> crate::Result {
-    for module in modules {
-        ensure_source_root_safe(&module.include_path, &module.label)?;
-    }
-    Ok(())
-}
-
-pub fn resolve_task_module(modules: &[ModuleMount], name: &str) -> crate::Result<ResolvedModule> {
-    validate_module_name(name, "task module name")?;
-
-    if name == "wali" || name.starts_with("wali.") {
-        if is_builtin_task_module(name) {
-            return Ok(ResolvedModule {
-                include_path: None,
-                local_name: name.to_string(),
-            });
-        }
-
-        return Err(crate::Error::InvalidManifest(format!("task module '{name}' is not a known wali builtin module")));
-    }
-
-    for module in modules {
-        let Some(namespace) = module.namespace.as_deref() else {
-            continue;
-        };
-        let Some(local_name) = strip_namespace(name, namespace) else {
-            continue;
-        };
-        if local_name.is_empty() {
-            return Err(crate::Error::InvalidManifest(format!(
-                "task module '{name}' names module source namespace '{namespace}', but not a module inside it"
-            )));
-        }
-        ensure_module_present(&module.include_path, local_name, name)?;
-        return Ok(ResolvedModule {
-            include_path: Some(module.include_path.clone()),
-            local_name: local_name.to_string(),
-        });
-    }
-
-    let mut matches = Vec::new();
-    for module in modules.iter().filter(|module| module.namespace.is_none()) {
-        ensure_source_root_safe(&module.include_path, &module.label)?;
-        if module_presence(&module.include_path, name)?.is_some() {
-            matches.push(module);
-        }
-    }
-
-    match matches.as_slice() {
-        [] => Err(crate::Error::InvalidManifest(format!(
-            "task module '{name}' was not found in any unnamespaced module source"
-        ))),
-        [module] => Ok(ResolvedModule {
-            include_path: Some(module.include_path.clone()),
-            local_name: name.to_string(),
-        }),
-        _ => Err(crate::Error::InvalidManifest(format!(
-            "task module '{name}' is ambiguous; it exists in {} unnamespaced module sources",
-            matches.len()
-        ))),
-    }
-}
-
-fn validate_namespace(namespace: &str) -> crate::Result {
-    validate_module_name(namespace, "module namespace")?;
-    if namespace == "wali" || namespace.starts_with("wali.") {
-        return Err(crate::Error::InvalidManifest(format!(
-            "module namespace '{namespace}' is reserved for wali builtins"
-        )));
-    }
-    Ok(())
-}
-
-pub fn validate_module_name(name: &str, kind: &str) -> crate::Result {
-    if name.is_empty() {
-        return Err(crate::Error::InvalidManifest(format!("{kind} must not be empty")));
-    }
-    if name.trim() != name {
-        return Err(crate::Error::InvalidManifest(format!("{kind} '{name}' must not contain surrounding whitespace")));
-    }
-
-    for segment in name.split('.') {
-        if segment.is_empty() {
-            return Err(crate::Error::InvalidManifest(format!("{kind} '{name}' contains an empty segment")));
-        }
-
-        let mut chars = segment.chars();
-        let first = chars.next().expect("empty segment checked above");
-        if !(first == '_' || first.is_ascii_alphabetic()) {
-            return Err(crate::Error::InvalidManifest(format!("{kind} '{name}' contains invalid segment '{segment}'")));
-        }
-        if chars.any(|ch| !(ch == '_' || ch.is_ascii_alphanumeric())) {
-            return Err(crate::Error::InvalidManifest(format!("{kind} '{name}' contains invalid segment '{segment}'")));
-        }
-    }
-
-    Ok(())
-}
-
-fn is_builtin_task_module(name: &str) -> bool {
-    matches!(
-        name,
-        "wali.builtin.command"
-            | "wali.builtin.copy_file"
-            | "wali.builtin.copy_tree"
-            | "wali.builtin.dir"
-            | "wali.builtin.file"
-            | "wali.builtin.link"
-            | "wali.builtin.link_tree"
-            | "wali.builtin.permissions"
-            | "wali.builtin.remove"
-            | "wali.builtin.touch"
-    )
-}
-
-fn strip_namespace<'a>(name: &'a str, namespace: &str) -> Option<&'a str> {
-    if name == namespace {
-        return Some("");
-    }
-    if name.starts_with(namespace) && name.as_bytes().get(namespace.len()) == Some(&b'.') {
-        return Some(&name[namespace.len() + 1..]);
-    }
-    None
-}
-
-fn ensure_module_present(root: &Path, local_name: &str, public_name: &str) -> crate::Result {
-    ensure_source_root_safe(root, public_name)?;
-    if module_presence(root, local_name)?.is_some() {
-        return Ok(());
-    }
-
-    Err(crate::Error::InvalidManifest(format!(
-        "task module '{public_name}' resolved to local module '{local_name}', but it was not found under {}",
-        root.display()
-    )))
-}
-
-fn ensure_source_root_safe(root: &Path, label: &str) -> crate::Result {
-    if !root.is_dir() {
-        return Err(crate::Error::InvalidManifest(format!(
-            "module source '{label}' include path is not a directory: {}",
-            root.display()
-        )));
-    }
-
-    let root_display = root.to_string_lossy();
-    if root_display.contains(';') || root_display.contains('?') {
-        return Err(crate::Error::InvalidManifest(format!(
-            "module source '{label}' include path contains characters that are unsafe for Lua package.path: {}",
-            root.display()
-        )));
-    }
-
-    let wali_file = root.join("wali.lua");
-    let wali_dir = root.join("wali");
-
-    if wali_file.exists() {
-        return Err(crate::Error::InvalidManifest(format!(
-            "module source '{label}' exposes reserved module namespace through {}",
-            wali_file.display()
-        )));
-    }
-
-    if wali_dir.exists() {
-        return Err(crate::Error::InvalidManifest(format!(
-            "module source '{label}' exposes reserved module namespace through {}",
-            wali_dir.display()
-        )));
-    }
-
-    Ok(())
-}
-
-fn module_presence(root: &Path, name: &str) -> crate::Result<Option<PathBuf>> {
-    let relative = module_relative_path(name)?;
-    let file = root.join(&relative).with_extension("lua");
-    let init = root.join(&relative).join("init.lua");
-
-    match (file.is_file(), init.is_file()) {
-        (false, false) => Ok(None),
-        (true, false) => Ok(Some(file)),
-        (false, true) => Ok(Some(init)),
-        (true, true) => Err(crate::Error::InvalidManifest(format!(
-            "module '{name}' is ambiguous under {}; both {} and {} exist",
-            root.display(),
-            file.display(),
-            init.display()
-        ))),
-    }
-}
-
-fn module_relative_path(name: &str) -> crate::Result<PathBuf> {
-    validate_module_name(name, "module name")?;
-
-    let mut path = PathBuf::new();
-    for segment in name.split('.') {
-        path.push(segment);
-    }
-    Ok(path)
-}
-
 fn modules_cache_root() -> PathBuf {
     if let Some(path) = std::env::var_os("WALI_MODULES_CACHE").filter(|value| !value.is_empty()) {
         return PathBuf::from(path);

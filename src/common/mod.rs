@@ -1,3 +1,4 @@
+pub(crate) mod base64;
 pub mod error;
 pub use error::Error;
 

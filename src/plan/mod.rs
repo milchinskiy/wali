@@ -114,7 +114,8 @@ fn openssh_private_key_requires_passphrase(pem: &[u8]) -> crate::Result<bool> {
         .filter(|line| !line.starts_with("-----BEGIN ") && !line.starts_with("-----END "))
         .collect::<String>();
 
-    let decoded = decode_base64(body.as_bytes())?;
+    let decoded = crate::common::base64::decode(body.as_bytes())
+        .map_err(|err| crate::Error::SshProtocol(format!("invalid OpenSSH private key payload: {err}")))?;
     let mut cursor = decoded.as_slice();
 
     if !cursor.starts_with(b"openssh-key-v1\0") {
@@ -143,60 +144,6 @@ fn read_ssh_string<'a>(cursor: &mut &'a [u8]) -> crate::Result<&'a [u8]> {
     let (value, rest) = cursor.split_at(len);
     *cursor = rest;
     Ok(value)
-}
-
-fn decode_base64(input: &[u8]) -> crate::Result<Vec<u8>> {
-    fn sextet(byte: u8) -> Option<u8> {
-        match byte {
-            b'A'..=b'Z' => Some(byte - b'A'),
-            b'a'..=b'z' => Some(byte - b'a' + 26),
-            b'0'..=b'9' => Some(byte - b'0' + 52),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-
-    let filtered = input
-        .iter()
-        .copied()
-        .filter(|byte| !byte.is_ascii_whitespace())
-        .collect::<Vec<_>>();
-
-    if filtered.len() % 4 != 0 {
-        return Err(crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64 length".into()));
-    }
-
-    let mut out = Vec::with_capacity(filtered.len() / 4 * 3);
-    for chunk in filtered.chunks_exact(4) {
-        let a = sextet(chunk[0])
-            .ok_or_else(|| crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into()))?;
-        let b = sextet(chunk[1])
-            .ok_or_else(|| crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into()))?;
-
-        let c = match chunk[2] {
-            b'=' => None,
-            byte => Some(sextet(byte).ok_or_else(|| {
-                crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into())
-            })?),
-        };
-        let d = match chunk[3] {
-            b'=' => None,
-            byte => Some(sextet(byte).ok_or_else(|| {
-                crate::Error::SshProtocol("invalid OpenSSH private key payload: malformed base64".into())
-            })?),
-        };
-
-        out.push((a << 2) | (b >> 4));
-        if let Some(c) = c {
-            out.push(((b & 0x0f) << 4) | (c >> 2));
-            if let Some(d) = d {
-                out.push(((c & 0x03) << 6) | d);
-            }
-        }
-    }
-
-    Ok(out)
 }
 
 #[derive(Debug, Clone)]

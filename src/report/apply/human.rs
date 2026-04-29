@@ -6,244 +6,10 @@ use console::Style;
 
 use crate::executor::{ChangeKind, ChangeSubject, ExecutionChange, ExecutionResult};
 
-use super::{Layout, RenderKind};
+use super::state::State;
+use super::{Event, RunMode};
 
-#[derive(Debug)]
-pub enum Event {
-    HostSchedule {
-        host_id: String,
-        tasks_count: u32,
-    },
-    HostConnect {
-        host_id: String,
-        error: Option<String>,
-    },
-    HostComplete {
-        host_id: String,
-    },
-    TaskSchedule {
-        host_id: String,
-        task_id: String,
-    },
-    TaskSuccess {
-        host_id: String,
-        task_id: String,
-        result: ExecutionResult,
-    },
-    TaskSkip {
-        host_id: String,
-        task_id: String,
-        reason: Option<String>,
-    },
-    TaskFail {
-        host_id: String,
-        task_id: String,
-        error: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunMode {
-    Apply,
-    Check,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct State {
-    mode: RunMode,
-    hosts: std::collections::BTreeMap<String, StateHost>,
-}
-
-impl State {
-    fn new(mode: RunMode) -> Self {
-        Self {
-            mode,
-            hosts: std::collections::BTreeMap::new(),
-        }
-    }
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-enum HostStatus {
-    Ok,
-    Error(String),
-}
-
-#[derive(Debug, serde::Serialize)]
-struct StateHost {
-    scheduled_at: String,
-    connected_at: Option<String>,
-    completed_at: Option<String>,
-    status: HostStatus,
-    tasks: Vec<StateTask>,
-}
-
-impl StateHost {
-    fn successes(&self) -> usize {
-        self.tasks
-            .iter()
-            .filter(|task| matches!(task.status, StateTaskStatus::Success(_)))
-            .count()
-    }
-
-    fn failed(&self) -> usize {
-        self.tasks
-            .iter()
-            .filter(|task| matches!(task.status, StateTaskStatus::Fail(_)))
-            .count()
-    }
-
-    fn skipped(&self) -> usize {
-        self.tasks
-            .iter()
-            .filter(|task| matches!(task.status, StateTaskStatus::Skipped(_)))
-            .count()
-    }
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-enum StateTaskStatus {
-    Scheduled,
-    Success(ExecutionResult),
-    Skipped(Option<String>),
-    Fail(String),
-}
-
-#[derive(Debug, serde::Serialize)]
-struct StateTask {
-    id: String,
-    status: StateTaskStatus,
-}
-
-fn get_host<'a>(
-    id: &'a str,
-    hosts: &'a mut std::collections::BTreeMap<String, StateHost>,
-) -> crate::Result<&'a mut StateHost> {
-    hosts
-        .get_mut(id)
-        .ok_or_else(|| crate::Error::Reporter(format!("host {id} not found")))
-}
-
-fn get_task<'a>(id: &'a str, tasks: &'a mut [StateTask]) -> crate::Result<&'a mut StateTask> {
-    tasks
-        .iter_mut()
-        .find(|task| task.id == id)
-        .ok_or_else(|| crate::Error::Reporter(format!("task {id} not found")))
-}
-
-impl State {
-    fn apply(&mut self, event: &Event) -> crate::Result {
-        match event {
-            Event::HostSchedule { host_id, tasks_count } => {
-                let _ = self.hosts.insert(
-                    host_id.clone(),
-                    StateHost {
-                        scheduled_at: chrono::Utc::now().to_rfc3339(),
-                        connected_at: None,
-                        completed_at: None,
-                        status: HostStatus::Ok,
-                        tasks: Vec::with_capacity(*tasks_count as usize),
-                    },
-                );
-            }
-            Event::HostConnect { host_id, error } => {
-                let host = get_host(host_id, &mut self.hosts)?;
-                host.status = error.clone().map_or(HostStatus::Ok, HostStatus::Error);
-                host.connected_at = Some(chrono::Utc::now().to_rfc3339());
-            }
-            Event::HostComplete { host_id } => {
-                let host = get_host(host_id, &mut self.hosts)?;
-                host.completed_at = Some(chrono::Utc::now().to_rfc3339());
-            }
-            Event::TaskSchedule { host_id, task_id } => {
-                let host = get_host(host_id, &mut self.hosts)?;
-                host.tasks.push(StateTask {
-                    id: task_id.clone(),
-                    status: StateTaskStatus::Scheduled,
-                });
-            }
-            Event::TaskSuccess {
-                host_id,
-                task_id,
-                result,
-            } => {
-                let host = get_host(host_id, &mut self.hosts)?;
-                let task = get_task(task_id, &mut host.tasks)?;
-                task.status = StateTaskStatus::Success(result.clone());
-            }
-            Event::TaskSkip {
-                host_id,
-                task_id,
-                reason,
-            } => {
-                let host = get_host(host_id, &mut self.hosts)?;
-                let task = get_task(task_id, &mut host.tasks)?;
-                task.status = StateTaskStatus::Skipped(reason.clone());
-            }
-            Event::TaskFail {
-                host_id,
-                task_id,
-                error,
-            } => {
-                let host = get_host(host_id, &mut self.hosts)?;
-                let task = get_task(task_id, &mut host.tasks)?;
-                task.status = StateTaskStatus::Fail(error.clone());
-            }
-        }
-
-        Ok(())
-    }
-}
-
-pub struct ApplyLayout {
-    state: State,
-    render: Box<dyn super::Renderer<State = State, Event = Event>>,
-}
-
-impl ApplyLayout {
-    pub fn new(kind: RenderKind) -> Self {
-        Self::with_mode(RunMode::Apply, kind)
-    }
-
-    pub fn check(kind: RenderKind) -> Self {
-        Self::with_mode(RunMode::Check, kind)
-    }
-
-    fn with_mode(mode: RunMode, kind: RenderKind) -> Self {
-        let render: Box<dyn super::Renderer<State = State, Event = Event>> = match kind {
-            RenderKind::Human => Box::new(HumanRender::default()),
-            RenderKind::Text => Box::new(TextRender),
-            RenderKind::Json { pretty } => Box::new(JsonRender::new(pretty)),
-        };
-
-        Self {
-            state: State::new(mode),
-            render,
-        }
-    }
-}
-
-impl Layout for ApplyLayout {
-    type Event = Event;
-
-    fn begin(&mut self) -> crate::Result {
-        self.render.begin(&self.state)
-    }
-
-    fn handle(&mut self, event: Self::Event) -> crate::Result {
-        self.state.apply(&event)?;
-        self.render.handle(&event, &mut self.state)
-    }
-
-    fn end(&mut self) -> crate::Result {
-        self.render.end(&self.state)
-    }
-}
-
-struct HumanRender {
+pub(super) struct HumanRender {
     multi_progress: indicatif::MultiProgress,
     bars: BTreeMap<String, indicatif::ProgressBar>,
 }
@@ -343,7 +109,7 @@ impl HumanRender {
                 )
                 .map_err(|_| crate::Error::Reporter("Failed to set style".into()))?
                 .progress_chars("#>-")
-                .tick_chars(super::BRAILLE),
+                .tick_chars(crate::report::BRAILLE),
             )
             .with_prefix(host_id.to_string());
 
@@ -362,7 +128,7 @@ impl HumanRender {
                 .bars
                 .get_mut(host_id)
                 .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
-            pb.set_style(pb.style().tick_chars(super::BRAILLE_FAIL).template("{spinner:.red.bright} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}").map_err(|_| crate::Error::Reporter("Failed to create progress style".to_string()))?);
+            pb.set_style(pb.style().tick_chars(crate::report::BRAILLE_FAIL).template("{spinner:.red.bright} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}").map_err(|_| crate::Error::Reporter("Failed to create progress style".to_string()))?);
             pb.abandon_with_message(err_string(error));
         } else {
             self.println(format!("Host {} connected", host_string(host_id)).as_str())?;
@@ -386,12 +152,12 @@ impl HumanRender {
             .ok_or_else(|| crate::Error::Reporter(format!("host {host_id} not found")))?;
         let style = if failed {
             pb.style()
-                .tick_chars(super::BRAILLE_FAIL)
+                .tick_chars(crate::report::BRAILLE_FAIL)
                 .template("{spinner:.red.bright} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}")
                 .map_err(|_| crate::Error::Reporter("Failed to set style".into()))?
         } else {
             pb.style()
-                .tick_chars(super::BRAILLE_SUCCESS)
+                .tick_chars(crate::report::BRAILLE_SUCCESS)
                 .template("{spinner:.green.bright} {prefix:20!.bold.cyan} {bar:40.white.dim} {pos:.white.bright}/{len:.dim} {wide_msg}")
                 .map_err(|_| crate::Error::Reporter("Failed to set style".into()))?
         };
@@ -417,7 +183,7 @@ impl HumanRender {
     }
 }
 
-impl super::Renderer for HumanRender {
+impl crate::report::Renderer for HumanRender {
     type State = State;
     type Event = Event;
 
@@ -472,104 +238,6 @@ impl super::Renderer for HumanRender {
                 self.update_progress(host_id, host.successes(), host.failed(), host.skipped());
             }
         }
-        Ok(())
-    }
-}
-
-struct TextRender;
-impl super::Renderer for TextRender {
-    type State = State;
-    type Event = Event;
-
-    fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result {
-        match event {
-            Event::HostSchedule { host_id, tasks_count } => {
-                println!("Host '{}' scheduled {} task(s)", host_id, tasks_count);
-            }
-            Event::HostConnect { host_id, error } => {
-                if let Some(error) = error {
-                    println!("Host '{}' failed to connect: '{}'", host_id, error);
-                } else {
-                    println!("Host '{}' connected", host_id);
-                }
-            }
-            Event::HostComplete { host_id } => match state.mode {
-                RunMode::Apply => println!("Host '{}' execution complete", host_id),
-                RunMode::Check => println!("Host '{}' check complete", host_id),
-            },
-            Event::TaskSchedule { host_id, task_id } => {
-                println!("Task '{}' scheduled on '{}'", task_id, host_id);
-            }
-            Event::TaskSuccess {
-                host_id,
-                task_id,
-                result,
-            } => match state.mode {
-                RunMode::Apply => {
-                    let change = if result.changed() { "changed" } else { "unchanged" };
-                    if let Some(message) = &result.message {
-                        println!("Task '{}' succeeded on '{}': {}: {}", task_id, host_id, change, message);
-                    } else {
-                        println!("Task '{}' succeeded on '{}': {}", task_id, host_id, change);
-                    }
-                }
-                RunMode::Check => {
-                    if let Some(message) = &result.message {
-                        println!("Task '{}' checked on '{}': {}", task_id, host_id, message);
-                    } else {
-                        println!("Task '{}' checked on '{}': ok", task_id, host_id);
-                    }
-                }
-            },
-            Event::TaskSkip {
-                host_id,
-                task_id,
-                reason,
-            } => {
-                println!(
-                    "Task '{}' skipped on '{}': {}",
-                    task_id,
-                    host_id,
-                    reason.clone().unwrap_or("unknown reason".to_string())
-                );
-            }
-            Event::TaskFail {
-                host_id,
-                task_id,
-                error,
-            } => {
-                println!("Task '{}' failed on '{}': '{}'", task_id, host_id, error);
-            }
-        }
-        Ok(())
-    }
-}
-
-struct JsonRender {
-    pretty: bool,
-}
-impl JsonRender {
-    fn new(pretty: bool) -> Self {
-        Self { pretty }
-    }
-}
-
-impl super::Renderer for JsonRender {
-    type State = State;
-    type Event = Event;
-
-    fn handle(&mut self, _event: &Self::Event, _state: &mut Self::State) -> crate::Result {
-        Ok(())
-    }
-
-    fn end(&mut self, state: &Self::State) -> crate::Result {
-        println!(
-            "{}",
-            match self.pretty {
-                true => serde_json::to_string_pretty(state)?,
-                false => serde_json::to_string(state)?,
-            }
-        );
         Ok(())
     }
 }
