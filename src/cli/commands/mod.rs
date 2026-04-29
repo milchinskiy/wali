@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::IsTerminal;
 
 use super::context::Context;
@@ -50,6 +51,37 @@ fn opt_pretty_json<'a>() -> ap::OptSpec<'a, Context> {
     .long("json-pretty")
     .help("Pretty print JSON")
     .group("json")
+}
+
+fn opt_jobs<'a>() -> ap::OptSpec<'a, Context> {
+    ap::OptSpec::value("jobs", |value: &OsStr, ctx: &mut Context| {
+        if let Ok(jobs) = parse_jobs(value) {
+            ctx.jobs = Some(jobs);
+        }
+    })
+    .long("jobs")
+    .metavar("N")
+    .help("Maximum number of hosts to run concurrently")
+    .validator(validate_jobs)
+}
+
+fn validate_jobs(value: &OsStr) -> Result<(), &'static str> {
+    parse_jobs(value).map(|_| ())
+}
+
+fn parse_jobs(value: &OsStr) -> Result<std::num::NonZeroUsize, &'static str> {
+    let Some(raw) = value.to_str() else {
+        return Err("--jobs must be valid UTF-8");
+    };
+    let jobs = raw.parse::<usize>().map_err(|_| "--jobs must be a positive integer")?;
+    std::num::NonZeroUsize::new(jobs).ok_or("--jobs must be greater than zero")
+}
+
+fn run_options(ctx: &Context) -> Result<wali::launcher::RunOptions, ap::Error> {
+    let Some(jobs) = ctx.jobs else {
+        return Ok(wali::launcher::RunOptions::default());
+    };
+    Ok(wali::launcher::RunOptions::limited(jobs))
 }
 
 fn load_manifest(ctx: &Context) -> Result<wali::manifest::Manifest, ap::Error> {

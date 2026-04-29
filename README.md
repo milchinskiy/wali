@@ -41,6 +41,17 @@ wali --json apply manifest.lua
 wali --json-pretty apply manifest.lua
 ```
 
+`check` and `apply` run hosts concurrently by default. Use `--jobs N` on either
+command to cap host concurrency without changing per-host task order:
+
+```sh
+wali check --jobs 1 manifest.lua
+wali apply --jobs 4 manifest.lua
+```
+
+`--jobs 1` runs hosts serially in manifest order. Tasks within one host always
+run sequentially.
+
 ## Minimal manifest
 
 Hosts may set `command_timeout = "30s"` to provide a default timeout for host

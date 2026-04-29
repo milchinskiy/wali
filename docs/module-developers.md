@@ -709,6 +709,8 @@ Use the CLI layers while developing:
 wali plan manifest.lua
 wali check manifest.lua
 wali apply manifest.lua
+wali check --jobs 1 manifest.lua   # serialize hosts while debugging
+wali apply --jobs 4 manifest.lua   # cap host concurrency
 # run apply again; it should usually be unchanged
 wali apply manifest.lua
 ```

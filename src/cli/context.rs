@@ -6,4 +6,5 @@ pub struct Context {
     pub json: bool,
     pub pretty: bool,
     pub manifest: Option<PathBuf>,
+    pub jobs: Option<std::num::NonZeroUsize>,
 }

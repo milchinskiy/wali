@@ -40,8 +40,10 @@ This split is central. A user should be able to inspect task expansion before
 connecting to anything, then validate against real hosts before applying
 changes.
 
-Hosts may run in parallel. Tasks within one host run sequentially. This keeps
-the per-host mental model imperative while still allowing useful concurrency.
+Hosts may run in parallel. `check --jobs N` and `apply --jobs N` cap the number
+of hosts executing at once; `--jobs 1` runs hosts serially in manifest order.
+Tasks within one host run sequentially. This keeps the per-host mental model
+imperative while still allowing useful concurrency.
 
 ## Boundaries
 
