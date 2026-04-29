@@ -100,6 +100,10 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
             modules::resolve_task_module(&[] as &[modules::ModuleMount], &task.module)?;
         }
 
+        if let Some(when) = &task.when {
+            when.validate(&task.id)?;
+        }
+
         if let Some(depends_on) = &task.depends_on {
             let mut seen = std::collections::HashSet::with_capacity(depends_on.len());
             for dependency in depends_on {

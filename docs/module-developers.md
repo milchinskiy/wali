@@ -339,6 +339,68 @@ For POSIX modes, prefer strings such as `"0644"` in module arguments and convert
 them inside the module or a shared helper. Decimal mode values are hard to read
 in manifests.
 
+## Task `when` predicates
+
+A task may declare `when` when the decision to run the task depends on host
+facts or cheap host probes. Wali evaluates `when` after connecting to the host
+and before module `requires`, schema normalization, `validate`, or `apply`.
+
+```lua
+{
+    id = "install optional config",
+    when = {
+        all = {
+            { os = "linux" },
+            { path_dir = "/etc" },
+            { command_exist = "systemctl" },
+            { ["not"] = { env_set = "WALI_SKIP_SYSTEMD_TASKS" } },
+        },
+    },
+    module = "wali.builtin.file",
+    args = { path = "/tmp/example.conf", content = "managed\n" },
+}
+```
+
+Supported predicates:
+
+```lua
+when = { os = "linux" }
+when = { arch = "x86_64" }
+when = { hostname = "web-1" }
+when = { user = "root" }
+when = { group = "root" }
+when = { env = { "NAME", "value" } }
+when = { env_set = "NAME" }
+when = { path_exist = "/path" }
+when = { path_file = "/path" }
+when = { path_dir = "/path" }
+when = { path_symlink = "/path" }
+when = { command_exist = "tar" }
+```
+
+Predicates can be composed with non-empty `all` and `any` lists and a unary
+`not` predicate. Because `not` is a Lua keyword, quote it as a table key:
+
+```lua
+when = {
+    any = {
+        { command_exist = "curl" },
+        { command_exist = "wget" },
+    },
+}
+
+when = { ["not"] = { env_set = "DISABLE_TASK" } }
+```
+
+`path_file` and `path_dir` follow symlinks, matching ordinary `stat` behavior.
+`path_symlink` inspects the path itself and therefore matches symlinks even when
+the link target is missing. Empty `all`/`any` lists and empty string predicate
+arguments are rejected during manifest validation.
+
+Use task `when` for deployment decisions. Use module `requires` for capabilities
+that the module itself needs regardless of who uses it.
+
+
 ## Requires
 
 `requires` describes host capabilities needed by the module. It is checked by

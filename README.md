@@ -86,6 +86,32 @@ dependency ids are rejected. If a dependency fails or is skipped, its dependents
 are skipped with a dependency-specific reason, while unrelated later tasks
 continue to run. `check` and `apply` use the same dependency semantics.
 
+Tasks may also declare a host-aware `when` predicate. `when` is evaluated after
+the host connection is established and before module `requires`, schema
+normalization, validation, or apply. A task whose predicate does not match is
+reported as skipped and is treated as a skipped dependency for downstream tasks.
+
+```lua
+{
+    id = "write only on Linux with curl",
+    when = {
+        all = {
+            { os = "linux" },
+            { command_exist = "curl" },
+            { path_dir = "/etc" },
+            { ["not"] = { env_set = "SKIP_THIS_TASK" } },
+        },
+    },
+    module = "wali.builtin.file",
+    args = { path = "/tmp/wali-demo/message.txt", content = "managed\n" },
+}
+```
+
+Supported task predicates are `all`, `any`, `not`, `os`, `arch`, `hostname`,
+`user`, `group`, `env`, `env_set`, `path_exist`, `path_file`, `path_dir`,
+`path_symlink`, and `command_exist`. `all` and `any` must contain at least one
+predicate, and string predicate arguments must not be empty.
+
 ## Custom modules
 
 A manifest may load custom modules from local directories or Git repositories.
