@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::spec::account::{Group, Owner, User};
 use crate::spec::runas::PtyMode;
 
+use super::path_semantics::normalize_posix;
 use super::shared::{shell_escape, trim_trailing_newlines};
 use super::{
     ChangeKind, CommandExec, CommandOpts, CommandOutput, CommandStatus, CommandStreams, CopyFileOpts, DirEntry,
@@ -514,17 +515,13 @@ pub(crate) fn remove_dir_via_commands<E>(
 where
     E: CommandExec,
 {
+    validate_remove_dir_target(path)?;
+
     let result_prelude = result_shell_prelude(path)?;
 
     let script = format!(
         r#"{result_prelude}
 path={path}
-case "$path" in
-    ''|'/')
-        echo 'refusing to remove empty path or root directory' >&2
-        exit {invalid}
-        ;;
-esac
 if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     emit_result unchanged
     exit 0
@@ -549,6 +546,18 @@ emit_result removed"#,
         Some(0) => decode_execution_result(stdout_bytes(&output), "remove_dir"),
         _ => Err(command_error("remove_dir", path.as_str(), &output)),
     }
+}
+
+fn validate_remove_dir_target(path: &TargetPath) -> crate::Result<()> {
+    let raw = path.as_str();
+    let normalized = normalize_posix(path);
+    let normalized = normalized.as_str();
+
+    if raw.is_empty() || normalized == "/" || normalized == "." || normalized == ".." || normalized.starts_with("../") {
+        return Err(crate::Error::CommandExec(format!("refusing to remove unsafe directory target: {raw}")));
+    }
+
+    Ok(())
 }
 
 pub(crate) fn mktemp_via_commands<E>(exec: &E, opts: MkTempOpts) -> crate::Result<TargetPath>
@@ -804,6 +813,10 @@ if [ ! -e "$from" ] && [ ! -L "$from" ]; then
     exit {not_found}
 fi
 if [ -e "$to" ] || [ -L "$to" ]; then
+    if [ -d "$to" ]; then
+        echo 'rename destination is an existing directory' >&2
+        exit {invalid}
+    fi
     if [ {replace} -ne 1 ]; then
         emit_result unchanged
         exit 0
@@ -814,6 +827,7 @@ emit_result updated"#,
         from = operand_shell(from),
         to = operand_shell(to),
         not_found = STATUS_NOT_FOUND,
+        invalid = STATUS_INVALID_TARGET,
         replace = i32::from(opts.replace),
     );
 

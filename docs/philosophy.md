@@ -180,7 +180,9 @@ Prefer refusing unclear operations over guessing.
 
 Examples:
 
-- refuse `/` as a remove or tree destination path;
+- refuse `/`, `.`, `..`, and parent-escaping paths as directory removal targets;
+- refuse existing directory destinations in exact-path rename primitives;
+- refuse `/` as a tree destination path;
 - refuse source/destination nesting in tree operations;
 - refuse source symlinks in `copy_file` instead of silently following them;
 - refuse special filesystem entries unless an explicit module option says

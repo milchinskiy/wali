@@ -509,6 +509,12 @@ ctx.host.fs.symlink(target, link_path)
 ctx.host.fs.mktemp(opts)
 ```
 
+Low-level mutation helpers enforce the same safety invariants for builtin and
+custom modules. `remove_dir` refuses empty, root, current-directory,
+parent-directory, and parent-escaping lexical targets before shell execution.
+`rename` is exact-path semantics: an existing directory destination is refused
+instead of being treated like a request to move the source inside that directory.
+
 Use `lstat` when your module owns the path itself. Use `stat` when your module
 intentionally wants the symlink target.
 

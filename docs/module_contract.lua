@@ -31,6 +31,8 @@
 -- apply ctx.host.fs additionally exposes mutation helpers:
 --   write, copy_file, create_dir, remove_file, remove_dir, mktemp, chmod,
 --   chown, rename, symlink
+--   remove_dir refuses unsafe lexical targets such as "/", ".", "..", and "../x".
+--   rename uses exact-path semantics and refuses existing directory destinations.
 --
 -- apply ctx.host.cmd exposes command execution helpers:
 --   exec, shell
