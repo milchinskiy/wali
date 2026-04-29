@@ -42,6 +42,9 @@ return {
         if ctx.sleep_ms ~= nil then
             return fail("validate context must not expose sleep_ms")
         end
+        if ctx.transfer ~= nil then
+            return fail("validate context must not expose transfer")
+        end
         if ctx.host.fs.write ~= nil then
             return fail("validate context must not expose fs.write")
         end

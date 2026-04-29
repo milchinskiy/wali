@@ -1,5 +1,6 @@
 use mlua::{Lua, LuaSerdeExt, String as LuaString, Table, Value as LuaValue};
 use rand::RngExt;
+use std::path::Path;
 
 use crate::executor::{
     Backend, CommandExec, CommandOutput, CommandRequest, CommandStatus, CommandStreams, CopyFileOpts, DirOpts,
@@ -34,6 +35,7 @@ pub fn build_task_ctx(
     transport: &str,
     task: &TaskInstance,
     backend: Backend,
+    base_path: &Path,
     phase: TaskCtxPhase,
 ) -> mlua::Result<Table> {
     let ctx = lua.create_table()?;
@@ -45,9 +47,10 @@ pub fn build_task_ctx(
         ctx.set("run_as", lua.to_value(run_as)?)?;
     }
 
-    ctx.set("host", build_host_table(lua, host_id, transport, backend, phase)?)?;
+    ctx.set("host", build_host_table(lua, host_id, transport, backend.clone(), phase)?)?;
 
     if phase.allows_mutation() {
+        ctx.set("transfer", crate::lua::transfer::build_transfer_table(lua, backend, base_path)?)?;
         ctx.set("rand", build_rand_table(lua)?)?;
         ctx.set(
             "sleep_ms",

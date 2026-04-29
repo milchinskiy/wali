@@ -585,6 +585,54 @@ intentionally wants the symlink target.
 `walk` returns lstat-style metadata. Use `order = "pre"` for parent-before-child
 planning and `order = "post"` for child-before-parent planning.
 
+## Transfer API
+
+`ctx.transfer` is available only during apply. It moves bytes between the wali
+controller process and the effective target host backend. Use it when a module
+needs controller-to-host or host-to-controller file transfer; use
+`ctx.host.fs.copy_file(...)` for same-host copies.
+
+```lua
+ctx.transfer.push_file(src, dest, opts)
+ctx.transfer.pull_file(src, dest, opts)
+```
+
+`push_file` reads `src` from the controller and writes `dest` on the target
+host. `pull_file` reads `src` from the target host and writes `dest` on the
+controller.
+
+Controller-side paths may be absolute or relative. Relative controller paths are
+resolved against manifest `base_path`, which defaults to the manifest directory.
+No project-root boundary is imposed: wali assumes the manifest author controls
+which local files may be read or written.
+
+`push_file` accepts the same write options as `ctx.host.fs.write(...)`:
+
+```lua
+{
+    create_parents = true,
+    replace = true,
+    mode = 420 -- 0644,
+    owner = { user = "root", group = "root" },
+}
+```
+
+`pull_file` accepts local write options only:
+
+```lua
+{
+    create_parents = true,
+    replace = true,
+    mode = 384 -- 0600,
+}
+```
+
+`owner` is not supported for controller-side writes. `pull_file` treats the
+controller-side destination path itself as the managed object: with
+`replace = true`, an existing local symlink is replaced by a regular file; with
+`replace = false`, an existing local symlink is preserved unchanged. Symlinks to
+directories are refused.
+
 ## Command execution
 
 Command execution is available during apply:

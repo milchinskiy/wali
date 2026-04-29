@@ -207,6 +207,8 @@ wali.builtin.file
 wali.builtin.link
 wali.builtin.link_tree
 wali.builtin.permissions
+wali.builtin.pull_file
+wali.builtin.push_file
 wali.builtin.remove
 wali.builtin.touch
 ```

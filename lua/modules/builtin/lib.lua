@@ -229,6 +229,17 @@ function lib.copy_file_opts(args)
 	return opts
 end
 
+function lib.pull_file_opts(args)
+	local opts = {
+		create_parents = args.create_parents,
+		replace = args.replace,
+	}
+	if args.mode ~= nil then
+		opts.mode = lib.mode_bits(args.mode)
+	end
+	return opts
+end
+
 function lib.owner_from_metadata(metadata)
 	if metadata == nil then
 		return nil

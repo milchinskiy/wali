@@ -78,6 +78,16 @@ Ensures a regular file with literal content exists or is absent.
 }
 ```
 
+Behavior when `state = "present"`:
+
+- destination directories and special entries are refused;
+- an existing identical regular file is unchanged unless requested metadata must
+  be updated;
+- an existing symlink destination is preserved unchanged when `replace = false`;
+- an existing symlink destination is replaced with a regular file when
+  `replace = true`, even when the symlink target already has identical content;
+- a symlink destination that resolves to a directory is refused.
+
 For removal:
 
 ```lua
@@ -115,10 +125,80 @@ Behavior:
 
 - `src` must be an existing regular file;
 - source symlinks are refused instead of followed;
-- destination directories and special entries are refused;
+- destination directories, including symlinks to directories, and special entries
+  are refused;
 - an existing identical regular file is unchanged unless requested metadata must
   be updated;
+- an existing symlink destination is preserved unchanged when `replace = false`;
+- an existing symlink destination is replaced with a regular file when
+  `replace = true`, even when the symlink target already has identical content;
 - `mode` overrides `preserve_mode` when both are provided.
+
+## `wali.builtin.push_file`
+
+Transfers one regular file from the wali controller to the target host.
+
+```lua
+{
+    id = "push config",
+    module = "wali.builtin.push_file",
+    args = {
+        src = "./files/example.conf",
+        dest = "/etc/example/example.conf",
+        create_parents = true,
+        replace = true,
+        mode = "0644",
+        owner = { user = "root", group = "root" },
+    },
+}
+```
+
+Behavior:
+
+- `src` is a controller-side path;
+- absolute controller paths are used as-is;
+- relative controller paths are resolved against manifest `base_path`, which
+  defaults to the manifest directory;
+- `src` must resolve to a regular file;
+- `dest` is a target-host path and is written through the effective host
+  backend, including `run_as` when configured;
+- `create_parents`, `replace`, `mode`, and `owner` match
+  `wali.builtin.file` write semantics.
+
+## `wali.builtin.pull_file`
+
+Transfers one regular file from the target host to the wali controller.
+
+```lua
+{
+    id = "pull log snapshot",
+    module = "wali.builtin.pull_file",
+    args = {
+        src = "/var/log/example/current.log",
+        dest = "./logs/current.log",
+        create_parents = true,
+        replace = true,
+        mode = "0600",
+    },
+}
+```
+
+Behavior:
+
+- `src` is a target-host path and is read through the effective host backend;
+- `dest` is a controller-side path;
+- absolute controller paths are used as-is;
+- relative controller paths are resolved against manifest `base_path`, which
+  defaults to the manifest directory;
+- an existing identical local regular file is unchanged unless requested mode
+  bits must be updated;
+- `replace = false` preserves any existing local file or symlink destination and
+  reports unchanged;
+- `replace = true` replaces an existing local symlink destination with a regular
+  file, even when the symlink target already has identical content;
+- local destination directories, including symlinks to directories, and special
+  entries are refused;
+- `owner` is intentionally not supported for local controller writes.
 
 ## `wali.builtin.link`
 

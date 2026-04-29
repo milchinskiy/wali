@@ -19,6 +19,7 @@ pub struct Plan {
 #[derive(Debug, Clone)]
 pub struct HostPlan {
     pub id: String,
+    pub base_path: PathBuf,
     pub transport: Transport,
     pub command_timeout: Option<Duration>,
     pub modules: Vec<crate::manifest::modules::ModuleMount>,
@@ -198,6 +199,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
 
             Ok(HostPlan {
                 id: host.id.clone(),
+                base_path: manifest.base_path.clone(),
                 modules: module_mounts.clone(),
                 transport: host.transport.clone(),
                 command_timeout: host.command_timeout,

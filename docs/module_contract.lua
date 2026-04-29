@@ -144,6 +144,8 @@ return {
 --   wali.builtin.dir
 --   wali.builtin.file
 --   wali.builtin.copy_file
+--   wali.builtin.push_file
+--   wali.builtin.pull_file
 --   wali.builtin.link
 --   wali.builtin.remove
 --   wali.builtin.touch

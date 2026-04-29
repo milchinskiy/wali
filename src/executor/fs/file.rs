@@ -1,7 +1,7 @@
 use crate::common::base64;
 use crate::executor::shared::shell_escape;
 
-use super::super::{ChangeKind, CommandExec, CopyFileOpts, ExecutionResult, TargetPath, WriteOpts};
+use super::super::{CommandExec, CopyFileOpts, ExecutionResult, TargetPath, WriteOpts};
 use super::ownership::render_owner_spec;
 use super::shell::{
     command_error, decode_execution_result, exit_code, operand_shell, parent_path_string, result_shell_prelude,
@@ -75,11 +75,19 @@ trap cleanup EXIT HUP INT TERM
 base64 -d > "$tmp"
 if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     result=created
-else
-    if [ -d "$path" ]; then
-        echo 'target path is a directory' >&2
-        exit {invalid}
+elif [ -d "$path" ]; then
+    echo 'target path is a directory' >&2
+    exit {invalid}
+elif [ -L "$path" ]; then
+    if [ {replace} -ne 1 ]; then
+        emit_result unchanged
+        exit 0
     fi
+    result=updated
+elif [ ! -f "$path" ]; then
+    echo 'target path is a special filesystem entry' >&2
+    exit {invalid}
+else
     if cmp -s -- "$tmp" "$path"; then
         result=unchanged
         if [ -n "$mode" ]; then
@@ -104,7 +112,7 @@ else
 fi
 if [ -n "$mode" ]; then
     chmod -- "$mode" "$tmp"
-elif [ "$result" = created ]; then
+elif [ "$result" = created ] || [ -L "$path" ]; then
     chmod -- "$(default_file_mode)" "$tmp"
 else
     existing_mode=$(mode_of "$path") || exit 125
@@ -143,10 +151,6 @@ pub(crate) fn copy_file_via_commands<E>(
 where
     E: CommandExec,
 {
-    if from == to {
-        return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, to.clone()));
-    }
-
     let parent = parent_path_string(to);
     let owner = render_owner_spec(&opts.owner)?;
     let mode = opts.mode.map(|value| format!("{:o}", value.bits()));
@@ -191,33 +195,41 @@ if [ {create_parents} -eq 1 ]; then
     mkdir -p -- "$parent"
 fi
 if [ -e "$to" ] || [ -L "$to" ]; then
-    if [ -d "$to" ] && [ ! -L "$to" ]; then
+    if [ -d "$to" ]; then
         echo 'copy destination is a directory' >&2
         exit {invalid}
     fi
-    if [ ! -f "$to" ] && [ ! -L "$to" ]; then
-        echo 'copy destination is a special filesystem entry' >&2
-        exit {invalid}
-    fi
-    if [ {replace} -ne 1 ]; then
-        emit_result unchanged
-        exit 0
-    fi
-    result=updated
-    if [ -f "$to" ] && [ ! -L "$to" ] && cmp -s -- "$from" "$to"; then
-        result=unchanged
-        if [ -n "$mode" ]; then
-            apply_mode_if_needed "$mode" "$to"
-        elif [ "$preserve_mode" -eq 1 ]; then
-            source_mode=$(mode_of "$from") || exit 125
-            apply_mode_if_needed "$source_mode" "$to"
+    if [ -L "$to" ]; then
+        if [ {replace} -ne 1 ]; then
+            emit_result unchanged
+            exit 0
         fi
-        if [ -n "$owner" ]; then
-            chown -- "$owner" "$to"
-            result=updated
+        result=updated
+    else
+        if [ ! -f "$to" ]; then
+            echo 'copy destination is a special filesystem entry' >&2
+            exit {invalid}
         fi
-        emit_result "$result"
-        exit 0
+        if cmp -s -- "$from" "$to"; then
+            result=unchanged
+            if [ -n "$mode" ]; then
+                apply_mode_if_needed "$mode" "$to"
+            elif [ "$preserve_mode" -eq 1 ]; then
+                source_mode=$(mode_of "$from") || exit 125
+                apply_mode_if_needed "$source_mode" "$to"
+            fi
+            if [ -n "$owner" ]; then
+                chown -- "$owner" "$to"
+                result=updated
+            fi
+            emit_result "$result"
+            exit 0
+        fi
+        if [ {replace} -ne 1 ]; then
+            emit_result unchanged
+            exit 0
+        fi
+        result=updated
     fi
 else
     result=created

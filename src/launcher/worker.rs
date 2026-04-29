@@ -205,6 +205,7 @@ impl Worker {
                         transport_name(&self.plan.transport),
                         task,
                         backend.clone(),
+                        &self.plan.base_path,
                         crate::lua::api::TaskCtxPhase::Validate,
                     )?;
                     module.validate(lua.lua(), ctx, args)?;
@@ -216,6 +217,7 @@ impl Worker {
                         transport_name(&self.plan.transport),
                         task,
                         backend.clone(),
+                        &self.plan.base_path,
                         crate::lua::api::TaskCtxPhase::Apply,
                     )?;
                     result = module.apply(lua.lua(), ctx, args)?;

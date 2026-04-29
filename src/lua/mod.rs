@@ -2,6 +2,7 @@ use mlua::LuaSerdeExt;
 
 pub mod api;
 pub mod module;
+mod transfer;
 
 pub struct LuaRuntime {
     lua: mlua::Lua,
@@ -48,6 +49,14 @@ impl LuaRuntime {
                 include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy_file.lua")),
             ),
             ("wali.builtin.link", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link.lua"))),
+            (
+                "wali.builtin.push_file",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/push_file.lua")),
+            ),
+            (
+                "wali.builtin.pull_file",
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_file.lua")),
+            ),
             (
                 "wali.builtin.remove",
                 include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/remove.lua")),
