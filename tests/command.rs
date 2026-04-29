@@ -237,6 +237,56 @@ return {{
 }
 
 #[test]
+fn local_pty_command_does_not_wait_for_inherited_pty_handles() {
+    let sandbox = Sandbox::new("local-pty-inherited-output");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(
+        modules.join("pty_handle_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        local out = ctx.host.cmd.shell({ script = "(sleep 5) & printf done", pty = "require" })
+        return api.result.apply()
+            :command("updated", "pty handle probe")
+            :data({ output = out.output })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write PTY handle probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "pty handle probe", module = "pty_handle_probe", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    let started = Instant::now();
+    let report = run_apply(&manifest);
+    assert_eq!(
+        task_result(&report, "pty handle probe")
+            .pointer("/data/output")
+            .and_then(Value::as_str),
+        Some("done")
+    );
+    assert!(started.elapsed() < Duration::from_secs(3), "local PTY command waited for an inherited PTY handle");
+}
+
+#[test]
 fn lua_host_api_unknown_option_fields_are_rejected() {
     let cases = [
         (

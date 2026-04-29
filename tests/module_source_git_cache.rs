@@ -143,6 +143,66 @@ return {{
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn git_module_cache_recovers_stale_lock_with_dead_owner_pid() {
+    if !git_is_available() {
+        eprintln!("skipping git module stale lock test: git executable not available");
+        return;
+    }
+
+    let sandbox = Sandbox::new("git-cache-stale-lock");
+    let repo = sandbox.mkdir("repo");
+    init_git_repo_with_simple_module(&repo, "stale_lock_mod", "from stale lock module\n");
+
+    let target = sandbox.path("target/stale-lock.txt");
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ git = {{ url = {}, ref = "main", path = "mods" }} }},
+    }},
+    tasks = {{
+        {{ id = "write stale lock", module = "stale_lock_mod", args = {{ path = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&repo),
+        lua_string(&target),
+    ));
+
+    let check = run_wali_json_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_unchanged(&check, "write stale lock");
+
+    let checkouts = cache.join("git/checkouts");
+    let checkout_id = std::fs::read_dir(&checkouts)
+        .unwrap_or_else(|error| panic!("failed to read git checkouts cache {}: {error}", checkouts.display()))
+        .filter_map(Result::ok)
+        .find(|entry| entry.path().is_dir())
+        .expect("git checkout was not created")
+        .file_name();
+
+    let lock = cache
+        .join("git/locks")
+        .join(format!("{}.lock", checkout_id.to_string_lossy()));
+    std::fs::create_dir_all(&lock).expect("failed to create simulated stale git cache lock");
+    std::fs::write(lock.join("owner"), "pid = 99999999\n").expect("failed to write simulated stale lock owner");
+
+    let check = run_wali_json_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("WALI_MODULES_CACHE", &cache)],
+    );
+    assert_task_unchanged(&check, "write stale lock");
+    assert!(!lock.exists(), "stale git cache lock should be recovered and removed");
+}
+
+#[test]
 fn git_module_cache_identity_separates_submodule_materialization_modes() {
     if !git_is_available() {
         eprintln!("skipping git module submodule cache identity test: git executable not available");

@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 const DEFAULT_MODULE_GIT_TIMEOUT: Duration = Duration::from_secs(300);
 const GIT_WAIT_INTERVAL: Duration = Duration::from_millis(10);
+const LOCK_OWNER_FILE: &str = "owner";
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -291,31 +292,117 @@ impl ModuleGitLock {
         })?;
         std::fs::create_dir_all(parent)?;
 
-        match std::fs::create_dir(&lock_path) {
-            Ok(()) => {
-                let owner = format!("pid = {}\n", std::process::id());
-                if let Err(error) = std::fs::write(lock_path.join("owner"), owner) {
-                    let _ = std::fs::remove_dir_all(&lock_path);
-                    return Err(error.into());
+        for _ in 0..2 {
+            match std::fs::create_dir(&lock_path) {
+                Ok(()) => {
+                    if let Err(error) = write_lock_owner(&lock_path) {
+                        let _ = std::fs::remove_dir_all(&lock_path);
+                        return Err(error);
+                    }
+                    return Ok(Self { path: lock_path });
                 }
-                Ok(Self { path: lock_path })
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if recover_stale_lock(&lock_path)? {
+                        continue;
+                    }
+                    return Err(lock_busy_error(&lock_path));
+                }
+                Err(error) => return Err(error.into()),
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let owner = std::fs::read_to_string(lock_path.join("owner")).unwrap_or_default();
-                let owner = owner.trim();
-                let owner = if owner.is_empty() {
-                    "owner is unknown".to_string()
-                } else {
-                    owner.to_string()
-                };
-                Err(crate::Error::ModuleSource(format!(
-                    "module git cache is locked by another wali process at {} ({owner})",
-                    lock_path.display()
-                )))
-            }
-            Err(error) => Err(error.into()),
         }
+
+        Err(crate::Error::ModuleSource(format!(
+            "module git cache lock at {} changed while acquiring it; retry the command",
+            lock_path.display()
+        )))
     }
+}
+
+fn write_lock_owner(lock_path: &Path) -> crate::Result {
+    let created_unix_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    let owner = format!("pid = {}\ncreated_unix_ms = {created_unix_ms}\n", std::process::id());
+    std::fs::write(lock_path.join(LOCK_OWNER_FILE), owner)?;
+    Ok(())
+}
+
+fn lock_busy_error(lock_path: &Path) -> crate::Error {
+    let owner = read_lock_owner(lock_path);
+    let owner = if owner.trim().is_empty() {
+        "owner is unknown".to_owned()
+    } else {
+        owner.trim().to_owned()
+    };
+    crate::Error::ModuleSource(format!(
+        "module git cache is locked by another wali process at {} ({owner})",
+        lock_path.display()
+    ))
+}
+
+fn recover_stale_lock(lock_path: &Path) -> crate::Result<bool> {
+    let owner = read_lock_owner(lock_path);
+    if !lock_owner_is_stale(&owner) {
+        return Ok(false);
+    }
+
+    let stale_path = unique_stale_lock_path(lock_path);
+    match std::fs::rename(lock_path, &stale_path) {
+        Ok(()) => {
+            let _ = std::fs::remove_dir_all(&stale_path);
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(crate::Error::ModuleSource(format!(
+            "failed to recover stale module git cache lock at {}: {error}",
+            lock_path.display()
+        ))),
+    }
+}
+
+fn read_lock_owner(lock_path: &Path) -> String {
+    std::fs::read_to_string(lock_path.join(LOCK_OWNER_FILE)).unwrap_or_default()
+}
+
+fn lock_owner_is_stale(owner: &str) -> bool {
+    let Some(pid) = lock_owner_pid(owner) else {
+        return false;
+    };
+
+    process_is_not_running(pid)
+}
+
+fn lock_owner_pid(owner: &str) -> Option<u32> {
+    owner.lines().find_map(|line| {
+        let value = line.trim().strip_prefix("pid =")?.trim();
+        value.parse::<u32>().ok()
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn process_is_not_running(pid: u32) -> bool {
+    if pid == std::process::id() {
+        return false;
+    }
+    !Path::new("/proc").join(pid.to_string()).exists()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn process_is_not_running(_pid: u32) -> bool {
+    false
+}
+
+fn unique_stale_lock_path(lock_path: &Path) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let leaf = lock_path
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("module-git.lock"))
+        .to_string_lossy();
+    lock_path.with_file_name(format!(".{leaf}.stale-{}-{nanos}", std::process::id()))
 }
 
 impl Drop for ModuleGitLock {

@@ -15,6 +15,9 @@ use crate::executor::{
 
 use super::LocalExecutor;
 
+const LOCAL_WAIT_INTERVAL: Duration = Duration::from_millis(10);
+const LOCAL_PTY_EXIT_DRAIN: Duration = Duration::from_millis(100);
+
 impl CommandExec for LocalExecutor {
     fn exec(&self, req: &CommandRequest) -> crate::Result<CommandOutput> {
         let req = req.with_default_timeout(self.default_command_timeout());
@@ -80,22 +83,23 @@ fn exec_local_run_as(
     let mut eof_sent = false;
     let mut saw_eof = false;
     let mut final_status = None;
+    let mut exit_drain_deadline = None;
 
     loop {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(crate::Error::CommandTimeout(format!("local run_as command timed out: {desc}")));
+        }
+
         if final_status.is_none() {
-            let timed_out = deadline.is_some_and(|deadline| Instant::now() >= deadline);
-            match child.try_wait()? {
-                Some(status) => final_status = Some(CommandStatus::Exited(status.exit_code() as i32)),
-                None if timed_out => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(crate::Error::CommandTimeout(format!("local run_as command timed out: {desc}")));
-                }
-                None => {}
+            if let Some(status) = child.try_wait()? {
+                final_status = Some(CommandStatus::Exited(status.exit_code() as i32));
+                exit_drain_deadline = Some(Instant::now() + LOCAL_PTY_EXIT_DRAIN);
             }
         }
 
-        match rx.recv_timeout(Duration::from_millis(10)) {
+        match rx.recv_timeout(LOCAL_WAIT_INTERVAL) {
             Ok(LocalPtyEvent::Data(chunk)) => {
                 let events = processor.push(&chunk);
 
@@ -139,18 +143,21 @@ fn exec_local_run_as(
             Err(mpsc::RecvTimeoutError::Disconnected) => saw_eof = true,
         }
 
-        if final_status.is_some() && saw_eof {
+        if final_status.is_some() && (saw_eof || exit_drain_deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        {
             break;
         }
     }
 
-    match reader_handle.join() {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => {
-            return Err(crate::Error::CommandExec(format!("local run_as PTY reader failed for {}: {err}", desc)));
-        }
-        Err(_) => {
-            return Err(crate::Error::CommandExec(format!("local run_as PTY reader thread panicked for {}", desc)));
+    if saw_eof {
+        match reader_handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                return Err(crate::Error::CommandExec(format!("local run_as PTY reader failed for {}: {err}", desc)));
+            }
+            Err(_) => {
+                return Err(crate::Error::CommandExec(format!("local run_as PTY reader thread panicked for {}", desc)));
+            }
         }
     }
 
@@ -245,6 +252,7 @@ fn exec_local_piped(req: &CommandRequest) -> crate::Result<CommandOutput> {
 }
 
 fn exec_local_pty(req: &CommandRequest) -> crate::Result<CommandOutput> {
+    let desc = describe_request(req);
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -253,55 +261,97 @@ fn exec_local_pty(req: &CommandRequest) -> crate::Result<CommandOutput> {
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|err| {
-            crate::Error::CommandExec(format!("failed to allocate local PTY for {}: {err}", describe_request(req)))
-        })?;
+        .map_err(|err| crate::Error::CommandExec(format!("failed to allocate local PTY for {desc}: {err}")))?;
 
     let mut builder = build_local_pty_command(req);
     builder.set_controlling_tty(true);
 
     let master = pair.master;
     let slave = pair.slave;
-    let mut child = slave.spawn_command(builder).map_err(|err| {
-        crate::Error::CommandExec(format!("failed to spawn local PTY command for {}: {err}", describe_request(req)))
-    })?;
+    let mut child = slave
+        .spawn_command(builder)
+        .map_err(|err| crate::Error::CommandExec(format!("failed to spawn local PTY command for {desc}: {err}")))?;
     drop(slave);
 
-    let reader = master.try_clone_reader().map_err(|err| {
-        crate::Error::CommandExec(format!("failed to clone local PTY reader for {}: {err}", describe_request(req)))
-    })?;
-    let writer = if req.opts.stdin.is_some() {
-        Some(master.take_writer().map_err(|err| {
-            crate::Error::CommandExec(format!("failed to clone local PTY writer for {}: {err}", describe_request(req)))
-        })?)
-    } else {
-        None
-    };
+    let reader = master
+        .try_clone_reader()
+        .map_err(|err| crate::Error::CommandExec(format!("failed to clone local PTY reader for {desc}: {err}")))?;
+    let writer =
+        if req.opts.stdin.is_some() {
+            Some(master.take_writer().map_err(|err| {
+                crate::Error::CommandExec(format!("failed to take local PTY writer for {desc}: {err}"))
+            })?)
+        } else {
+            None
+        };
     drop(master);
 
-    let stdin_handle = spawn_pty_stdin(writer, req.opts.stdin.clone(), describe_request(req));
-    let output_handle = thread::spawn(move || -> std::io::Result<Vec<u8>> {
-        let mut reader = reader;
-        let mut buf = Vec::new();
-        reader.read_to_end(&mut buf)?;
-        Ok(buf)
-    });
+    let (output_tx, output_rx) = mpsc::channel();
+    let reader_desc = desc.clone();
+    let reader_handle = thread::spawn(move || run_pty_reader(reader, output_tx, reader_desc));
+    let stdin_rx = spawn_pty_stdin(writer, req.opts.stdin.clone(), desc.clone());
 
-    let status = wait_for_portable_child(child.as_mut(), req.opts.timeout, describe_request(req))?;
+    let deadline = req.opts.timeout.map(|timeout| Instant::now() + timeout);
+    let mut combined = Vec::new();
+    let mut final_status = None;
+    let mut saw_eof = false;
+    let mut exit_drain_deadline = None;
+    let mut stdin_done = stdin_rx.is_none();
 
-    join_stdin(stdin_handle, describe_request(req))?;
-    let combined = match output_handle.join() {
-        Ok(result) => result.map_err(crate::Error::from)?,
-        Err(_) => {
-            return Err(crate::Error::CommandExec(format!(
-                "local PTY reader thread panicked for {}",
-                describe_request(req)
-            )));
+    loop {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(crate::Error::CommandTimeout(format!("local PTY command timed out: {desc}")));
         }
-    };
+
+        if final_status.is_none() {
+            if let Some(status) = child.try_wait()? {
+                final_status = Some(CommandStatus::Exited(status.exit_code() as i32));
+                exit_drain_deadline = Some(Instant::now() + LOCAL_PTY_EXIT_DRAIN);
+            }
+        }
+
+        if !stdin_done {
+            if let Some(receiver) = &stdin_rx {
+                stdin_done = poll_pty_stdin(receiver, &desc)?.is_some();
+            }
+        }
+
+        match output_rx.recv_timeout(LOCAL_WAIT_INTERVAL) {
+            Ok(LocalPtyEvent::Data(chunk)) => {
+                combined.extend_from_slice(&chunk);
+            }
+            Ok(LocalPtyEvent::Eof) => saw_eof = true,
+            Ok(LocalPtyEvent::Error(err)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(crate::Error::CommandExec(format!("failed to read local PTY output for {desc}: {err}")));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => saw_eof = true,
+        }
+
+        if final_status.is_some() && (saw_eof || exit_drain_deadline.is_some_and(|deadline| Instant::now() >= deadline))
+        {
+            break;
+        }
+    }
+
+    if saw_eof {
+        match reader_handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                return Err(crate::Error::CommandExec(format!("local PTY reader failed for {desc}: {err}")));
+            }
+            Err(_) => {
+                return Err(crate::Error::CommandExec(format!("local PTY reader thread panicked for {desc}")));
+            }
+        }
+    }
 
     Ok(CommandOutput {
-        status,
+        status: final_status.unwrap_or(CommandStatus::Unknown),
         streams: CommandStreams::Combined(combined),
     })
 }
@@ -368,9 +418,14 @@ fn spawn_pty_stdin(
     writer: Option<Box<dyn Write + Send>>,
     stdin_bytes: Option<Vec<u8>>,
     desc: String,
-) -> Option<thread::JoinHandle<std::io::Result<()>>> {
-    match (writer, stdin_bytes) {
-        (Some(mut writer), Some(data)) => Some(thread::spawn(move || {
+) -> Option<mpsc::Receiver<std::io::Result<()>>> {
+    let (Some(mut writer), Some(data)) = (writer, stdin_bytes) else {
+        return None;
+    };
+
+    let (tx, rx) = mpsc::channel();
+    let _ = thread::spawn(move || {
+        let result = (|| {
             match writer.write_all(&data) {
                 Ok(()) => {}
                 Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => return Ok(()),
@@ -389,8 +444,21 @@ fn spawn_pty_stdin(
                     Err(std::io::Error::new(err.kind(), format!("failed to flush PTY stdin for {desc}: {err}")))
                 }
             }
-        })),
-        _ => None,
+        })();
+        let _ = tx.send(result);
+    });
+
+    Some(rx)
+}
+
+fn poll_pty_stdin(receiver: &mpsc::Receiver<std::io::Result<()>>, desc: &str) -> crate::Result<Option<()>> {
+    match receiver.try_recv() {
+        Ok(Ok(())) => Ok(Some(())),
+        Ok(Err(err)) => Err(crate::Error::CommandExec(format!("local PTY stdin writer failed for {desc}: {err}"))),
+        Err(mpsc::TryRecvError::Empty) => Ok(None),
+        Err(mpsc::TryRecvError::Disconnected) => {
+            Err(crate::Error::CommandExec(format!("local PTY stdin writer thread terminated unexpectedly for {desc}")))
+        }
     }
 }
 
@@ -401,22 +469,6 @@ fn wait_for_child(child: &mut Child, timeout: Option<Duration>, desc: String) ->
             let _ = child.kill();
             let _ = child.wait();
             Err(crate::Error::CommandTimeout(format!("local command timed out: {desc}")))
-        }
-        None => Ok(None),
-    })
-}
-
-fn wait_for_portable_child(
-    child: &mut (dyn portable_pty::Child + Send + Sync),
-    timeout: Option<Duration>,
-    desc: String,
-) -> crate::Result<CommandStatus> {
-    wait_loop(timeout, |timed_out| match child.try_wait()? {
-        Some(status) => Ok(Some(CommandStatus::Exited(status.exit_code() as i32))),
-        None if timed_out => {
-            let _ = child.kill();
-            let _ = child.wait();
-            Err(crate::Error::CommandTimeout(format!("local PTY command timed out: {desc}")))
         }
         None => Ok(None),
     })
@@ -433,21 +485,8 @@ where
         if let Some(status) = step(timed_out)? {
             return Ok(status);
         }
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(LOCAL_WAIT_INTERVAL);
     }
-}
-
-fn join_stdin(handle: Option<thread::JoinHandle<std::io::Result<()>>>, desc: String) -> crate::Result {
-    if let Some(handle) = handle {
-        match handle.join() {
-            Ok(result) => result.map_err(crate::Error::from)?,
-            Err(_) => {
-                return Err(crate::Error::CommandExec(format!("stdin writer thread panicked for {desc}")));
-            }
-        }
-    }
-
-    Ok(())
 }
 
 #[cfg(unix)]
