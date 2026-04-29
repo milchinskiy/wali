@@ -37,6 +37,7 @@ modules = {
             path = "modules",
             depth = 1,
             submodules = false,
+            timeout = "5m",
         },
     },
 }
@@ -136,6 +137,8 @@ Git fields:
 - `path` is optional, relative to the checkout root, and must not contain parent
   directory components;
 - `depth` is optional and must be greater than zero when set;
+- `timeout` is optional, uses the same human duration syntax as command
+  timeouts, must be greater than zero when set, and defaults to `5m`;
 - `submodules = true` materializes submodules with
   `git submodule update --init --recursive --force` after checkout.
 
@@ -144,13 +147,19 @@ wali uses `$XDG_DATA_HOME/wali/modules`, falling back to
 `~/.local/share/wali/modules`.
 
 Checkout identity is based on the Git URL, ref, and submodule materialization
-mode. The manifest namespace, repository leaf name, `git.path`, and `depth` are
-not checkout identity. `git.path` only selects the include root inside the
-checkout; `depth` only changes how the requested ref is fetched.
+mode. The manifest namespace, repository leaf name, `git.path`, `depth`, and
+`timeout` are not checkout identity. `git.path` only selects the include root
+inside the checkout; `depth` only changes how the requested ref is fetched;
+`timeout` only bounds the system `git` processes used during preparation.
 
 `check` and `apply` hold a process-level cache lock for every Git source until
 execution finishes. This prevents another wali process from resetting or
 cleaning the same checkout while task runtimes are loading module files.
+
+Every system `git` process is run with `GIT_TERMINAL_PROMPT=0`, null stdin, and
+a bounded timeout. A timeout kills the Git child process, waits for it, and
+fails source preparation with a `Module source error` that names the timed-out
+Git command.
 
 Pin a commit for reproducible module code. Branch names are intentionally
 mutable because they are resolved by Git at fetch time.
@@ -528,7 +537,8 @@ names must match `[A-Za-z_][A-Za-z0-9_]*`. Empty programs, empty shell scripts,
 and zero-duration timeouts are rejected.
 
 If a command request omits `timeout`, Wali uses the host-level
-`command_timeout` default when it is configured. An explicit request timeout
+`command_timeout` default when it is configured. The same host default bounds
+the initial fact probe performed during connection. An explicit request timeout
 always overrides the host default.
 
 Command output uses split streams by default:

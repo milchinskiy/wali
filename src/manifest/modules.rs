@@ -1,8 +1,14 @@
 use std::ffi::{OsStr, OsString};
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::de::{self, Deserialize, Deserializer};
+
+const DEFAULT_MODULE_GIT_TIMEOUT: Duration = Duration::from_secs(300);
+const GIT_WAIT_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -15,6 +21,8 @@ pub struct ModuleGit {
     pub depth: Option<u32>,
     #[serde(default)]
     pub submodules: bool,
+    #[serde(default, with = "serde_ext_duration::opt::human")]
+    pub timeout: Option<Duration>,
 }
 
 impl ModuleGit {
@@ -138,12 +146,23 @@ impl ModuleGit {
         if self.depth == Some(0) {
             return Err(crate::Error::InvalidManifest(format!("module git source '{}' has invalid depth 0", self.url)));
         }
+        if self.timeout.is_some_and(|timeout| timeout.is_zero()) {
+            return Err(crate::Error::InvalidManifest(format!(
+                "module git source '{}' timeout must be greater than zero",
+                self.url
+            )));
+        }
         Ok(())
+    }
+
+    fn operation_timeout(&self) -> Duration {
+        self.timeout.unwrap_or(DEFAULT_MODULE_GIT_TIMEOUT)
     }
 
     fn prepare(&self) -> crate::Result {
         self.validate()?;
 
+        let timeout = self.operation_timeout();
         let cache_path = self.cache_path()?;
         let include_path = self.include_path()?;
 
@@ -154,11 +173,11 @@ impl ModuleGit {
                     cache_path.display()
                 )));
             }
-            ensure_git_worktree(&cache_path)?;
+            ensure_git_worktree(&cache_path, timeout)?;
             ensure_source_metadata(&cache_path, &self.source_metadata()?)?;
-            set_origin_url(&cache_path, self.checked_url()?)?;
-            self.fetch_checkout(&cache_path)?;
-            self.update_submodules(&cache_path)?;
+            set_origin_url(&cache_path, self.checked_url()?, timeout)?;
+            self.fetch_checkout(&cache_path, timeout)?;
+            self.update_submodules(&cache_path, timeout)?;
             write_source_metadata(&cache_path, &self.source_metadata()?)?;
             ensure_include_dir(&include_path)?;
             return Ok(());
@@ -175,14 +194,17 @@ impl ModuleGit {
         let tmp_path = unique_tmp_path(parent, cache_path.file_name().unwrap_or_else(|| OsStr::new("repo")));
         let result = (|| {
             std::fs::create_dir(&tmp_path)?;
-            run_git(vec![
-                OsString::from("init"),
-                OsString::from("--quiet"),
-                tmp_path.as_os_str().to_os_string(),
-            ])?;
-            set_origin_url(&tmp_path, self.checked_url()?)?;
-            self.fetch_checkout(&tmp_path)?;
-            self.update_submodules(&tmp_path)?;
+            run_git(
+                vec![
+                    OsString::from("init"),
+                    OsString::from("--quiet"),
+                    tmp_path.as_os_str().to_os_string(),
+                ],
+                timeout,
+            )?;
+            set_origin_url(&tmp_path, self.checked_url()?, timeout)?;
+            self.fetch_checkout(&tmp_path, timeout)?;
+            self.update_submodules(&tmp_path, timeout)?;
             write_source_metadata(&tmp_path, &self.source_metadata()?)?;
             ensure_include_dir(&include_path_at(&tmp_path, self.checked_path()?))?;
             Ok::<_, crate::Error>(())
@@ -204,7 +226,7 @@ impl ModuleGit {
         }
     }
 
-    fn fetch_checkout(&self, repo: &Path) -> crate::Result {
+    fn fetch_checkout(&self, repo: &Path, timeout: Duration) -> crate::Result {
         let mut args = vec![
             OsString::from("-C"),
             repo.as_os_str().to_os_string(),
@@ -218,22 +240,25 @@ impl ModuleGit {
         }
         args.push(OsString::from("origin"));
         args.push(OsString::from(self.checked_ref()?));
-        run_git(args)?;
-        run_git(vec![
-            OsString::from("-C"),
-            repo.as_os_str().to_os_string(),
-            OsString::from("checkout"),
-            OsString::from("--quiet"),
-            OsString::from("--detach"),
-            OsString::from("--force"),
-            OsString::from("FETCH_HEAD"),
-        ])?;
-        clean_worktree(repo)
+        run_git(args, timeout)?;
+        run_git(
+            vec![
+                OsString::from("-C"),
+                repo.as_os_str().to_os_string(),
+                OsString::from("checkout"),
+                OsString::from("--quiet"),
+                OsString::from("--detach"),
+                OsString::from("--force"),
+                OsString::from("FETCH_HEAD"),
+            ],
+            timeout,
+        )?;
+        clean_worktree(repo, timeout)
     }
 
-    fn update_submodules(&self, repo: &Path) -> crate::Result {
+    fn update_submodules(&self, repo: &Path, timeout: Duration) -> crate::Result {
         if !self.submodules {
-            return deinit_submodules(repo);
+            return deinit_submodules(repo, timeout);
         }
 
         let mut args = vec![
@@ -248,7 +273,7 @@ impl ModuleGit {
         if let Some(depth) = self.depth {
             args.push(OsString::from(format!("--depth={depth}")));
         }
-        run_git(args)
+        run_git(args, timeout)
     }
 }
 
@@ -438,6 +463,10 @@ impl Module {
 pub fn validate_sources(modules: &[Module]) -> crate::Result {
     let mut namespaces = Vec::new();
     for module in modules {
+        if let Some(git) = module.git() {
+            git.validate()?;
+        }
+
         let Some(namespace) = module.namespace() else {
             continue;
         };
@@ -760,64 +789,81 @@ fn http_url_has_userinfo(url: &str) -> bool {
     authority.contains('@')
 }
 
-fn set_origin_url(repo: &Path, url: &str) -> crate::Result {
-    let remote_exists = run_git(vec![
-        OsString::from("-C"),
-        repo.as_os_str().to_os_string(),
-        OsString::from("remote"),
-        OsString::from("get-url"),
-        OsString::from("origin"),
-    ])
-    .is_ok();
+fn set_origin_url(repo: &Path, url: &str, timeout: Duration) -> crate::Result {
+    let remote_exists = git_status(
+        vec![
+            OsString::from("-C"),
+            repo.as_os_str().to_os_string(),
+            OsString::from("remote"),
+            OsString::from("get-url"),
+            OsString::from("origin"),
+        ],
+        timeout,
+    )?;
 
     if remote_exists {
-        run_git(vec![
-            OsString::from("-C"),
-            repo.as_os_str().to_os_string(),
-            OsString::from("remote"),
-            OsString::from("set-url"),
-            OsString::from("origin"),
-            OsString::from(url),
-        ])
+        run_git(
+            vec![
+                OsString::from("-C"),
+                repo.as_os_str().to_os_string(),
+                OsString::from("remote"),
+                OsString::from("set-url"),
+                OsString::from("origin"),
+                OsString::from(url),
+            ],
+            timeout,
+        )
     } else {
-        run_git(vec![
-            OsString::from("-C"),
-            repo.as_os_str().to_os_string(),
-            OsString::from("remote"),
-            OsString::from("add"),
-            OsString::from("origin"),
-            OsString::from(url),
-        ])
+        run_git(
+            vec![
+                OsString::from("-C"),
+                repo.as_os_str().to_os_string(),
+                OsString::from("remote"),
+                OsString::from("add"),
+                OsString::from("origin"),
+                OsString::from(url),
+            ],
+            timeout,
+        )
     }
 }
 
-fn deinit_submodules(repo: &Path) -> crate::Result {
-    run_git(vec![
-        OsString::from("-C"),
-        repo.as_os_str().to_os_string(),
-        OsString::from("submodule"),
-        OsString::from("deinit"),
-        OsString::from("--all"),
-        OsString::from("--force"),
-    ])
+fn deinit_submodules(repo: &Path, timeout: Duration) -> crate::Result {
+    run_git(
+        vec![
+            OsString::from("-C"),
+            repo.as_os_str().to_os_string(),
+            OsString::from("submodule"),
+            OsString::from("deinit"),
+            OsString::from("--all"),
+            OsString::from("--force"),
+        ],
+        timeout,
+    )
 }
 
-fn clean_worktree(repo: &Path) -> crate::Result {
-    run_git(vec![
-        OsString::from("-C"),
-        repo.as_os_str().to_os_string(),
-        OsString::from("reset"),
-        OsString::from("--hard"),
-        OsString::from("--quiet"),
-        OsString::from("HEAD"),
-    ])?;
-    run_git(vec![
-        OsString::from("-C"),
-        repo.as_os_str().to_os_string(),
-        OsString::from("clean"),
-        OsString::from("-ffdx"),
-        OsString::from("--quiet"),
-    ])
+fn clean_worktree(repo: &Path, timeout: Duration) -> crate::Result {
+    run_git(
+        vec![
+            OsString::from("-C"),
+            repo.as_os_str().to_os_string(),
+            OsString::from("reset"),
+            OsString::from("--hard"),
+            OsString::from("--quiet"),
+            OsString::from("HEAD"),
+        ],
+        timeout,
+    )?;
+    run_git(
+        vec![
+            OsString::from("-C"),
+            repo.as_os_str().to_os_string(),
+            OsString::from("clean"),
+            OsString::from("-ffdx"),
+            OsString::from("--quiet"),
+        ],
+        timeout,
+    )
 }
 
 fn unique_tmp_path(parent: &Path, leaf: &OsStr) -> PathBuf {
@@ -866,13 +912,16 @@ fn write_source_metadata(repo: &Path, expected: &str) -> crate::Result {
     Ok(())
 }
 
-fn ensure_git_worktree(path: &Path) -> crate::Result {
-    let output = git_output(vec![
-        OsString::from("-C"),
-        path.as_os_str().to_os_string(),
-        OsString::from("rev-parse"),
-        OsString::from("--is-inside-work-tree"),
-    ])?;
+fn ensure_git_worktree(path: &Path, timeout: Duration) -> crate::Result {
+    let output = git_output(
+        vec![
+            OsString::from("-C"),
+            path.as_os_str().to_os_string(),
+            OsString::from("rev-parse"),
+            OsString::from("--is-inside-work-tree"),
+        ],
+        timeout,
+    )?;
     if output.trim() == "true" {
         Ok(())
     } else {
@@ -880,12 +929,12 @@ fn ensure_git_worktree(path: &Path) -> crate::Result {
     }
 }
 
-fn git_output<I, S>(args: I) -> crate::Result<String>
+fn git_output<I, S>(args: I, timeout: Duration) -> crate::Result<String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = git_command(args).output().map_err(git_exec_error)?;
+    let output = git_command_output(args, timeout)?;
 
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
@@ -894,12 +943,12 @@ where
     Err(git_error(output))
 }
 
-fn run_git<I, S>(args: I) -> crate::Result
+fn run_git<I, S>(args: I, timeout: Duration) -> crate::Result
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = git_command(args).output().map_err(git_exec_error)?;
+    let output = git_command_output(args, timeout)?;
 
     if output.status.success() {
         Ok(())
@@ -908,21 +957,154 @@ where
     }
 }
 
-fn git_command<I, S>(args: I) -> Command
+fn git_status<I, S>(args: I, timeout: Duration) -> crate::Result<bool>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    Ok(git_command_output(args, timeout)?.status.success())
+}
+
+fn git_command_output<I, S>(args: I, timeout: Duration) -> crate::Result<Output>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let args = args
+        .into_iter()
+        .map(|arg| arg.as_ref().to_os_string())
+        .collect::<Vec<_>>();
+    let desc = describe_git_command(&args);
+    let mut command = git_command(&args);
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = command.spawn().map_err(|error| git_exec_error(&desc, error))?;
+    let stdout = spawn_git_reader("stdout", child.stdout.take(), desc.clone());
+    let stderr = spawn_git_reader("stderr", child.stderr.take(), desc.clone());
+    let started = Instant::now();
+
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() >= timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = join_git_reader(stdout, "stdout", &desc);
+                let _ = join_git_reader(stderr, "stderr", &desc);
+                return Err(crate::Error::ModuleSource(format!(
+                    "git command timed out after {}: {desc}",
+                    format_duration(timeout)
+                )));
+            }
+            Ok(None) => thread::sleep(GIT_WAIT_INTERVAL),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = join_git_reader(stdout, "stdout", &desc);
+                let _ = join_git_reader(stderr, "stderr", &desc);
+                return Err(crate::Error::ModuleSource(format!("failed to wait for git command {desc}: {error}")));
+            }
+        }
+    };
+
+    Ok(Output {
+        status,
+        stdout: join_git_reader(stdout, "stdout", &desc)?,
+        stderr: join_git_reader(stderr, "stderr", &desc)?,
+    })
+}
+
+fn git_command(args: &[OsString]) -> Command {
     let mut command = Command::new("git");
     command.args(args).stdin(Stdio::null()).env("GIT_TERMINAL_PROMPT", "0");
     command
 }
 
-fn git_exec_error(error: std::io::Error) -> crate::Error {
-    crate::Error::ModuleSource(format!("failed to execute git: {error}"))
+fn spawn_git_reader(
+    stream_name: &'static str,
+    stream: Option<impl Read + Send + 'static>,
+    desc: String,
+) -> thread::JoinHandle<std::io::Result<Vec<u8>>> {
+    thread::spawn(move || {
+        let Some(mut stream) = stream else {
+            return Ok(Vec::new());
+        };
+        let mut bytes = Vec::new();
+        stream.read_to_end(&mut bytes).map_err(|error| {
+            std::io::Error::new(error.kind(), format!("failed to read git {stream_name} for {desc}: {error}"))
+        })?;
+        Ok(bytes)
+    })
 }
 
-fn git_error(output: std::process::Output) -> crate::Error {
+fn join_git_reader(
+    reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
+    stream_name: &str,
+    desc: &str,
+) -> crate::Result<Vec<u8>> {
+    match reader.join() {
+        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Err(error)) => Err(crate::Error::ModuleSource(error.to_string())),
+        Err(_) => Err(crate::Error::ModuleSource(format!("git {stream_name} reader thread panicked for {desc}"))),
+    }
+}
+
+fn describe_git_command(args: &[OsString]) -> String {
+    let mut parts = Vec::with_capacity(args.len() + 1);
+    parts.push("git".to_string());
+    parts.extend(args.iter().map(|arg| shell_like(arg.as_os_str())));
+    parts.join(" ")
+}
+
+fn shell_like(value: &OsStr) -> String {
+    let value = value.to_string_lossy();
+    if value.is_empty() {
+        return "''".to_string();
+    }
+    if value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'/' | b':' | b'@' | b'='))
+    {
+        return value.into_owned();
+    }
+
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('\'');
+    for ch in value.chars() {
+        if ch == '\'' {
+            quoted.push_str("'\\''");
+        } else {
+            quoted.push(ch);
+        }
+    }
+    quoted.push('\'');
+    quoted
+}
+
+fn format_duration(duration: Duration) -> String {
+    let secs = duration.as_secs();
+    let millis = duration.subsec_millis();
+
+    if secs == 0 {
+        return format!("{}ms", millis.max(1));
+    }
+
+    let minutes = secs / 60;
+    let seconds = secs % 60;
+    match (minutes, seconds, millis) {
+        (0, seconds, 0) => format!("{seconds}s"),
+        (0, seconds, millis) => format!("{seconds}.{millis:03}s"),
+        (minutes, 0, 0) => format!("{minutes}m"),
+        (minutes, seconds, 0) => format!("{minutes}m{seconds}s"),
+        (minutes, seconds, millis) => format!("{minutes}m{seconds}.{millis:03}s"),
+    }
+}
+
+fn git_exec_error(desc: &str, error: std::io::Error) -> crate::Error {
+    crate::Error::ModuleSource(format!("failed to execute git command {desc}: {error}"))
+}
+
+fn git_error(output: Output) -> crate::Error {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let message = match (stdout.is_empty(), stderr.is_empty()) {

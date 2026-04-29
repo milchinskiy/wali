@@ -45,7 +45,7 @@ impl super::SshExecutor {
             session.set_keepalive(false, duration_to_keepalive_secs(interval));
         }
 
-        let facts = probe_initial_facts(&session)?;
+        let facts = probe_initial_facts(&session, default_command_timeout)?;
 
         session.set_timeout(0);
 
@@ -269,8 +269,32 @@ impl ssh2::KeyboardInteractivePrompt for StaticPasswordPrompt<'_> {
     }
 }
 
-fn probe_initial_facts(session: &ssh2::Session) -> crate::Result<FactCache> {
+fn probe_initial_facts(session: &ssh2::Session, timeout: Option<Duration>) -> crate::Result<FactCache> {
+    let _timeout = SessionTimeoutGuard::set(session, timeout);
     parse_initial_facts(&exec_stdout(session, INITIAL_FACTS_SCRIPT)?)
+}
+
+struct SessionTimeoutGuard<'a> {
+    session: &'a ssh2::Session,
+    previous_timeout_ms: u32,
+}
+
+impl<'a> SessionTimeoutGuard<'a> {
+    fn set(session: &'a ssh2::Session, timeout: Option<Duration>) -> Option<Self> {
+        let timeout = timeout?;
+        let previous_timeout_ms = session.timeout();
+        session.set_timeout(duration_to_timeout_ms(timeout));
+        Some(Self {
+            session,
+            previous_timeout_ms,
+        })
+    }
+}
+
+impl Drop for SessionTimeoutGuard<'_> {
+    fn drop(&mut self) {
+        self.session.set_timeout(self.previous_timeout_ms);
+    }
 }
 
 fn duration_to_timeout_ms(duration: Duration) -> u32 {

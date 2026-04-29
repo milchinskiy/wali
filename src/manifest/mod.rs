@@ -79,6 +79,9 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
                 host.id
             )));
         }
+        if let crate::spec::host::Transport::Ssh(ssh) = &host.transport {
+            ssh.validate(&host.id)?;
+        }
     }
 
     let mut task_id_set = std::collections::HashSet::with_capacity(manifest.tasks.len());

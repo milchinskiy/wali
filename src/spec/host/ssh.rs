@@ -41,6 +41,31 @@ pub struct Connection {
     pub keepalive_interval: Option<Duration>,
 }
 
+impl Connection {
+    pub fn validate(&self, host_id: &str) -> crate::Result {
+        if self.user.trim().is_empty() {
+            return Err(crate::Error::InvalidManifest(format!("Host '{host_id}' ssh user must not be empty")));
+        }
+        if self.host.trim().is_empty() {
+            return Err(crate::Error::InvalidManifest(format!("Host '{host_id}' ssh host must not be empty")));
+        }
+        if self.port == 0 {
+            return Err(crate::Error::InvalidManifest(format!("Host '{host_id}' ssh port must be greater than zero")));
+        }
+        if self.connect_timeout.is_some_and(|timeout| timeout.is_zero()) {
+            return Err(crate::Error::InvalidManifest(format!(
+                "Host '{host_id}' ssh connect_timeout must be greater than zero"
+            )));
+        }
+        if self.keepalive_interval.is_some_and(|interval| interval.is_zero()) {
+            return Err(crate::Error::InvalidManifest(format!(
+                "Host '{host_id}' ssh keepalive_interval must be greater than zero"
+            )));
+        }
+        Ok(())
+    }
+}
+
 fn default_ssh_port() -> u16 {
     22
 }

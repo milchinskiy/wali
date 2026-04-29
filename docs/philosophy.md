@@ -74,6 +74,8 @@ Git module preparation should use the system `git` executable. The local Git
 cache is an implementation detail, not a host state backend and not part of
 convergence. Git cache locks must protect checkouts for the full `check` or
 `apply` execution, because module files may be loaded after the initial fetch.
+Every Git child process must be bounded by timeout, must not read from
+interactive stdin, and must not prompt through Git's terminal credential flow.
 
 `plan` remains compile-only: no Git fetches, no host access, no network access.
 

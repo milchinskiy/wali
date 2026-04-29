@@ -43,8 +43,9 @@ wali --json-pretty apply manifest.lua
 
 ## Minimal manifest
 
-Hosts may set `command_timeout = "30s"` to provide a default timeout for all
-commands on that host. Per-command `timeout` values override the host default.
+Hosts may set `command_timeout = "30s"` to provide a default timeout for host
+commands, including the initial fact probe performed during connection.
+Per-command `timeout` values override the host default.
 
 ```lua
 return {
@@ -127,6 +128,7 @@ modules = {
             path = "modules",
             depth = 1,
             submodules = false,
+            timeout = "5m",
         },
     },
 }
@@ -139,7 +141,8 @@ Critical source rules:
 - namespaced sources are not exposed globally;
 - ambiguous unnamespaced module names fail instead of depending on search order;
 - `plan` does not fetch Git sources;
-- `check` and `apply` prepare and lock Git checkouts until execution finishes.
+- `check` and `apply` prepare and lock Git checkouts until execution finishes;
+- every system `git` process has a timeout. `git.timeout` defaults to `5m` when omitted.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).
