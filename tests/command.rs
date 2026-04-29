@@ -2,6 +2,8 @@
 
 mod common;
 
+use std::time::{Duration, Instant};
+
 use common::*;
 use serde_json::Value;
 
@@ -148,6 +150,90 @@ return {
         &[("PATH", &fake_bin)],
         "local initial fact probe timed out",
     );
+}
+
+#[test]
+fn local_initial_fact_probe_does_not_wait_for_inherited_output_handles() {
+    let sandbox = Sandbox::new("local-initial-facts-inherited-output");
+    let fake_bin = sandbox.mkdir("fake-bin");
+    write_fake_executable(
+        &fake_bin,
+        "sh",
+        "#!/bin/sh\n(sleep 5) &\nprintf 'Linux\\nx86_64\\nlocalhost\\n0\\n0\\n0\\nroot\\nroot\\nroot\\n'\n",
+    );
+
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {},
+}
+"#,
+    );
+
+    let started = Instant::now();
+    let report = run_wali_json_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("PATH", &fake_bin)],
+    );
+
+    assert_eq!(report.get("mode").and_then(Value::as_str), Some("check"));
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "local fact probe waited for an inherited stdout/stderr handle"
+    );
+}
+
+#[test]
+fn local_piped_command_does_not_wait_for_inherited_output_handles() {
+    let sandbox = Sandbox::new("local-command-inherited-output");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(
+        modules.join("output_handle_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        local out = ctx.host.cmd.shell({ script = "(sleep 5) & printf done" })
+        return api.result.apply()
+            :command("updated", "output handle probe")
+            :data({ stdout = out.stdout })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write output handle probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "output handle probe", module = "output_handle_probe", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    let started = Instant::now();
+    let report = run_apply(&manifest);
+    assert_eq!(
+        task_result(&report, "output handle probe")
+            .pointer("/data/stdout")
+            .and_then(Value::as_str),
+        Some("done")
+    );
+    assert!(started.elapsed() < Duration::from_secs(3), "local command waited for an inherited stdout/stderr handle");
 }
 
 #[test]

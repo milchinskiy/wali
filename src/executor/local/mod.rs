@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -85,22 +85,19 @@ fn collect_initial_facts(timeout: Option<Duration>) -> crate::Result<FactCache> 
 
 fn shell_output(script: &str, timeout: Option<Duration>, desc: &str) -> crate::Result<Output> {
     let mut command = Command::new("sh");
-    command
-        .arg("-c")
-        .arg(script)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.arg("-c").arg(script).stdin(Stdio::null());
+
+    let mut stdout = LocalCapture::new("local-fact-probe", "stdout", desc)?;
+    let mut stderr = LocalCapture::new("local-fact-probe", "stderr", desc)?;
+    command.stdout(stdout.stdio(desc)?).stderr(stderr.stdio(desc)?);
 
     let mut child = command.spawn()?;
-    let stdout = spawn_pipe_reader("stdout", child.stdout.take(), desc.to_owned());
-    let stderr = spawn_pipe_reader("stderr", child.stderr.take(), desc.to_owned());
     let status = wait_for_probe_child(&mut child, timeout, desc)?;
 
     Ok(Output {
         status,
-        stdout: join_pipe_reader(stdout, "stdout", desc)?,
-        stderr: join_pipe_reader(stderr, "stderr", desc)?,
+        stdout: stdout.read("stdout", desc)?,
+        stderr: stderr.read("stderr", desc)?,
     })
 }
 
@@ -129,35 +126,120 @@ fn wait_for_probe_child(
     }
 }
 
-fn spawn_pipe_reader<T>(
-    stream_name: &'static str,
-    stream: Option<T>,
-    desc: String,
-) -> thread::JoinHandle<std::io::Result<Vec<u8>>>
-where
-    T: Read + Send + 'static,
-{
-    thread::spawn(move || {
-        let Some(mut stream) = stream else {
-            return Ok(Vec::new());
-        };
-        let mut bytes = Vec::new();
-        stream.read_to_end(&mut bytes).map_err(|error| {
-            std::io::Error::new(error.kind(), format!("failed to read {stream_name} for {desc}: {error}"))
-        })?;
-        Ok(bytes)
-    })
+struct LocalCapture {
+    path: PathBuf,
+    file: Option<std::fs::File>,
 }
 
-fn join_pipe_reader(
-    reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
-    stream_name: &str,
-    desc: &str,
-) -> crate::Result<Vec<u8>> {
-    match reader.join() {
-        Ok(Ok(bytes)) => Ok(bytes),
-        Ok(Err(error)) => Err(error.into()),
-        Err(_) => Err(crate::Error::FactProbe(format!("{stream_name} reader thread panicked for {desc}"))),
+impl LocalCapture {
+    fn new(prefix: &str, stream_name: &str, desc: &str) -> crate::Result<Self> {
+        let temp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+
+        for attempt in 0..100 {
+            let path = temp_dir.join(format!("wali-{prefix}-{pid}-{nanos}-{stream_name}-{attempt}.log"));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+
+            match options.open(&path) {
+                Ok(file) => {
+                    return Ok(Self { path, file: Some(file) });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => {
+                    return Err(crate::Error::CommandExec(format!(
+                        "failed to create {stream_name} capture for {desc}: {error}"
+                    )));
+                }
+            }
+        }
+
+        Err(crate::Error::CommandExec(format!("failed to create unique {stream_name} capture for {desc}")))
+    }
+
+    fn stdio(&mut self, desc: &str) -> crate::Result<Stdio> {
+        let file = self
+            .file
+            .take()
+            .ok_or_else(|| crate::Error::CommandExec(format!("capture file was already consumed for {desc}")))?;
+        Ok(Stdio::from(file))
+    }
+
+    fn read(&self, stream_name: &str, desc: &str) -> crate::Result<Vec<u8>> {
+        std::fs::read(&self.path).map_err(|error| {
+            crate::Error::CommandExec(format!("failed to read {stream_name} capture for {desc}: {error}"))
+        })
+    }
+}
+
+impl Drop for LocalCapture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+struct LocalInput {
+    path: PathBuf,
+}
+
+impl LocalInput {
+    fn new(input: &[u8], desc: &str) -> crate::Result<Self> {
+        let temp_dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+
+        for attempt in 0..100 {
+            let path = temp_dir.join(format!("wali-local-stdin-{pid}-{nanos}-{attempt}.bin"));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+
+            match options.open(&path) {
+                Ok(mut file) => {
+                    use std::io::Write;
+                    file.write_all(input).map_err(|error| {
+                        crate::Error::CommandExec(format!("failed to write stdin capture for {desc}: {error}"))
+                    })?;
+                    return Ok(Self { path });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => {
+                    return Err(crate::Error::CommandExec(format!(
+                        "failed to create stdin capture for {desc}: {error}"
+                    )));
+                }
+            }
+        }
+
+        Err(crate::Error::CommandExec(format!("failed to create unique stdin capture for {desc}")))
+    }
+
+    fn stdio(&self, desc: &str) -> crate::Result<Stdio> {
+        let file = std::fs::File::open(&self.path)
+            .map_err(|error| crate::Error::CommandExec(format!("failed to open stdin capture for {desc}: {error}")))?;
+        Ok(Stdio::from(file))
+    }
+}
+
+impl Drop for LocalInput {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 

@@ -74,6 +74,8 @@ pub(super) struct ExecutionPlan {
 
 fn load_execution_plan(ctx: &Context) -> Result<ExecutionPlan, ap::Error> {
     let manifest = load_manifest(ctx)?;
+    let plan = wali::plan::compile(manifest.clone())?;
+
     let module_locks = wali::manifest::modules::prepare_sources(&manifest.modules)?;
     let module_mounts = manifest
         .modules
@@ -82,8 +84,9 @@ fn load_execution_plan(ctx: &Context) -> Result<ExecutionPlan, ap::Error> {
         .collect::<wali::Result<Vec<_>>>()?;
     wali::manifest::modules::validate_prepared_mounts(&module_mounts)?;
     wali::manifest::modules::validate_task_modules(&module_mounts, &manifest.tasks)?;
+
     Ok(ExecutionPlan {
-        plan: wali::plan::compile(manifest)?,
+        plan,
         _module_locks: module_locks,
     })
 }

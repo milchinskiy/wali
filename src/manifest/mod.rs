@@ -48,8 +48,8 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
     let runtime = crate::lua::LuaRuntime::with_manifest_flow()?;
     runtime.add_include_path(parent_path)?;
 
-    let mainfest: mlua::Value = runtime.eval(path.file_name().unwrap_or_default().to_string_lossy(), &content)?;
-    let mut manifest: Manifest = runtime.from_lua_value(mainfest)?;
+    let manifest_value: mlua::Value = runtime.eval(path.file_name().unwrap_or_default().to_string_lossy(), &content)?;
+    let mut manifest: Manifest = runtime.from_lua_value(manifest_value)?;
 
     canonicalize_manifest(parent_path, &mut manifest)?;
     check_validity(&manifest)?;

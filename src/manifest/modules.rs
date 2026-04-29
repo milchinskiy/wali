@@ -370,9 +370,7 @@ impl Module {
         match (self.path.as_ref(), self.git.as_deref()) {
             (Some(path), None) => Ok(path.clone()),
             (None, Some(git)) => git.include_path(),
-            _ => Err(crate::Error::InvalidManifest(
-                "module source must define exactly one of 'path' or 'git'".into(),
-            )),
+            _ => Err(crate::Error::InvalidManifest("module source must define exactly one of 'path' or 'git'".into())),
         }
     }
 
@@ -528,8 +526,10 @@ pub fn resolve_task_module(modules: &[ModuleMount], name: &str) -> crate::Result
         return Err(crate::Error::InvalidManifest(format!("task module '{name}' is not a known wali builtin module")));
     }
 
-    for module in modules.iter().filter(|module| module.namespace.is_some()) {
-        let namespace = module.namespace.as_deref().expect("namespace checked above");
+    for module in modules {
+        let Some(namespace) = module.namespace.as_deref() else {
+            continue;
+        };
         let Some(local_name) = strip_namespace(name, namespace) else {
             continue;
         };
@@ -1004,12 +1004,17 @@ impl GitCapture {
 
         for attempt in 0..100 {
             let path = temp_dir.join(format!("wali-git-{pid}-{nanos}-{stream_name}-{attempt}.log"));
-            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+
+            match options.open(&path) {
                 Ok(file) => {
-                    return Ok(Self {
-                        path,
-                        file: Some(file),
-                    });
+                    return Ok(Self { path, file: Some(file) });
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(error) => {
@@ -1020,15 +1025,14 @@ impl GitCapture {
             }
         }
 
-        Err(crate::Error::ModuleSource(format!(
-            "failed to create unique git {stream_name} capture for {desc}"
-        )))
+        Err(crate::Error::ModuleSource(format!("failed to create unique git {stream_name} capture for {desc}")))
     }
 
     fn stdio(&mut self, desc: &str) -> crate::Result<Stdio> {
-        let file = self.file.take().ok_or_else(|| {
-            crate::Error::ModuleSource(format!("git capture file was already consumed for {desc}"))
-        })?;
+        let file = self
+            .file
+            .take()
+            .ok_or_else(|| crate::Error::ModuleSource(format!("git capture file was already consumed for {desc}")))?;
         Ok(Stdio::from(file))
     }
 

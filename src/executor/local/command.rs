@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -215,30 +215,32 @@ fn write_pty_input(writer: Option<&mut Box<dyn Write + Send>>, bytes: &[u8], des
 }
 
 fn exec_local_piped(req: &CommandRequest) -> crate::Result<CommandOutput> {
+    let desc = describe_request(req);
     let mut command = build_local_command(req);
-    command.stdin(if req.opts.stdin.is_some() {
-        Stdio::piped()
-    } else {
-        Stdio::null()
+    let stdin = req
+        .opts
+        .stdin
+        .as_deref()
+        .map(|input| super::LocalInput::new(input, &desc))
+        .transpose()?;
+    command.stdin(match &stdin {
+        Some(stdin) => stdin.stdio(&desc)?,
+        None => Stdio::null(),
     });
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
+
+    let mut stdout = super::LocalCapture::new("local-command", "stdout", &desc)?;
+    let mut stderr = super::LocalCapture::new("local-command", "stderr", &desc)?;
+    command.stdout(stdout.stdio(&desc)?).stderr(stderr.stdio(&desc)?);
 
     let mut child = command.spawn()?;
-
-    let stdin_handle = spawn_child_stdin(child.stdin.take(), req.opts.stdin.clone());
-    let stdout_handle = spawn_child_reader("stdout", child.stdout.take(), describe_request(req));
-    let stderr_handle = spawn_child_reader("stderr", child.stderr.take(), describe_request(req));
-
-    let status = wait_for_child(&mut child, req.opts.timeout, describe_request(req))?;
-
-    join_stdin(stdin_handle, describe_request(req))?;
-    let stdout = join_reader(stdout_handle, "stdout", describe_request(req))?;
-    let stderr = join_reader(stderr_handle, "stderr", describe_request(req))?;
+    let status = wait_for_child(&mut child, req.opts.timeout, desc.clone())?;
 
     Ok(CommandOutput {
         status,
-        streams: CommandStreams::Split { stdout, stderr },
+        streams: CommandStreams::Split {
+            stdout: stdout.read("stdout", &desc)?,
+            stderr: stderr.read("stderr", &desc)?,
+        },
     })
 }
 
@@ -362,28 +364,6 @@ fn apply_local_pty_opts(builder: &mut CommandBuilder, opts: &CommandOpts) {
     }
 }
 
-fn spawn_child_stdin(
-    stdin: Option<ChildStdin>,
-    stdin_bytes: Option<Vec<u8>>,
-) -> Option<thread::JoinHandle<std::io::Result<()>>> {
-    match (stdin, stdin_bytes) {
-        (Some(mut stdin), Some(data)) => Some(thread::spawn(move || {
-            match stdin.write_all(&data) {
-                Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => return Ok(()),
-                Err(err) => return Err(err),
-            }
-
-            match stdin.flush() {
-                Ok(()) => Ok(()),
-                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
-                Err(err) => Err(err),
-            }
-        })),
-        _ => None,
-    }
-}
-
 fn spawn_pty_stdin(
     writer: Option<Box<dyn Write + Send>>,
     stdin_bytes: Option<Vec<u8>>,
@@ -412,25 +392,6 @@ fn spawn_pty_stdin(
         })),
         _ => None,
     }
-}
-
-fn spawn_child_reader<T>(
-    stream_name: &'static str,
-    stream: Option<T>,
-    desc: String,
-) -> thread::JoinHandle<std::io::Result<Vec<u8>>>
-where
-    T: Read + Send + 'static,
-{
-    thread::spawn(move || {
-        let Some(mut stream) = stream else {
-            return Err(std::io::Error::other(format!("child {stream_name} pipe was not available for {desc}")));
-        };
-
-        let mut buf = Vec::new();
-        stream.read_to_end(&mut buf)?;
-        Ok(buf)
-    })
 }
 
 fn wait_for_child(child: &mut Child, timeout: Option<Duration>, desc: String) -> crate::Result<CommandStatus> {
@@ -487,17 +448,6 @@ fn join_stdin(handle: Option<thread::JoinHandle<std::io::Result<()>>>, desc: Str
     }
 
     Ok(())
-}
-
-fn join_reader(
-    handle: thread::JoinHandle<std::io::Result<Vec<u8>>>,
-    stream_name: &'static str,
-    desc: String,
-) -> crate::Result<Vec<u8>> {
-    match handle.join() {
-        Ok(result) => result.map_err(crate::Error::from),
-        Err(_) => Err(crate::Error::CommandExec(format!("{stream_name} reader thread panicked for {desc}"))),
-    }
 }
 
 #[cfg(unix)]

@@ -34,15 +34,11 @@ return {
     );
 }
 
-
 #[test]
 fn git_module_source_timeout_is_not_blocked_by_inherited_output_handles() {
     let sandbox = Sandbox::new("git-timeout-inherited-output");
     let fake_bin = sandbox.mkdir("fake-bin");
-    write_fake_git(
-        &fake_bin,
-        "#!/bin/sh\n(sh -c 'sleep 30') &\nwhile :; do :; done\n",
-    );
+    write_fake_git(&fake_bin, "#!/bin/sh\n(sh -c 'sleep 30') &\nwhile :; do :; done\n");
 
     let cache = sandbox.path("module-cache");
     let manifest = sandbox.write_manifest(
@@ -103,6 +99,56 @@ return {
     assert_eq!(plan.get("mode").and_then(Value::as_str), Some("plan"));
     assert!(!marker.exists(), "plan must not execute git");
     assert!(!cache.exists(), "plan must not create the git cache");
+}
+
+#[test]
+fn invalid_task_graph_is_rejected_before_git_sources_are_fetched() {
+    let sandbox = Sandbox::new("git-not-fetched-before-invalid-task-graph");
+    let fake_bin = sandbox.mkdir("fake-bin");
+    let marker = sandbox.path("git-ran");
+    write_fake_git(&fake_bin, &format!("#!/bin/sh\necho ran > {}\nexit 99\n", shell_quote_path(&marker)));
+
+    let cache = sandbox.path("module-cache");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+        { id = "other", transport = "local" },
+    },
+    modules = {
+        { git = {
+            url = "https://example.invalid/wali/mods.git",
+            ref = "main",
+            path = "mods",
+        } },
+    },
+    tasks = {
+        {
+            id = "first",
+            module = "wali.builtin.command",
+            host = { id = "other" },
+            args = { program = "true" },
+        },
+        {
+            id = "second",
+            module = "wali.builtin.command",
+            depends_on = { "first" },
+            host = { id = "localhost" },
+            args = { program = "true" },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains_with_env(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        &[("PATH", &fake_bin), ("WALI_MODULES_CACHE", &cache)],
+        "not scheduled for host 'localhost'",
+    );
+    assert!(!marker.exists(), "invalid task graph must be rejected before git is executed");
+    assert!(!cache.exists(), "invalid task graph must not create the git cache");
 }
 
 #[test]

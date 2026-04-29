@@ -268,14 +268,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
 }
 
 fn task_matches_host(task: &task::Task, host: &host::Host) -> bool {
-    if let Some(thost) = &task.host {
-        if thost.matches(host) {
-            return true;
-        }
-    } else {
-        return true;
-    }
-    false
+    task.host.as_ref().is_none_or(|selector| selector.matches(host))
 }
 
 /// Orders tasks in dependency order using Kahn's algorithm for topological sorting
