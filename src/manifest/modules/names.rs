@@ -26,7 +26,7 @@ pub fn resolve_task_module(modules: &[ModuleMount], name: &str) -> crate::Result
     validate_module_name(name, "task module name")?;
 
     if name == "wali" || name.starts_with("wali.") {
-        if is_builtin_task_module(name) {
+        if crate::lua::builtins::is_task_module(name) {
             return Ok(ResolvedModule {
                 include_path: None,
                 local_name: name.to_string(),
@@ -112,24 +112,6 @@ pub fn validate_module_name(name: &str, kind: &str) -> crate::Result {
     }
 
     Ok(())
-}
-
-fn is_builtin_task_module(name: &str) -> bool {
-    matches!(
-        name,
-        "wali.builtin.command"
-            | "wali.builtin.copy_file"
-            | "wali.builtin.copy_tree"
-            | "wali.builtin.dir"
-            | "wali.builtin.file"
-            | "wali.builtin.link"
-            | "wali.builtin.link_tree"
-            | "wali.builtin.permissions"
-            | "wali.builtin.pull_file"
-            | "wali.builtin.push_file"
-            | "wali.builtin.remove"
-            | "wali.builtin.touch"
-    )
 }
 
 fn strip_namespace<'a>(name: &'a str, namespace: &str) -> Option<&'a str> {

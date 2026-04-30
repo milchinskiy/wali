@@ -1,6 +1,7 @@
 use mlua::LuaSerdeExt;
 
 pub mod api;
+pub(crate) mod builtins;
 pub mod module;
 mod transfer;
 
@@ -28,10 +29,10 @@ impl LuaRuntime {
     pub fn with_manifest_flow() -> mlua::Result<Self> {
         let runtime = Self::new()?;
 
-        #[allow(clippy::single_element_loop)]
-        for (name, content) in &[("manifest", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/manifest.lua")))] {
-            runtime.register_module_content(name, content)?;
-        }
+        runtime.register_module_content(
+            "manifest",
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/manifest.lua")),
+        )?;
 
         Ok(runtime)
     }
@@ -39,47 +40,8 @@ impl LuaRuntime {
     pub fn with_modules_flow() -> mlua::Result<Self> {
         let runtime = Self::new()?;
 
-        for (name, content) in &[
-            ("wali.api", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/api.lua"))),
-            ("wali.builtin.lib", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/lib.lua"))),
-            ("wali.builtin.dir", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/dir.lua"))),
-            ("wali.builtin.file", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/file.lua"))),
-            (
-                "wali.builtin.copy_file",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy_file.lua")),
-            ),
-            ("wali.builtin.link", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link.lua"))),
-            (
-                "wali.builtin.push_file",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/push_file.lua")),
-            ),
-            (
-                "wali.builtin.pull_file",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_file.lua")),
-            ),
-            (
-                "wali.builtin.remove",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/remove.lua")),
-            ),
-            ("wali.builtin.touch", include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/touch.lua"))),
-            (
-                "wali.builtin.link_tree",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link_tree.lua")),
-            ),
-            (
-                "wali.builtin.copy_tree",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy_tree.lua")),
-            ),
-            (
-                "wali.builtin.permissions",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/permissions.lua")),
-            ),
-            (
-                "wali.builtin.command",
-                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/command.lua")),
-            ),
-        ] {
-            runtime.register_module_content(name, content)?;
+        for module in builtins::MODULES {
+            runtime.register_module_content(module.name, module.content)?;
         }
 
         Ok(runtime)
