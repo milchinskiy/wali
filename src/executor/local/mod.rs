@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 use crate::launcher::secrets::SecretVault;
 use crate::spec::runas::RunAs;
 
-use super::ExecutorBinder;
 use super::facts::{CommandFactProbe, FactCache, INITIAL_FACTS_SCRIPT, parse_initial_facts};
 use super::fs::CommandFsExecutor;
 use super::path_semantics::PosixPathExecutor;
@@ -55,10 +54,9 @@ impl LocalExecutor {
     pub fn default_command_timeout(&self) -> Option<Duration> {
         self.state.default_command_timeout
     }
-}
 
-impl ExecutorBinder for LocalExecutor {
-    fn bind(&self, run_as: Option<RunAs>) -> Self {
+    #[must_use]
+    pub fn bind(&self, run_as: Option<RunAs>) -> Self {
         Self {
             state: Arc::clone(&self.state),
             run_as,

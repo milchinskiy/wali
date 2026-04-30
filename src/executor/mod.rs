@@ -1,5 +1,4 @@
 use crate::spec::account::Owner;
-use crate::spec::runas::RunAs;
 
 mod command;
 mod facts;
@@ -27,11 +26,6 @@ pub use self::ssh::SshExecutor;
 
 mod backend;
 pub use backend::Backend;
-
-pub trait ExecutorBinder {
-    /// bind the executor to a run_as
-    fn bind(&self, run_as: Option<RunAs>) -> Self;
-}
 
 pub trait Facts {
     /// returns the current operating system
@@ -220,7 +214,3 @@ pub trait PathSemantics {
     /// strip a normalized path prefix using path-segment boundaries
     fn strip_prefix(&self, base: &TargetPath, path: &TargetPath) -> Option<TargetPath>;
 }
-
-pub trait Executor: Facts + Fs + CommandExec + PathSemantics + Send {}
-
-impl<T> Executor for T where T: Facts + Fs + CommandExec + PathSemantics + Send {}

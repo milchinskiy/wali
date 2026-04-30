@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::executor::{Backend, ExecutionResult, ExecutorBinder};
+use crate::executor::{Backend, ExecutionResult};
 use crate::plan::{HostPlan, TaskInstance};
 use crate::report::ReportSender;
 use crate::report::apply::Event;

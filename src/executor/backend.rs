@@ -8,7 +8,7 @@ use crate::spec::runas::RunAs;
 use super::facts::{CommandFactProbe, FactCache};
 use super::fs::CommandFsExecutor;
 use super::path_semantics::PosixPathExecutor;
-use super::{CommandExec, ExecutorBinder, LocalExecutor, SshExecutor};
+use super::{CommandExec, LocalExecutor, SshExecutor};
 
 #[derive(Clone)]
 pub enum Backend {
@@ -30,10 +30,9 @@ impl Backend {
             }
         }
     }
-}
 
-impl ExecutorBinder for Backend {
-    fn bind(&self, run_as: Option<RunAs>) -> Self {
+    #[must_use]
+    pub fn bind(&self, run_as: Option<RunAs>) -> Self {
         match self {
             Self::Local(executor) => Self::Local(executor.bind(run_as)),
             Self::Ssh(executor) => Self::Ssh(executor.bind(run_as)),
