@@ -4,6 +4,8 @@ use rust_args_parser as ap;
 pub fn plan<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new("plan")
         .handler_try(plan_handler)
+        .opt(super::opt_host())
+        .opt(super::opt_task())
         .pos(
             ap::PosSpec::new("MANIFEST", |value, ctx: &mut Context| {
                 ctx.manifest = Some(std::path::PathBuf::from(value));

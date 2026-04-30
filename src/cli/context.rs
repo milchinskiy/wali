@@ -6,4 +6,5 @@ pub struct Context {
     pub pretty: bool,
     pub manifest: Option<PathBuf>,
     pub jobs: Option<std::num::NonZeroUsize>,
+    pub selection: wali::plan::Selection,
 }

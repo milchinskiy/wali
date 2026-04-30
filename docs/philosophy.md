@@ -45,6 +45,13 @@ of hosts executing at once; `--jobs 1` runs hosts serially in manifest order.
 Tasks within one host run sequentially. This keeps the per-host mental model
 imperative while still allowing useful concurrency.
 
+CLI host and task selectors are plan-level narrowing primitives. They mutate the
+compiled plan before rendering, secret collection, module source preparation, or
+worker launch. Task selection is dependency-inclusive: selected task instances
+bring their transitive same-host dependencies, but not their downstream
+dependents. This keeps `plan`, `check`, and `apply` aligned around one concrete
+working set.
+
 ## Boundaries
 
 Manifest-side data answers what the user wrote. Plan-side data answers what will

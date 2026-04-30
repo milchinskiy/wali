@@ -7,6 +7,8 @@ pub fn check<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new("check")
         .handler_try(check_handler)
         .opt(super::opt_jobs())
+        .opt(super::opt_host())
+        .opt(super::opt_task())
         .pos(
             ap::PosSpec::new("MANIFEST", |value, ctx: &mut Context| {
                 ctx.manifest = Some(std::path::PathBuf::from(value));

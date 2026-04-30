@@ -4,14 +4,33 @@ use super::{ModuleMount, ResolvedModule};
 
 pub fn validate_task_modules(modules: &[ModuleMount], tasks: &[crate::manifest::task::Task]) -> crate::Result {
     for task in tasks {
-        resolve_task_module(modules, &task.module).map_err(|error| match error {
-            crate::Error::InvalidManifest(message) => crate::Error::InvalidManifest(format!(
-                "task '{}' has invalid module '{}': {message}",
-                task.id, task.module
-            )),
-            other => other,
-        })?;
+        validate_task_module_ref(modules, &task.id, &task.module)?;
     }
+    Ok(())
+}
+
+pub fn validate_plan_task_modules(modules: &[ModuleMount], plan: &crate::plan::Plan) -> crate::Result {
+    for host in &plan.hosts {
+        for task in &host.tasks {
+            resolve_task_module(modules, &task.module).map_err(|error| match error {
+                crate::Error::InvalidManifest(message) => crate::Error::InvalidManifest(format!(
+                    "host '{}' task '{}' has invalid module '{}': {message}",
+                    host.id, task.id, task.module
+                )),
+                other => other,
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_task_module_ref(modules: &[ModuleMount], task_id: &str, module: &str) -> crate::Result {
+    let _ = resolve_task_module(modules, module).map_err(|error| match error {
+        crate::Error::InvalidManifest(message) => {
+            crate::Error::InvalidManifest(format!("task '{task_id}' has invalid module '{module}': {message}"))
+        }
+        other => other,
+    })?;
     Ok(())
 }
 

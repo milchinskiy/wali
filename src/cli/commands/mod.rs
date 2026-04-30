@@ -54,6 +54,44 @@ fn opt_jobs<'a>() -> ap::OptSpec<'a, Context> {
     .validator(validate_jobs)
 }
 
+fn opt_host<'a>() -> ap::OptSpec<'a, Context> {
+    ap::OptSpec::value("host", |value: &OsStr, ctx: &mut Context| {
+        if let Some(host_id) = value.to_str() {
+            ctx.selection.insert_host(host_id);
+        }
+    })
+    .long("host")
+    .short('H')
+    .metavar("ID")
+    .help("Select host id; may be repeated")
+    .repeatable()
+    .validator(validate_selector_value)
+}
+
+fn opt_task<'a>() -> ap::OptSpec<'a, Context> {
+    ap::OptSpec::value("task", |value: &OsStr, ctx: &mut Context| {
+        if let Some(task_id) = value.to_str() {
+            ctx.selection.insert_task(task_id);
+        }
+    })
+    .long("task")
+    .short('T')
+    .metavar("ID")
+    .help("Select task id and its dependencies; may be repeated")
+    .repeatable()
+    .validator(validate_selector_value)
+}
+
+fn validate_selector_value(value: &OsStr) -> Result<(), &'static str> {
+    let Some(raw) = value.to_str() else {
+        return Err("selector values must be valid UTF-8");
+    };
+    if raw.is_empty() {
+        return Err("selector values must not be empty");
+    }
+    Ok(())
+}
+
 fn validate_jobs(value: &OsStr) -> Result<(), &'static str> {
     parse_jobs(value).map(|_| ())
 }
@@ -85,7 +123,19 @@ fn load_manifest(ctx: &Context) -> Result<wali::manifest::Manifest, ap::Error> {
 }
 
 fn load_plan(ctx: &Context) -> Result<wali::plan::Plan, ap::Error> {
-    Ok(wali::plan::compile(load_manifest(ctx)?)?)
+    let mut selected = load_selected_plan(ctx)?;
+    let module_mounts = selected
+        .modules
+        .iter()
+        .map(wali::manifest::modules::Module::mount)
+        .collect::<wali::Result<Vec<_>>>()?;
+    selected.plan.set_module_mounts(module_mounts);
+    Ok(selected.plan)
+}
+
+struct SelectedPlan {
+    plan: wali::plan::Plan,
+    modules: Vec<wali::manifest::modules::Module>,
 }
 
 pub(super) struct ExecutionPlan {
@@ -94,22 +144,42 @@ pub(super) struct ExecutionPlan {
 }
 
 fn load_execution_plan(ctx: &Context) -> Result<ExecutionPlan, ap::Error> {
-    let manifest = load_manifest(ctx)?;
-    let plan = wali::plan::compile(manifest.clone())?;
+    let mut selected = load_selected_plan(ctx)?;
 
-    let module_locks = wali::manifest::modules::prepare_sources(&manifest.modules)?;
-    let module_mounts = manifest
+    let module_locks = wali::manifest::modules::prepare_sources(&selected.modules)?;
+    let module_mounts = selected
         .modules
         .iter()
         .map(wali::manifest::modules::Module::mount)
         .collect::<wali::Result<Vec<_>>>()?;
     wali::manifest::modules::validate_prepared_mounts(&module_mounts)?;
-    wali::manifest::modules::validate_task_modules(&module_mounts, &manifest.tasks)?;
+    wali::manifest::modules::validate_plan_task_modules(&module_mounts, &selected.plan)?;
+    selected.plan.set_module_mounts(module_mounts);
 
     Ok(ExecutionPlan {
-        plan,
+        plan: selected.plan,
         _module_locks: module_locks,
     })
+}
+
+fn load_selected_plan(ctx: &Context) -> Result<SelectedPlan, ap::Error> {
+    let manifest = load_manifest(ctx)?;
+    let plan = wali::plan::compile(manifest.clone())?.select(&ctx.selection)?;
+    let modules = module_sources_for_selected_plan(&manifest, &plan, ctx.selection.is_empty());
+
+    Ok(SelectedPlan { plan, modules })
+}
+
+fn module_sources_for_selected_plan(
+    manifest: &wali::manifest::Manifest,
+    plan: &wali::plan::Plan,
+    include_all: bool,
+) -> Vec<wali::manifest::modules::Module> {
+    if include_all {
+        manifest.modules.clone()
+    } else {
+        wali::manifest::modules::select_sources_for_task_modules(&manifest.modules, &plan.task_module_names())
+    }
 }
 
 fn render_kind(ctx: &Context) -> RenderKind {

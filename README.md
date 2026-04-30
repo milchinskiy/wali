@@ -52,6 +52,22 @@ wali apply --jobs 4 manifest.lua
 `--jobs 1` runs hosts serially in manifest order. Tasks within one host always
 run sequentially.
 
+Use `--host ID` and `--task ID` on `plan`, `check`, or `apply` to select a
+smaller working set without changing the manifest:
+
+```sh
+wali plan --host web-1 manifest.lua
+wali check --task deploy manifest.lua
+wali apply --host web-1 --task deploy manifest.lua
+```
+
+Selectors are exact ids and may be repeated. Host and task selectors are
+intersected. Selecting a task includes its transitive `depends_on` dependencies
+on the same host, but it does not include downstream dependents. `plan` prints
+the same selected plan that `check` and `apply` would execute. For selected
+plans, module source preparation and validation are limited to modules required
+by the selected tasks.
+
 ## Minimal manifest
 
 Hosts may set `command_timeout = "30s"` to provide a default timeout for host

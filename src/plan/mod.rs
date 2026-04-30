@@ -5,6 +5,9 @@ use crate::spec::host::ssh::Auth;
 use crate::spec::predicate;
 use crate::spec::runas::RunAs;
 use std::collections::{BTreeMap, BTreeSet};
+
+mod selection;
+pub use self::selection::Selection;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -14,6 +17,21 @@ pub struct Plan {
     pub root_path: PathBuf,
     pub manifest_path: PathBuf,
     pub hosts: Vec<HostPlan>,
+}
+
+impl Plan {
+    pub fn task_module_names(&self) -> BTreeSet<String> {
+        self.hosts
+            .iter()
+            .flat_map(|host| host.tasks.iter().map(|task| task.module.clone()))
+            .collect()
+    }
+
+    pub fn set_module_mounts(&mut self, modules: Vec<crate::manifest::modules::ModuleMount>) {
+        for host in &mut self.hosts {
+            host.modules = modules.clone();
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

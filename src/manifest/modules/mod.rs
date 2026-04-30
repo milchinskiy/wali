@@ -4,7 +4,10 @@ mod git;
 mod names;
 
 pub use self::git::{ModuleGit, ModuleGitLock};
-pub use self::names::{resolve_task_module, validate_module_name, validate_prepared_mounts, validate_task_modules};
+pub use self::names::{
+    resolve_task_module, validate_module_name, validate_plan_task_modules, validate_prepared_mounts,
+    validate_task_modules,
+};
 
 use self::names::{ensure_source_root_safe, validate_namespace};
 
@@ -174,4 +177,104 @@ pub fn prepare_sources(modules: &[Module]) -> crate::Result<Vec<ModuleGitLock>> 
     }
 
     Ok(locks)
+}
+
+pub fn select_sources_for_task_modules(
+    modules: &[Module],
+    task_modules: &std::collections::BTreeSet<String>,
+) -> Vec<Module> {
+    if task_modules.is_empty() {
+        return Vec::new();
+    }
+
+    let mut needed_namespaces = std::collections::BTreeSet::new();
+    let mut needs_unnamespaced = false;
+
+    for task_module in task_modules {
+        if is_builtin_module_name(task_module) {
+            continue;
+        }
+
+        if let Some(namespace) = modules
+            .iter()
+            .filter_map(Module::namespace)
+            .find(|namespace| module_name_matches_namespace(task_module, namespace))
+        {
+            needed_namespaces.insert(namespace.to_string());
+        } else {
+            needs_unnamespaced = true;
+        }
+    }
+
+    modules
+        .iter()
+        .filter(|module| match module.namespace() {
+            Some(namespace) => needed_namespaces.contains(namespace),
+            None => needs_unnamespaced,
+        })
+        .cloned()
+        .collect()
+}
+
+fn is_builtin_module_name(name: &str) -> bool {
+    name == "wali" || name.starts_with("wali.")
+}
+
+fn module_name_matches_namespace(name: &str, namespace: &str) -> bool {
+    name == namespace || name.starts_with(namespace) && name.as_bytes().get(namespace.len()) == Some(&b'.')
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    fn module(namespace: Option<&str>, path: &str) -> Module {
+        Module {
+            namespace: namespace.map(str::to_string),
+            path: Some(PathBuf::from(path)),
+            git: None,
+        }
+    }
+
+    #[test]
+    fn source_selection_ignores_external_sources_for_builtin_tasks() {
+        let modules = vec![module(None, "/unused"), module(Some("acme"), "/acme")];
+        let task_modules = std::collections::BTreeSet::from(["wali.builtin.file".to_string()]);
+
+        let selected = select_sources_for_task_modules(&modules, &task_modules);
+
+        assert!(selected.is_empty());
+    }
+
+    #[test]
+    fn source_selection_keeps_only_matching_namespaced_source() {
+        let modules = vec![
+            module(None, "/unnamespaced"),
+            module(Some("acme"), "/acme"),
+            module(Some("other"), "/other"),
+        ];
+        let task_modules = std::collections::BTreeSet::from(["acme.deploy".to_string()]);
+
+        let selected = select_sources_for_task_modules(&modules, &task_modules);
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].namespace(), Some("acme"));
+    }
+
+    #[test]
+    fn source_selection_keeps_all_unnamespaced_sources_for_unnamespaced_task() {
+        let modules = vec![
+            module(None, "/first"),
+            module(Some("acme"), "/acme"),
+            module(None, "/second"),
+        ];
+        let task_modules = std::collections::BTreeSet::from(["deploy".to_string()]);
+
+        let selected = select_sources_for_task_modules(&modules, &task_modules);
+
+        assert_eq!(selected.len(), 2);
+        assert!(selected.iter().all(|module| module.namespace().is_none()));
+    }
 }
