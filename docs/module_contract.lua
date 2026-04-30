@@ -4,10 +4,12 @@
 --              validation/apply. It is for host capability checks only.
 -- validate  -> receives a read/probe-only ctx. It may inspect facts, paths,
 --              metadata, directory listings, file contents, symlink targets,
---              and tree walk output. It must not mutate host state and does
---              not expose ctx.host.cmd, ctx.rand, or ctx.sleep_ms.
+--              tree walk output, and controller-side transfer source checks.
+--              It must not mutate host state and does not expose ctx.host.cmd,
+--              ctx.rand, ctx.sleep_ms, or transfer mutation helpers.
 -- apply     -> receives the full ctx, including mutating filesystem functions,
---              command execution, random helpers, and sleep_ms.
+--              command execution, transfer mutation helpers, random helpers,
+--              and sleep_ms.
 --
 -- wali check runs requires + validate only. It never calls apply().
 --
@@ -23,10 +25,19 @@
 --   ctx.host.transport            "local" or "ssh"
 --   ctx.host.facts.*              os/arch/hostname/env/user/group/which/etc
 --   ctx.host.path.*               join/normalize/parent/is_absolute/basename/strip_prefix
+--   ctx.transfer.*                controller/host file transfer helpers
+--
+-- validate ctx.transfer exposes only read-only transfer validation helpers:
+--   check_push_file_source(src) validates that controller src resolves to
+--   a regular file.
 --
 -- validate ctx.host.fs exposes only read/probe helpers:
 --   metadata, stat, lstat, exists, read, list_dir, walk, read_link
 --   list_dir output is sorted deterministically by entry name.
+--
+-- apply ctx.transfer additionally exposes mutation helpers:
+--   push_file(src, dest, opts), pull_file(src, dest, opts)
+--   relative controller paths are resolved against manifest base_path.
 --
 -- apply ctx.host.fs additionally exposes mutation helpers:
 --   write, copy_file, create_dir, remove_file, remove_dir, mktemp, chmod,

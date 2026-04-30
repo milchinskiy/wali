@@ -13,23 +13,12 @@ pub fn root<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new(env!("CARGO_PKG_NAME"))
         .help(env!("CARGO_PKG_DESCRIPTION"))
         .group("json", ap::GroupMode::Xor)
-        .opt(opt_verbosity())
         .opt(opt_json())
         .opt(opt_pretty_json())
-        .handler_try(|_, _| Err(ap::Error::User("not implemented".to_string())))
+        .handler_try(|_, _| Err(ap::Error::User("expected command: plan, check, or apply".to_string())))
         .subcmd(apply::apply())
         .subcmd(check::check())
         .subcmd(plan::plan())
-}
-
-fn opt_verbosity<'a>() -> ap::OptSpec<'a, Context> {
-    ap::OptSpec::flag("verbosity", |ctx: &mut Context| {
-        ctx.verbosity = ctx.verbosity.saturating_add(1);
-    })
-    .short('v')
-    .long("verbosity")
-    .help("Verbosity level")
-    .repeatable()
 }
 
 fn opt_json<'a>() -> ap::OptSpec<'a, Context> {
