@@ -12,4 +12,5 @@ pub mod plan;
 pub mod utils;
 
 pub mod report;
+pub mod state_file;
 pub mod ui;

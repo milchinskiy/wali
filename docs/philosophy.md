@@ -30,17 +30,18 @@ that cannot be solved by the simpler model.
 
 ## Core execution model
 
-The CLI currently has three layers:
+The CLI currently has three execution layers plus explicit cleanup:
 
 1. `plan` compiles and prints the per-host task plan without host access.
 2. `check` performs host-aware, non-mutating validation.
 3. `apply` runs the same validation and then mutates host state.
+4. `cleanup` uses a previous successful apply state file to remove filesystem entries that were reported as created within the current selected manifest scope.
 
 This split is central. A user should be able to inspect task expansion before
 connecting to anything, then validate against real hosts before applying
 changes.
 
-Hosts may run in parallel. `check --jobs N` and `apply --jobs N` cap the number
+Hosts may run in parallel. `check --jobs N`, `apply --jobs N`, and `cleanup --jobs N` cap the number
 of hosts executing at once; `--jobs 1` runs hosts serially in manifest order.
 Tasks within one host run sequentially. This keeps the per-host mental model
 imperative while still allowing useful concurrency.
@@ -49,7 +50,7 @@ CLI host and task selectors are plan-level narrowing primitives. They mutate the
 compiled plan before rendering, secret collection, module source preparation, or
 worker launch. Task selection is dependency-inclusive: selected task instances
 bring their transitive same-host dependencies, but not their downstream
-dependents. This keeps `plan`, `check`, and `apply` aligned around one concrete
+dependents. This keeps `plan`, `check`, `apply`, and cleanup scope aligned around one concrete
 working set.
 
 ## Boundaries
@@ -165,8 +166,13 @@ order, nesting rules, symlink policy, overwrite policy, special-entry policy,
 pruning behavior, partial-failure behavior, and structured changes before it is
 implemented.
 
-Current tree modules avoid pruning. More destructive sync-style behavior should
-wait for a journal or state-file design.
+Current tree modules avoid pruning. `apply --state-file FILE` records the
+selected effective plan, explicit resource records, and the final successful
+apply report state. `cleanup --state-file FILE` uses the explicit resource
+records conservatively: it removes filesystem entries recorded as created
+resources in the current selected manifest scope. It does not revert updates,
+remove unchanged paths, or perform sync-style pruning. Cleanup does not rewrite
+the apply state file; a new successful apply records the next baseline.
 
 ## Result contract
 
@@ -175,7 +181,8 @@ optional human message, and optional machine-readable data.
 
 A change record should say what happened, not only that something happened:
 created, updated, removed, or unchanged; subject; path or detail when useful.
-This supports human output, JSON output, tests, and future state files.
+Successful apply state converts those task results into explicit resource
+records. Cleanup consumes those resource records, not renderer JSON internals.
 
 ## Reporting model
 
@@ -246,4 +253,4 @@ The current priority order is:
 2. keep integration tests ahead of new builtins;
 3. document module authoring and current builtin behavior;
 4. add new modules only when their safety semantics are clear;
-5. design journal/state tracking before destructive sync or revert features.
+5. keep cleanup conservative; destructive sync-style pruning or revert features need stronger ownership semantics first.

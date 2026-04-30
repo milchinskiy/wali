@@ -9,6 +9,7 @@ pub fn apply<'a>() -> ap::CmdSpec<'a, Context> {
         .opt(super::opt_jobs())
         .opt(super::opt_host())
         .opt(super::opt_task())
+        .opt(super::opt_state_file())
         .pos(
             ap::PosSpec::new("MANIFEST", |value, ctx: &mut Context| {
                 ctx.manifest = Some(std::path::PathBuf::from(value));
@@ -21,8 +22,17 @@ pub fn apply<'a>() -> ap::CmdSpec<'a, Context> {
 fn apply_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
     let execution = super::load_execution_plan(ctx)?;
     let launcher = wali::launcher::Launcher::prepare(&execution.plan)?;
-    let report = Reporter::new(ApplyLayout::new(super::render_kind(ctx)));
-    launcher.apply_with_options(report, super::run_options(ctx)?)?;
+    let render_kind = super::render_kind(ctx);
+
+    if let Some(state_file) = ctx.state_file.as_deref() {
+        let (layout, capture) = ApplyLayout::with_state_capture(render_kind);
+        let report = Reporter::new(layout);
+        launcher.apply_with_options(report, super::run_options(ctx)?)?;
+        wali::state_file::write_apply_state(state_file, &execution.plan, capture.take()?)?;
+    } else {
+        let report = Reporter::new(ApplyLayout::new(render_kind));
+        launcher.apply_with_options(report, super::run_options(ctx)?)?;
+    }
 
     Ok(())
 }

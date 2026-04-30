@@ -385,7 +385,9 @@ and therefore usually requires suitable privileges.
 ## `wali.builtin.command`
 
 Runs an explicitly imperative command or shell script. Use `creates` or
-`removes` guards when the command can be made idempotent.
+`removes` guards when the command can be made idempotent. If a command creates
+or removes its guard path during a successful run, that filesystem transition is
+reported explicitly so state-based cleanup can reason about it.
 
 ```lua
 {

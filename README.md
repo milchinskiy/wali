@@ -15,12 +15,13 @@ module arguments. Wali compiles a per-host task plan, connects to each host for
 host-aware commands, evaluates task predicates and module requirements,
 validates module input, and applies changes when requested.
 
-The CLI has three layers:
+The CLI has three execution layers plus explicit cleanup:
 
 ```sh
 wali plan manifest.lua
 wali check manifest.lua
 wali apply manifest.lua
+wali cleanup --state-file apply-state.json manifest.lua
 ```
 
 `plan` is compile-only: no host access, no Git fetches, no module validation.
@@ -32,27 +33,41 @@ validation with a read/probe-only Lua context.
 `apply` runs the same checks and then executes module `apply` functions with the
 full task context.
 
+`cleanup` reads a previous successful apply state file and removes filesystem
+entries recorded as `created` resources within the current selected manifest
+scope. Cleanup uses the current manifest for host connection data and does not
+remove paths that were merely updated or unchanged. Cleanup does not rewrite the
+apply state file; run apply again with `--state-file` to record a new baseline.
+
 JSON output is available for all commands:
 
 ```sh
 wali --json plan manifest.lua
 wali --json check manifest.lua
 wali --json apply manifest.lua
+wali --json cleanup --state-file apply-state.json manifest.lua
 wali --json-pretty apply manifest.lua
 ```
 
-`check` and `apply` run hosts concurrently by default. Use `--jobs N` on either
-command to cap host concurrency without changing per-host task order:
+`check`, `apply`, and `cleanup` run hosts concurrently by default. Use `--jobs N` on any
+of those commands to cap host concurrency without changing per-host task order:
 
 ```sh
 wali check --jobs 1 manifest.lua
 wali apply --jobs 4 manifest.lua
+wali cleanup --jobs 1 --state-file apply-state.json manifest.lua
 ```
 
 `--jobs 1` runs hosts serially in manifest order. Tasks within one host always
 run sequentially.
 
-Use `--host ID` and `--task ID` on `plan`, `check`, or `apply` to select a
+`apply --state-file FILE` writes an atomic JSON snapshot after a successful
+apply. The snapshot contains the selected effective plan, explicit resource
+records, and the final apply report state. Failed applies do not overwrite the
+state file. This explicit resource snapshot is the durable state contract used
+by cleanup.
+
+Use `--host ID` and `--task ID` on `plan`, `check`, `apply`, or `cleanup` to select a
 smaller working set without changing the manifest:
 
 ```sh
@@ -66,7 +81,9 @@ intersected. Selecting a task includes its transitive `depends_on` dependencies
 on the same host, but it does not include downstream dependents. `plan` prints
 the same selected plan that `check` and `apply` would execute. For selected
 plans, module source preparation and validation are limited to modules required
-by the selected tasks.
+by the selected tasks. For `cleanup`, host selectors limit cleanup to previous
+created entries on selected hosts. Task selectors limit cleanup to previous
+created entries from the selected task dependency closure.
 
 ## Minimal manifest
 

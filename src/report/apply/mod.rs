@@ -3,6 +3,8 @@ mod json;
 mod state;
 mod text;
 
+use std::sync::{Arc, Mutex};
+
 use self::human::HumanRender;
 use self::json::JsonRender;
 use self::state::State;
@@ -51,23 +53,77 @@ pub enum Event {
 pub enum RunMode {
     Apply,
     Check,
+    Cleanup,
 }
 
 pub struct ApplyLayout {
     state: State,
     render: Box<dyn super::Renderer<State = State, Event = Event>>,
+    capture: Option<StateCapture>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CapturedTaskResult {
+    pub host_id: String,
+    pub task_id: String,
+    pub result: ExecutionResult,
+}
+
+#[derive(Debug, Clone)]
+pub struct CapturedApplyState {
+    pub run: serde_json::Value,
+    pub task_results: Vec<CapturedTaskResult>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct StateCapture {
+    inner: Arc<Mutex<Option<CapturedApplyState>>>,
+}
+
+impl StateCapture {
+    pub fn take(&self) -> crate::Result<CapturedApplyState> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| crate::Error::Reporter("apply state capture lock was poisoned".into()))?;
+        guard
+            .take()
+            .ok_or_else(|| crate::Error::Reporter("apply state was not captured".into()))
+    }
+
+    fn store(&self, state: &State) -> crate::Result {
+        let captured = CapturedApplyState {
+            run: serde_json::to_value(state)?,
+            task_results: state.successful_task_results(),
+        };
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| crate::Error::Reporter("apply state capture lock was poisoned".into()))?;
+        *guard = Some(captured);
+        Ok(())
+    }
 }
 
 impl ApplyLayout {
     pub fn new(kind: RenderKind) -> Self {
-        Self::with_mode(RunMode::Apply, kind)
+        Self::with_mode(RunMode::Apply, kind, None)
+    }
+
+    pub fn with_state_capture(kind: RenderKind) -> (Self, StateCapture) {
+        let capture = StateCapture::default();
+        (Self::with_mode(RunMode::Apply, kind, Some(capture.clone())), capture)
     }
 
     pub fn check(kind: RenderKind) -> Self {
-        Self::with_mode(RunMode::Check, kind)
+        Self::with_mode(RunMode::Check, kind, None)
     }
 
-    fn with_mode(mode: RunMode, kind: RenderKind) -> Self {
+    pub fn cleanup(kind: RenderKind) -> Self {
+        Self::with_mode(RunMode::Cleanup, kind, None)
+    }
+
+    fn with_mode(mode: RunMode, kind: RenderKind, capture: Option<StateCapture>) -> Self {
         let render: Box<dyn super::Renderer<State = State, Event = Event>> = match kind {
             RenderKind::Human => Box::new(HumanRender::default()),
             RenderKind::Text => Box::new(TextRender),
@@ -77,6 +133,7 @@ impl ApplyLayout {
         Self {
             state: State::new(mode),
             render,
+            capture,
         }
     }
 }
@@ -94,6 +151,9 @@ impl Layout for ApplyLayout {
     }
 
     fn end(&mut self) -> crate::Result {
+        if let Some(capture) = &self.capture {
+            capture.store(&self.state)?;
+        }
         self.render.end(&self.state)
     }
 }

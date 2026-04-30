@@ -70,7 +70,11 @@ impl<L: Layout> Reporter<L> {
     pub fn join(mut self) -> crate::Result {
         drop(self.tx);
 
-        match self.join.take().unwrap().join() {
+        let Some(handle) = self.join.take() else {
+            return Err(crate::Error::Reporter("reporter thread was already joined".into()));
+        };
+
+        match handle.join() {
             Ok(result) => result,
             Err(_) => Err(crate::Error::Reporter("thread panicked".into())),
         }

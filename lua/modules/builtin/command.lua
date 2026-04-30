@@ -70,6 +70,12 @@ return {
 		lib.assert_command_ok(output, detail)
 
 		local result = lib.result.apply()
+		if args.creates ~= nil and ctx.host.fs.exists(args.creates) then
+			result:created(args.creates, "creates guard was created")
+		end
+		if args.removes ~= nil and not ctx.host.fs.exists(args.removes) then
+			result:removed(args.removes, "removes guard was removed")
+		end
 		if args.changed == "never" then
 			result:command("unchanged", detail)
 		else

@@ -54,7 +54,7 @@ impl HumanRender {
 
         let mut summary = String::new();
         match mode {
-            RunMode::Apply => {
+            RunMode::Apply | RunMode::Cleanup => {
                 let state = if result.changed() {
                     warn_string("changed")
                 } else {
@@ -83,7 +83,7 @@ impl HumanRender {
         {
             let _ = writeln!(&mut summary, "{}", msg);
         }
-        if matches!(mode, RunMode::Apply) && !result.changes.is_empty() {
+        if matches!(mode, RunMode::Apply | RunMode::Cleanup) && !result.changes.is_empty() {
             for change in &result.changes {
                 let _ = writeln!(&mut summary, "{} {}", change_marker(change.kind), change_label(change));
             }
@@ -143,6 +143,7 @@ impl HumanRender {
         let verb = match state.mode {
             RunMode::Apply => "complete",
             RunMode::Check => "check complete",
+            RunMode::Cleanup => "cleanup complete",
         };
         self.println(format!("Host {} {}", host_string(host_id), verb).as_str())?;
         let failed = state.hosts.get(host_id).map(|host| host.failed() > 0).unwrap_or(false);
@@ -186,6 +187,13 @@ impl HumanRender {
 impl crate::report::Renderer for HumanRender {
     type State = State;
     type Event = Event;
+
+    fn end(&mut self, state: &Self::State) -> crate::Result {
+        if matches!(state.mode, RunMode::Cleanup) && state.hosts.is_empty() {
+            self.println("No cleanup work")?;
+        }
+        Ok(())
+    }
 
     fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result {
         match event {

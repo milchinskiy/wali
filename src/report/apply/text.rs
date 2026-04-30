@@ -6,6 +6,13 @@ impl crate::report::Renderer for TextRender {
     type State = State;
     type Event = Event;
 
+    fn end(&mut self, state: &Self::State) -> crate::Result {
+        if matches!(state.mode, RunMode::Cleanup) && state.hosts.is_empty() {
+            println!("No cleanup work");
+        }
+        Ok(())
+    }
+
     fn handle(&mut self, event: &Self::Event, state: &mut Self::State) -> crate::Result {
         match event {
             Event::HostSchedule { host_id, tasks_count } => {
@@ -20,6 +27,7 @@ impl crate::report::Renderer for TextRender {
             }
             Event::HostComplete { host_id } => match state.mode {
                 RunMode::Apply => println!("Host '{}' execution complete", host_id),
+                RunMode::Cleanup => println!("Host '{}' cleanup complete", host_id),
                 RunMode::Check => println!("Host '{}' check complete", host_id),
             },
             Event::TaskSchedule { host_id, task_id } => {
@@ -30,7 +38,7 @@ impl crate::report::Renderer for TextRender {
                 task_id,
                 result,
             } => match state.mode {
-                RunMode::Apply => {
+                RunMode::Apply | RunMode::Cleanup => {
                     let change = if result.changed() { "changed" } else { "unchanged" };
                     if let Some(message) = &result.message {
                         println!("Task '{}' succeeded on '{}': {}: {}", task_id, host_id, change, message);

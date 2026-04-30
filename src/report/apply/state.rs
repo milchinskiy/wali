@@ -1,6 +1,6 @@
 use crate::executor::ExecutionResult;
 
-use super::{Event, RunMode};
+use super::{CapturedTaskResult, Event, RunMode};
 
 #[derive(Debug, serde::Serialize)]
 pub(super) struct State {
@@ -14,6 +14,25 @@ impl State {
             mode,
             hosts: std::collections::BTreeMap::new(),
         }
+    }
+
+    pub(super) fn successful_task_results(&self) -> Vec<CapturedTaskResult> {
+        self.hosts
+            .iter()
+            .flat_map(|(host_id, host)| {
+                host.tasks.iter().filter_map(move |task| {
+                    let StateTaskStatus::Success(result) = &task.status else {
+                        return None;
+                    };
+
+                    Some(CapturedTaskResult {
+                        host_id: host_id.clone(),
+                        task_id: task.id.clone(),
+                        result: result.clone(),
+                    })
+                })
+            })
+            .collect()
     }
 }
 

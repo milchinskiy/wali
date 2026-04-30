@@ -7,6 +7,7 @@ use wali::report::RenderKind;
 
 mod apply;
 mod check;
+mod cleanup;
 mod plan;
 
 pub fn root<'a>() -> ap::CmdSpec<'a, Context> {
@@ -15,9 +16,10 @@ pub fn root<'a>() -> ap::CmdSpec<'a, Context> {
         .group("json", ap::GroupMode::Xor)
         .opt(opt_json())
         .opt(opt_pretty_json())
-        .handler_try(|_, _| Err(ap::Error::User("expected command: plan, check, or apply".to_string())))
+        .handler_try(|_, _| Err(ap::Error::User("expected command: plan, check, apply, or cleanup".to_string())))
         .subcmd(apply::apply())
         .subcmd(check::check())
+        .subcmd(cleanup::cleanup())
         .subcmd(plan::plan())
 }
 
@@ -82,6 +84,23 @@ fn opt_task<'a>() -> ap::OptSpec<'a, Context> {
     .validator(validate_selector_value)
 }
 
+fn opt_state_file<'a>() -> ap::OptSpec<'a, Context> {
+    ap::OptSpec::value("state-file", |value: &OsStr, ctx: &mut Context| {
+        ctx.state_file = Some(std::path::PathBuf::from(value));
+    })
+    .long("state-file")
+    .metavar("FILE")
+    .help("Read or write successful apply state FILE")
+    .validator(validate_state_file_value)
+}
+
+fn validate_state_file_value(value: &OsStr) -> Result<(), &'static str> {
+    if value.is_empty() {
+        return Err("--state-file must not be empty");
+    }
+    Ok(())
+}
+
 fn validate_selector_value(value: &OsStr) -> Result<(), &'static str> {
     let Some(raw) = value.to_str() else {
         return Err("selector values must be valid UTF-8");
@@ -133,8 +152,8 @@ fn load_plan(ctx: &Context) -> Result<wali::plan::Plan, ap::Error> {
     Ok(selected.plan)
 }
 
-struct SelectedPlan {
-    plan: wali::plan::Plan,
+pub(super) struct SelectedPlan {
+    pub plan: wali::plan::Plan,
     modules: Vec<wali::manifest::modules::Module>,
 }
 
@@ -162,7 +181,7 @@ fn load_execution_plan(ctx: &Context) -> Result<ExecutionPlan, ap::Error> {
     })
 }
 
-fn load_selected_plan(ctx: &Context) -> Result<SelectedPlan, ap::Error> {
+pub(super) fn load_selected_plan(ctx: &Context) -> Result<SelectedPlan, ap::Error> {
     let manifest = load_manifest(ctx)?;
     let plan = wali::plan::compile(manifest.clone())?.select(&ctx.selection)?;
     let modules = module_sources_for_selected_plan(&manifest, &plan, ctx.selection.is_empty());

@@ -1,1 +1,7 @@
 /target
+
+# Local run artifacts
+/state.json
+/apply-state.json
+/*.state.json
+/wali-state.json
