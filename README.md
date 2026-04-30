@@ -67,23 +67,27 @@ records, and the final apply report state. Failed applies do not overwrite the
 state file. This explicit resource snapshot is the durable state contract used
 by cleanup.
 
-Use `--host ID` and `--task ID` on `plan`, `check`, `apply`, or `cleanup` to select a
-smaller working set without changing the manifest:
+Use `--host ID`, `--host-tag TAG`, `--task ID`, and `--task-tag TAG`
+on `plan`, `check`, `apply`, or `cleanup` to select a smaller working set
+without changing the manifest:
 
 ```sh
 wali plan --host web-1 manifest.lua
 wali check --task deploy manifest.lua
 wali apply --host web-1 --task deploy manifest.lua
+wali cleanup --host-tag web --task-tag deploy --state-file apply-state.json manifest.lua
 ```
 
-Selectors are exact ids and may be repeated. Host and task selectors are
-intersected. Selecting a task includes its transitive `depends_on` dependencies
+Selectors are exact ids or exact tags and may be repeated. Host id and host tag
+selectors select the union of matching hosts. Task id and task tag selectors
+select the union of matching tasks. Host and task dimensions are intersected.
+Selecting a task by id or tag includes its transitive `depends_on` dependencies
 on the same host, but it does not include downstream dependents. `plan` prints
 the same selected plan that `check` and `apply` would execute. For selected
 plans, module source preparation and validation are limited to modules required
-by the selected tasks. For `cleanup`, host selectors limit cleanup to previous
-created entries on selected hosts. Task selectors limit cleanup to previous
-created entries from the selected task dependency closure.
+by the selected tasks. For `cleanup`, host id/tag selectors limit cleanup to
+previous created entries on selected hosts. Task id/tag selectors limit cleanup
+to previous created entries from the selected task dependency closure.
 
 ## Minimal manifest
 

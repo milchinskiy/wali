@@ -8,7 +8,9 @@ pub fn cleanup<'a>() -> ap::CmdSpec<'a, Context> {
         .handler_try(cleanup_handler)
         .opt(super::opt_jobs())
         .opt(super::opt_host())
+        .opt(super::opt_host_tag())
         .opt(super::opt_task())
+        .opt(super::opt_task_tag())
         .opt(super::opt_state_file())
         .pos(
             ap::PosSpec::new("MANIFEST", |value, ctx: &mut Context| {

@@ -34,6 +34,7 @@ struct PlanSnapshot {
 #[serde(deny_unknown_fields)]
 struct HostSnapshot {
     id: String,
+    tags: BTreeSet<String>,
     transport: String,
     tasks: Vec<TaskSnapshot>,
 }
@@ -155,8 +156,8 @@ impl ApplyState {
             .iter()
             .map(|host| host.id.as_str())
             .collect::<BTreeSet<_>>();
-        let task_scoped = !selection.tasks().is_empty();
-        let full_cleanup = selection.hosts().is_empty() && selection.tasks().is_empty();
+        let task_scoped = selection.has_task_selectors();
+        let full_cleanup = selection.is_empty();
 
         let mut items = BTreeMap::<(String, TargetPath), CleanupItem>::new();
 
@@ -230,6 +231,7 @@ impl From<&crate::plan::HostPlan> for HostSnapshot {
     fn from(host: &crate::plan::HostPlan) -> Self {
         Self {
             id: host.id.clone(),
+            tags: host.tags.clone(),
             transport: match &host.transport {
                 crate::spec::host::Transport::Local => "local".to_string(),
                 crate::spec::host::Transport::Ssh(..) => "ssh".to_string(),
@@ -404,6 +406,7 @@ mod tests {
     fn host(id: &str, tasks: Vec<TaskInstance>) -> HostPlan {
         HostPlan {
             id: id.to_string(),
+            tags: BTreeSet::new(),
             base_path: PathBuf::new(),
             transport: Transport::Local,
             command_timeout: None,

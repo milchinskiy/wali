@@ -48,7 +48,9 @@ imperative while still allowing useful concurrency.
 
 CLI host and task selectors are plan-level narrowing primitives. They mutate the
 compiled plan before rendering, secret collection, module source preparation, or
-worker launch. Task selection is dependency-inclusive: selected task instances
+worker launch. Host ids and host tags form an inclusive host selector. Task ids
+and task tags form an inclusive task selector. Host and task dimensions are
+intersected. Task selection is dependency-inclusive: selected task instances
 bring their transitive same-host dependencies, but not their downstream
 dependents. This keeps `plan`, `check`, `apply`, and cleanup scope aligned around one concrete
 working set.

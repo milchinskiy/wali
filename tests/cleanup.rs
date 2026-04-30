@@ -278,3 +278,129 @@ return {{
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+fn task_tag_scoped_cleanup_preserves_unselected_outputs() {
+    let sandbox = Sandbox::new("cleanup-task-tag-scope");
+    let state_file = sandbox.path("apply-state.json");
+    let selected = sandbox.path("selected.txt");
+    let unselected = sandbox.path("unselected.txt");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "selected",
+            tags = {{ "demo" }},
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "selected\n" }},
+        }},
+        {{
+            id = "unselected",
+            tags = {{ "other" }},
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "unselected\n" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&selected),
+        lua_string(&unselected),
+    ));
+
+    run_wali_json(&[
+        "--json",
+        "apply",
+        "--state-file",
+        state_file.to_str().expect("non-utf8 state path"),
+        manifest.to_str().expect("non-utf8 manifest path"),
+    ]);
+    assert!(selected.exists());
+    assert!(unselected.exists());
+
+    let report = run_wali_json(&[
+        "--json",
+        "cleanup",
+        "--task-tag",
+        "demo",
+        "--state-file",
+        state_file.to_str().expect("non-utf8 state path"),
+        manifest.to_str().expect("non-utf8 manifest path"),
+    ]);
+
+    assert_eq!(report.get("mode").and_then(Value::as_str), Some("cleanup"));
+    assert!(!selected.exists(), "tag-scoped cleanup should remove selected task output");
+    assert!(unselected.exists(), "tag-scoped cleanup must preserve unselected task output");
+
+    let tasks = report
+        .pointer("/hosts/localhost/tasks")
+        .and_then(Value::as_array)
+        .expect("cleanup report missing tasks");
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0].get("id").and_then(Value::as_str), Some("cleanup:1:selected"));
+}
+
+#[test]
+fn host_tag_scoped_cleanup_preserves_unselected_hosts() {
+    let sandbox = Sandbox::new("cleanup-host-tag-scope");
+    let state_file = sandbox.path("apply-state.json");
+    let web = sandbox.path("web.txt");
+    let db = sandbox.path("db.txt");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "web", tags = {{ "web" }}, transport = "local" }},
+        {{ id = "db", tags = {{ "db" }}, transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "write-web",
+            host = {{ id = "web" }},
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "web\n" }},
+        }},
+        {{
+            id = "write-db",
+            host = {{ id = "db" }},
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "db\n" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&web),
+        lua_string(&db),
+    ));
+
+    run_wali_json(&[
+        "--json",
+        "apply",
+        "--state-file",
+        state_file.to_str().expect("non-utf8 state path"),
+        manifest.to_str().expect("non-utf8 manifest path"),
+    ]);
+    assert!(web.exists());
+    assert!(db.exists());
+
+    let report = run_wali_json(&[
+        "--json",
+        "cleanup",
+        "--host-tag",
+        "web",
+        "--state-file",
+        state_file.to_str().expect("non-utf8 state path"),
+        manifest.to_str().expect("non-utf8 manifest path"),
+    ]);
+
+    assert_eq!(report.get("mode").and_then(Value::as_str), Some("cleanup"));
+    assert!(!web.exists(), "host-tag cleanup should remove selected host output");
+    assert!(db.exists(), "host-tag cleanup must preserve unselected host output");
+    assert!(report.pointer("/hosts/web").is_some(), "selected host should be reported");
+    assert!(report.pointer("/hosts/db").is_none(), "unselected host must not be reported");
+}

@@ -37,6 +37,7 @@ impl Plan {
 #[derive(Debug, Clone)]
 pub struct HostPlan {
     pub id: String,
+    pub tags: BTreeSet<String>,
     pub base_path: PathBuf,
     pub transport: Transport,
     pub command_timeout: Option<Duration>,
@@ -217,6 +218,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
 
             Ok(HostPlan {
                 id: host.id.clone(),
+                tags: host.tags.clone(),
                 base_path: manifest.base_path.clone(),
                 modules: module_mounts.clone(),
                 transport: host.transport.clone(),

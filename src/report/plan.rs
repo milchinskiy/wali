@@ -14,6 +14,7 @@ struct PlanReport {
 #[derive(Debug, serde::Serialize)]
 struct PlanHost {
     id: String,
+    tags: Vec<String>,
     transport: PlanTransport,
     modules_paths: Vec<String>,
     tasks: Vec<PlanTask>,
@@ -68,6 +69,7 @@ impl PlanHost {
     fn from_host_plan(host: &crate::plan::HostPlan) -> Self {
         Self {
             id: host.id.clone(),
+            tags: host.tags.iter().cloned().collect(),
             transport: PlanTransport::from_transport(&host.transport),
             modules_paths: host.modules.iter().map(|module| module.label.clone()).collect(),
             tasks: host.tasks.iter().map(PlanTask::from_task_instance).collect(),
@@ -143,6 +145,9 @@ fn render_text(report: &PlanReport) -> crate::Result {
     println!("Hosts:");
     for host in &report.hosts {
         println!("  - {} [{}]", host.id, host.transport.label());
+        if !host.tags.is_empty() {
+            println!("    tags: {}", host.tags.join(", "));
+        }
 
         if !host.modules_paths.is_empty() {
             println!("    modules:");

@@ -70,6 +70,19 @@ fn opt_host<'a>() -> ap::OptSpec<'a, Context> {
     .validator(validate_selector_value)
 }
 
+fn opt_host_tag<'a>() -> ap::OptSpec<'a, Context> {
+    ap::OptSpec::value("host-tag", |value: &OsStr, ctx: &mut Context| {
+        if let Some(tag) = value.to_str() {
+            ctx.selection.insert_host_tag(tag);
+        }
+    })
+    .long("host-tag")
+    .metavar("TAG")
+    .help("Select hosts tagged TAG; may be repeated")
+    .repeatable()
+    .validator(validate_selector_value)
+}
+
 fn opt_task<'a>() -> ap::OptSpec<'a, Context> {
     ap::OptSpec::value("task", |value: &OsStr, ctx: &mut Context| {
         if let Some(task_id) = value.to_str() {
@@ -80,6 +93,19 @@ fn opt_task<'a>() -> ap::OptSpec<'a, Context> {
     .short('T')
     .metavar("ID")
     .help("Select task id and its dependencies; may be repeated")
+    .repeatable()
+    .validator(validate_selector_value)
+}
+
+fn opt_task_tag<'a>() -> ap::OptSpec<'a, Context> {
+    ap::OptSpec::value("task-tag", |value: &OsStr, ctx: &mut Context| {
+        if let Some(tag) = value.to_str() {
+            ctx.selection.insert_task_tag(tag);
+        }
+    })
+    .long("task-tag")
+    .metavar("TAG")
+    .help("Select tasks tagged TAG and their dependencies; may be repeated")
     .repeatable()
     .validator(validate_selector_value)
 }
