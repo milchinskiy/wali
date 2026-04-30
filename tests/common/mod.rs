@@ -85,11 +85,22 @@ pub fn shell_quote_path(path: &Path) -> String {
 }
 
 pub fn run_wali_with_env(args: &[&str], envs: &[(&str, &Path)]) -> std::process::Output {
+    run_wali_with_env_and_cwd(args, envs, None)
+}
+
+pub fn run_wali_with_env_and_cwd(
+    args: &[&str],
+    envs: &[(&str, &Path)],
+    current_dir: Option<&Path>,
+) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_wali"));
     command
         .args(args)
         .env("NO_COLOR", "1")
         .env_remove("__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__");
+    if let Some(current_dir) = current_dir {
+        command.current_dir(current_dir);
+    }
     for (key, value) in envs {
         command.env(key, value);
     }
@@ -101,7 +112,11 @@ pub fn run_wali_json(args: &[&str]) -> Value {
 }
 
 pub fn run_wali_json_with_env(args: &[&str], envs: &[(&str, &Path)]) -> Value {
-    let output = run_wali_with_env(args, envs);
+    run_wali_json_with_env_and_cwd(args, envs, None)
+}
+
+pub fn run_wali_json_with_env_and_cwd(args: &[&str], envs: &[(&str, &Path)], current_dir: Option<&Path>) -> Value {
+    let output = run_wali_with_env_and_cwd(args, envs, current_dir);
     assert!(
         output.status.success(),
         "wali failed with status {:?}\nstdout:\n{}\nstderr:\n{}",

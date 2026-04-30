@@ -488,6 +488,51 @@ return {{
 }
 
 #[test]
+fn copy_tree_preflight_rejects_file_destination_symlink_to_directory_before_mutation() {
+    let sandbox = Sandbox::new("copy-preflight-symlink-dir");
+    let src = sandbox.path("src");
+    let dest = sandbox.path("dest");
+    let linked_dir = sandbox.path("linked-dir");
+    std::fs::create_dir_all(&src).expect("failed to create source root");
+    std::fs::create_dir_all(&dest).expect("failed to create destination root");
+    std::fs::create_dir_all(&linked_dir).expect("failed to create linked directory");
+    std::fs::write(src.join("conflict"), "source conflict\n").expect("failed to write source conflict file");
+    std::fs::write(src.join("later"), "source later\n").expect("failed to write later source file");
+    std::os::unix::fs::symlink(&linked_dir, dest.join("conflict")).expect("failed to create destination symlink");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "copy tree",
+            module = "wali.builtin.copy_tree",
+            args = {{ src = {}, dest = {}, replace = true }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&src),
+        lua_string(&dest),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        "symlink to a directory where a file is expected",
+    );
+    assert!(
+        std::fs::symlink_metadata(dest.join("conflict"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(!dest.join("later").exists(), "preflight should fail before copying unrelated later entries");
+}
+
+#[test]
 fn builtin_file_replace_true_replaces_existing_target_symlink_even_when_content_matches() {
     let sandbox = Sandbox::new("builtin-file-symlink-identical");
     let target = sandbox.path("target.txt");

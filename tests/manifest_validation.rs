@@ -173,6 +173,109 @@ return {{
 }
 
 #[test]
+fn lua_module_schema_unknown_fields_are_rejected() {
+    let cases = [
+        (
+            "schema-typo-required",
+            r#"{
+        type = "string",
+        requred = true,
+    }"#,
+        ),
+        (
+            "schema-nested-typo-required",
+            r#"{
+        type = "object",
+        props = {
+            path = { type = "string", requred = true },
+        },
+    }"#,
+        ),
+        (
+            "schema-typo-default",
+            r#"{
+        type = "string",
+        defualt = "fallback",
+    }"#,
+        ),
+        (
+            "schema-typo-items",
+            r#"{
+        type = "list",
+        items = { type = "string" },
+        itemz = { type = "integer" },
+    }"#,
+        ),
+        (
+            "schema-typo-props",
+            r#"{
+        type = "object",
+        props = {},
+        propz = {},
+    }"#,
+        ),
+        (
+            "schema-typo-value",
+            r#"{
+        type = "map",
+        value = { type = "string" },
+        valu = { type = "integer" },
+    }"#,
+        ),
+        (
+            "schema-typo-values",
+            r#"{
+        type = "enum",
+        values = { "a", "b" },
+        valuez = { "c" },
+    }"#,
+        ),
+    ];
+
+    for (name, schema) in cases {
+        let sandbox = Sandbox::new(name);
+        let modules = sandbox.mkdir("modules");
+        std::fs::write(
+            modules.join("bad_schema.lua"),
+            format!(
+                r#"
+return {{
+    schema = {},
+    apply = function(ctx, args)
+        return nil
+    end,
+}}
+"#,
+                schema
+            ),
+        )
+        .expect("failed to write bad schema module");
+
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "bad schema", module = "bad_schema", args = {{}} }},
+    }},
+}}
+"#,
+            lua_string(&modules),
+        ));
+
+        assert_wali_failure_contains(
+            &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+            "unknown field",
+        );
+    }
+}
+
+#[test]
 fn lua_module_result_unknown_fields_are_rejected() {
     let cases = [
         (

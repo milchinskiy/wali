@@ -69,6 +69,134 @@ return {{
 }
 
 #[test]
+fn default_base_path_is_manifest_directory() {
+    let sandbox = Sandbox::new("transfer-default-base-path");
+    let manifest_dir = sandbox.mkdir("manifest-dir");
+    let local_src = manifest_dir.join("input.txt");
+    let host_dest = sandbox.path("host/default-base-pushed.txt");
+
+    std::fs::write(&local_src, "manifest relative source\n").expect("failed to write local source");
+    let manifest = manifest_dir.join("manifest.lua");
+    std::fs::write(
+        &manifest,
+        format!(
+            r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "push default base",
+            module = "wali.builtin.push_file",
+            args = {{ src = "input.txt", dest = {}, create_parents = true }},
+        }},
+    }},
+}}
+"#,
+            lua_string(&host_dest),
+        ),
+    )
+    .expect("failed to write manifest");
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "push default base");
+    assert_eq!(std::fs::read_to_string(&host_dest).unwrap(), "manifest relative source\n");
+}
+
+#[test]
+fn relative_base_path_is_manifest_relative_not_process_cwd() {
+    let sandbox = Sandbox::new("transfer-relative-base-path");
+    let manifest_dir = sandbox.mkdir("manifest-dir");
+    let base = manifest_dir.join("assets");
+    let other_cwd = sandbox.mkdir("other-cwd");
+    let host_dest = sandbox.path("host/relative-base-pushed.txt");
+
+    std::fs::create_dir_all(&base).expect("failed to create base directory");
+    std::fs::write(base.join("input.txt"), "relative base source\n").expect("failed to write local source");
+    let manifest = manifest_dir.join("manifest.lua");
+    std::fs::write(
+        &manifest,
+        format!(
+            r#"
+return {{
+    base_path = "assets",
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "push relative base",
+            module = "wali.builtin.push_file",
+            args = {{ src = "input.txt", dest = {}, create_parents = true }},
+        }},
+    }},
+}}
+"#,
+            lua_string(&host_dest),
+        ),
+    )
+    .expect("failed to write manifest");
+
+    let report = run_wali_json_with_env_and_cwd(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        &[],
+        Some(&other_cwd),
+    );
+    assert_task_changed(&report, "push relative base");
+    assert_eq!(std::fs::read_to_string(&host_dest).unwrap(), "relative base source\n");
+}
+
+#[test]
+fn missing_relative_base_path_is_manifest_error() {
+    let sandbox = Sandbox::new("transfer-missing-base-path");
+    let manifest_dir = sandbox.mkdir("manifest-dir");
+    let manifest = manifest_dir.join("manifest.lua");
+    std::fs::write(
+        &manifest,
+        r#"
+return {
+    base_path = "missing-assets",
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {},
+}
+"#,
+    )
+    .expect("failed to write manifest");
+
+    assert_wali_failure_contains(&["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")], "base_path");
+}
+
+#[test]
+fn base_path_must_be_directory() {
+    let sandbox = Sandbox::new("transfer-base-path-file");
+    let manifest_dir = sandbox.mkdir("manifest-dir");
+    let base_file = manifest_dir.join("base-file");
+    let manifest = manifest_dir.join("manifest.lua");
+    std::fs::write(&base_file, "not a directory\n").expect("failed to write base file");
+    std::fs::write(
+        &manifest,
+        r#"
+return {
+    base_path = "base-file",
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {},
+}
+"#,
+    )
+    .expect("failed to write manifest");
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
+        "must be a directory",
+    );
+}
+
+#[test]
 fn transfer_allows_absolute_controller_paths() {
     let sandbox = Sandbox::new("transfer-absolute");
     let local_src = sandbox.path("absolute-source.txt");

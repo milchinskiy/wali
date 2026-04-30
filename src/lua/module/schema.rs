@@ -261,7 +261,7 @@ impl<'de> Deserialize<'de> for DefaultSlot {
 /// Use [`Schema::from_lua`] to load and validate schema defaults, then use
 /// [`Schema::normalize_lua`] or [`Schema::normalize_json`] to normalize user input.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Schema {
     Any {
         #[serde(default)]

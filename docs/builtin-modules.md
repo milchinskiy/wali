@@ -157,8 +157,10 @@ Behavior:
 
 - `src` is a controller-side path;
 - absolute controller paths are used as-is;
-- relative controller paths are resolved against manifest `base_path`, which
-  defaults to the manifest directory;
+- relative controller paths are resolved against manifest `base_path`; a relative
+  `base_path` is resolved from the manifest directory, and an omitted
+  `base_path` defaults to the manifest directory; `base_path` must resolve to
+  an existing directory;
 - `src` must resolve to a regular file;
 - `dest` is a target-host path and is written through the effective host
   backend, including `run_as` when configured;
@@ -188,8 +190,10 @@ Behavior:
 - `src` is a target-host path and is read through the effective host backend;
 - `dest` is a controller-side path;
 - absolute controller paths are used as-is;
-- relative controller paths are resolved against manifest `base_path`, which
-  defaults to the manifest directory;
+- relative controller paths are resolved against manifest `base_path`; a relative
+  `base_path` is resolved from the manifest directory, and an omitted
+  `base_path` defaults to the manifest directory; `base_path` must resolve to
+  an existing directory;
 - an existing identical local regular file is unchanged unless requested mode
   bits must be updated;
 - `replace = false` preserves any existing local file or symlink destination and
@@ -367,6 +371,8 @@ directory or symlink is created.
 - destination directories are created or verified;
 - destination directories are never replaced by files or links;
 - destination special entries are refused for copied files;
+- destination symlinks that resolve to directories or special entries are refused
+  during preflight where copied files are expected;
 - destination file/symlink paths may be replaced only when `replace = true`;
 - extra destination entries are not pruned.
 

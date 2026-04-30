@@ -411,14 +411,27 @@ local function assert_expected_dir(path, current, label)
 	end
 end
 
-local function assert_expected_file(path, current, label)
+local function assert_expected_file(ctx, path, current, label)
 	if current == nil then
 		return
 	end
 	if current.kind == "dir" then
 		error(label .. " is a directory where a file is expected: " .. path)
 	end
-	if current.kind ~= "file" and current.kind ~= "symlink" then
+	if current.kind == "symlink" then
+		local target = ctx.host.fs.stat(path)
+		if target == nil then
+			return
+		end
+		if target.kind == "file" then
+			return
+		end
+		if target.kind == "dir" then
+			error(label .. " is a symlink to a directory where a file is expected: " .. path)
+		end
+		error(label .. " is a symlink to a special filesystem entry where a file is expected: " .. path)
+	end
+	if current.kind ~= "file" then
 		error(label .. " is a special filesystem entry where a file is expected: " .. path)
 	end
 end
@@ -457,7 +470,7 @@ function lib.assert_tree_destination(ctx, path, policy)
 		return
 	end
 	if expect == "file" then
-		assert_expected_file(path, current, label)
+		assert_expected_file(ctx, path, current, label)
 		return
 	end
 	if expect == "symlink" then

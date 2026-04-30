@@ -58,13 +58,31 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
     if manifest.name.is_empty() {
         manifest.name = path.to_string_lossy().to_string();
     }
-    if manifest.base_path.as_os_str().is_empty() {
-        manifest.base_path = parent_path.to_path_buf();
-    } else {
-        manifest.base_path = manifest.base_path.canonicalize()?;
-    }
+    manifest.base_path = resolve_base_path(parent_path, &manifest.base_path)?;
 
     Ok(manifest)
+}
+
+fn resolve_base_path(manifest_dir: &Path, base_path: &Path) -> crate::Result<PathBuf> {
+    if base_path.as_os_str().is_empty() {
+        return Ok(manifest_dir.to_path_buf());
+    }
+
+    let path = if base_path.is_relative() {
+        manifest_dir.join(base_path)
+    } else {
+        base_path.to_path_buf()
+    };
+
+    let resolved = path.canonicalize().map_err(|error| {
+        crate::Error::InvalidManifest(format!("base_path '{}' cannot be resolved: {error}", path.display()))
+    })?;
+
+    if !resolved.is_dir() {
+        return Err(crate::Error::InvalidManifest(format!("base_path '{}' must be a directory", resolved.display())));
+    }
+
+    Ok(resolved)
 }
 
 fn check_validity(manifest: &Manifest) -> crate::Result {

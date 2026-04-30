@@ -331,9 +331,9 @@ schema = {
 }
 ```
 
-Manifest-facing objects, Lua host API option tables, and module result tables
-reject unknown fields. Module object schemas reject unknown task arguments. A
-typo should fail instead of being ignored.
+Manifest-facing objects, Lua host API option tables, module result tables, and
+module schema definitions reject unknown fields. Module object schemas reject
+unknown task arguments. A typo should fail instead of being ignored.
 
 For POSIX modes, prefer strings such as `"0644"` in module arguments and convert
 them inside the module or a shared helper. Decimal mode values are hard to read
@@ -602,7 +602,9 @@ host. `pull_file` reads `src` from the target host and writes `dest` on the
 controller.
 
 Controller-side paths may be absolute or relative. Relative controller paths are
-resolved against manifest `base_path`, which defaults to the manifest directory.
+resolved against manifest `base_path`. A relative `base_path` is resolved from
+the manifest directory, and an omitted `base_path` defaults to the manifest
+directory. `base_path` must resolve to an existing directory.
 No project-root boundary is imposed: wali assumes the manifest author controls
 which local files may be read or written.
 
