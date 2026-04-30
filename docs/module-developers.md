@@ -339,6 +339,39 @@ For POSIX modes, prefer strings such as `"0644"` in module arguments and convert
 them inside the module or a shared helper. Decimal mode values are hard to read
 in manifests.
 
+## Task dependencies and `on_change`
+
+`depends_on` and `on_change` are host-local task references. Both forms order
+the current task after the referenced source tasks, and selecting a task by id or
+tag includes both normal dependencies and change-gated source tasks.
+
+`depends_on` is the ordinary success gate: the current task runs only when every
+listed dependency succeeded. `on_change` is a success-and-change gate during
+`apply`: the current task runs only when every listed source succeeded and at
+least one listed source reported a changed execution result. If all `on_change`
+sources were unchanged, wali reports the gated task as skipped. During `check`,
+`on_change` still orders and validates the gated task because no apply-time
+change result exists yet.
+
+Do not list the same source in both `depends_on` and `on_change`. Duplicate
+references, self-references, unknown task ids, and references to tasks not
+scheduled for the same host are rejected.
+
+```lua
+{
+    id = "render nginx config",
+    module = "wali.builtin.template",
+    args = { src = "nginx.conf.j2", dest = "/etc/nginx/nginx.conf" },
+}
+
+{
+    id = "reload nginx",
+    on_change = { "render nginx config" },
+    module = "wali.builtin.command",
+    args = { program = "systemctl", args = { "reload", "nginx" } },
+}
+```
+
 ## Task `when` predicates
 
 A task may declare `when` when the decision to run the task depends on host

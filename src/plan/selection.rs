@@ -247,7 +247,7 @@ fn include_task_and_dependencies(
         crate::Error::InvalidManifest(format!("selected task '{task_id}' is not scheduled for host '{host_id}'"))
     })?;
 
-    for dependency in &task.depends_on {
+    for dependency in task.depends_on.iter().chain(task.on_change.iter()) {
         if !by_id.contains_key(dependency.as_str()) {
             return Err(crate::Error::InvalidManifest(format!(
                 "task '{}' depends on task '{}' which is not scheduled for host '{}'",
@@ -272,6 +272,7 @@ mod tests {
             tags: BTreeSet::new(),
             vars: BTreeMap::new(),
             depends_on: depends_on.iter().map(|id| id.to_string()).collect(),
+            on_change: Vec::new(),
             when: None,
             run_as: None,
             module: "wali.builtin.command".to_string(),
@@ -282,6 +283,12 @@ mod tests {
     fn tagged_task(id: &str, tags: &[&str], depends_on: &[&str]) -> TaskInstance {
         let mut task = task(id, depends_on);
         task.tags = tags.iter().map(|tag| tag.to_string()).collect();
+        task
+    }
+
+    fn task_on_change(id: &str, on_change: &[&str]) -> TaskInstance {
+        let mut task = task(id, &[]);
+        task.on_change = on_change.iter().map(|id| id.to_string()).collect();
         task
     }
 
@@ -333,6 +340,29 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(task_ids, vec!["prepare", "deploy"]);
+    }
+
+    #[test]
+    fn selecting_task_keeps_on_change_sources_but_not_dependents() {
+        let plan = plan(vec![host(
+            "localhost",
+            vec![
+                task("render config", &[]),
+                task_on_change("reload", &["render config"]),
+                task("post reload audit", &["reload"]),
+            ],
+        )]);
+        let mut selection = Selection::default();
+        selection.insert_task("reload");
+
+        let selected = plan.select(&selection).expect("selection failed");
+        let task_ids = selected.hosts[0]
+            .tasks
+            .iter()
+            .map(|task| task.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(task_ids, vec!["render config", "reload"]);
     }
 
     #[test]

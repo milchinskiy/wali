@@ -81,8 +81,8 @@ wali cleanup --host-tag web --task-tag deploy --state-file apply-state.json mani
 Selectors are exact ids or exact tags and may be repeated. Host id and host tag
 selectors select the union of matching hosts. Task id and task tag selectors
 select the union of matching tasks. Host and task dimensions are intersected.
-Selecting a task by id or tag includes its transitive `depends_on` dependencies
-on the same host, but it does not include downstream dependents. `plan` prints
+Selecting a task by id or tag includes its transitive `depends_on` and `on_change`
+source tasks on the same host, but it does not include downstream dependents. `plan` prints
 the same selected plan that `check` and `apply` would execute. For selected
 plans, module source preparation and validation are limited to modules required
 by the selected tasks. For `cleanup`, host id/tag selectors limit cleanup to
@@ -129,10 +129,15 @@ return {
 
 Task dependencies are execution dependencies, not only ordering hints. A task with
 `depends_on` runs only when every declared dependency completed successfully on
-the same host. Dependencies must be scheduled for that same host, and duplicate
-dependency ids are rejected. If a dependency fails or is skipped, its dependents
-are skipped with a dependency-specific reason, while unrelated later tasks
-continue to run. `check` and `apply` use the same dependency semantics.
+the same host. `on_change` is also an execution dependency, but in `apply` it
+runs the gated task only when at least one referenced source task reported a real
+change. If all `on_change` sources succeeded unchanged, the gated task is skipped
+with a clear reason. In `check`, `on_change` still orders and validates the gated
+task because no apply-time change result exists yet. Dependencies must be
+scheduled for the same host; duplicate dependency ids and duplicate references
+between `depends_on` and `on_change` are rejected. If a dependency fails or is
+skipped, its dependents are skipped with a dependency-specific reason, while
+unrelated later tasks continue to run.
 
 ## Variables
 
@@ -316,6 +321,7 @@ wali.builtin.permissions
 wali.builtin.pull_file
 wali.builtin.push_file
 wali.builtin.remove
+wali.builtin.template
 wali.builtin.touch
 ```
 

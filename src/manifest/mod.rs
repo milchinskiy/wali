@@ -131,26 +131,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
             when.validate(&task.id)?;
         }
 
-        if let Some(depends_on) = &task.depends_on {
-            let mut seen = std::collections::HashSet::with_capacity(depends_on.len());
-            for dependency in depends_on {
-                if dependency == &task.id {
-                    return Err(crate::Error::InvalidManifest(format!("Task '{}' cannot depend on itself", task.id)));
-                }
-                if !seen.insert(dependency) {
-                    return Err(crate::Error::InvalidManifest(format!(
-                        "Task '{}' declares duplicate dependency '{}'",
-                        task.id, dependency
-                    )));
-                }
-                if !task_id_set.contains(dependency) {
-                    return Err(crate::Error::InvalidManifest(format!(
-                        "Task '{}' depends on non-existent task '{}'",
-                        task.id, dependency
-                    )));
-                }
-            }
-        }
+        validate_task_references(task, &task_id_set)?;
 
         if let Some(hsel) = task.host.as_ref()
             && let host::HostSelector::Id(id) = hsel
@@ -174,6 +155,64 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
                         task.id, run_as, host
                     )));
                 }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_task_references(task: &task::Task, task_id_set: &std::collections::HashSet<String>) -> crate::Result {
+    let mut referenced = std::collections::HashSet::new();
+
+    if let Some(depends_on) = &task.depends_on {
+        let mut seen = std::collections::HashSet::with_capacity(depends_on.len());
+        for dependency in depends_on {
+            if dependency == &task.id {
+                return Err(crate::Error::InvalidManifest(format!("Task '{}' cannot depend on itself", task.id)));
+            }
+            if !seen.insert(dependency.as_str()) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Task '{}' declares duplicate dependency '{}'",
+                    task.id, dependency
+                )));
+            }
+            if !task_id_set.contains(dependency) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Task '{}' depends on non-existent task '{}'",
+                    task.id, dependency
+                )));
+            }
+            referenced.insert(dependency.as_str());
+        }
+    }
+
+    if let Some(on_change) = &task.on_change {
+        let mut seen = std::collections::HashSet::with_capacity(on_change.len());
+        for dependency in on_change {
+            if dependency == &task.id {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Task '{}' cannot list itself in on_change",
+                    task.id
+                )));
+            }
+            if !seen.insert(dependency.as_str()) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Task '{}' declares duplicate on_change reference '{}'",
+                    task.id, dependency
+                )));
+            }
+            if !task_id_set.contains(dependency) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Task '{}' has on_change reference to non-existent task '{}'",
+                    task.id, dependency
+                )));
+            }
+            if referenced.contains(dependency.as_str()) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Task '{}' references task '{}' in both depends_on and on_change",
+                    task.id, dependency
+                )));
             }
         }
     }

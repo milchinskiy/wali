@@ -21,7 +21,7 @@ pub enum ExecutionMode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TaskOutcome {
-    Succeeded,
+    Succeeded { changed: bool },
     Skipped(String),
     Failed(String),
 }
@@ -96,6 +96,12 @@ impl Worker {
                 continue;
             }
 
+            if let Some(reason) = self.on_change_skip_reason(task, &outcomes, mode)? {
+                self.report_task_skip(&sender, task, reason.clone())?;
+                outcomes.insert(task.id.clone(), TaskOutcome::Skipped(reason));
+                continue;
+            }
+
             let bound = backend.bind(task.run_as.clone());
             match self.skip_reason(task, &bound) {
                 Ok(Some(reason)) => {
@@ -117,12 +123,13 @@ impl Worker {
 
             match self.run_task(task, bound, mode) {
                 Ok(result) => {
+                    let changed = result.changed();
                     sender.send(Event::TaskSuccess {
                         host_id: self.plan.id.clone(),
                         task_id: task.id.clone(),
                         result,
                     })?;
-                    outcomes.insert(task.id.clone(), TaskOutcome::Succeeded);
+                    outcomes.insert(task.id.clone(), TaskOutcome::Succeeded { changed });
                 }
                 Err(error) => {
                     let message = error.to_string();
@@ -151,9 +158,9 @@ impl Worker {
         task: &TaskInstance,
         outcomes: &BTreeMap<String, TaskOutcome>,
     ) -> crate::Result<Option<String>> {
-        for dependency in &task.depends_on {
+        for dependency in task.depends_on.iter().chain(task.on_change.iter()) {
             match outcomes.get(dependency) {
-                Some(TaskOutcome::Succeeded) => {}
+                Some(TaskOutcome::Succeeded { .. }) => {}
                 Some(TaskOutcome::Skipped(reason)) => {
                     return Ok(Some(format!("dependency '{}' was skipped: {}", dependency, reason)));
                 }
@@ -167,6 +174,43 @@ impl Worker {
                     )));
                 }
             }
+        }
+
+        Ok(None)
+    }
+
+    fn on_change_skip_reason(
+        &self,
+        task: &TaskInstance,
+        outcomes: &BTreeMap<String, TaskOutcome>,
+        mode: ExecutionMode,
+    ) -> crate::Result<Option<String>> {
+        if mode != ExecutionMode::Apply || task.on_change.is_empty() {
+            return Ok(None);
+        }
+
+        let mut any_changed = false;
+        for dependency in &task.on_change {
+            match outcomes.get(dependency) {
+                Some(TaskOutcome::Succeeded { changed: true }) => any_changed = true,
+                Some(TaskOutcome::Succeeded { changed: false }) => {}
+                Some(TaskOutcome::Skipped(_)) | Some(TaskOutcome::Failed(_)) => {
+                    return Err(crate::Error::InvalidManifest(format!(
+                        "task '{}' reached on_change gate with non-successful dependency '{}'",
+                        task.id, dependency
+                    )));
+                }
+                None => {
+                    return Err(crate::Error::InvalidManifest(format!(
+                        "task '{}' has on_change dependency '{}' with no recorded outcome",
+                        task.id, dependency
+                    )));
+                }
+            }
+        }
+
+        if !any_changed {
+            return Ok(Some(format!("on_change dependencies did not change: {}", task.on_change.join(", "))));
         }
 
         Ok(None)

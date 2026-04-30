@@ -119,6 +119,7 @@ fn build_task_table(lua: &Lua, task: &TaskInstance) -> mlua::Result<Table> {
     table.set("module", task.module.clone())?;
     table.set("tags", lua.to_value(&task.tags)?)?;
     table.set("depends_on", lua.to_value(&task.depends_on)?)?;
+    table.set("on_change", lua.to_value(&task.on_change)?)?;
     Ok(table)
 }
 

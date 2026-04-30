@@ -10,6 +10,7 @@ pub struct Task {
     pub id: TaskId,
     pub tags: Option<BTreeSet<super::Tag>>,
     pub depends_on: Option<Vec<TaskId>>,
+    pub on_change: Option<Vec<TaskId>>,
     pub when: Option<When>,
     pub host: Option<super::host::HostSelector>,
     pub run_as: Option<String>,

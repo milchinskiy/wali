@@ -172,6 +172,7 @@ pub struct TaskInstance {
     pub tags: BTreeSet<String>,
     pub vars: BTreeMap<String, serde_json::Value>,
     pub depends_on: Vec<String>,
+    pub on_change: Vec<String>,
     pub when: Option<predicate::When>,
     pub run_as: Option<RunAs>,
     pub module: String,
@@ -199,6 +200,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                         tags: task.tags.clone().unwrap_or_default(),
                         vars: merged_vars(&manifest.vars, &host.vars, &task.vars),
                         depends_on: task.depends_on.clone().unwrap_or_default(),
+                        on_change: task.on_change.clone().unwrap_or_default(),
                         when: task.when.clone(),
                         run_as: match &task.run_as {
                             None => None,
@@ -265,6 +267,7 @@ fn order_tasks(host_id: &str, tasks: Vec<TaskInstance>) -> crate::Result<Vec<Tas
 
     for task in &tasks {
         let mut seen = BTreeSet::new();
+
         for dep in &task.depends_on {
             if !seen.insert(dep) {
                 return Err(crate::Error::InvalidManifest(format!(
@@ -285,6 +288,27 @@ fn order_tasks(host_id: &str, tasks: Vec<TaskInstance>) -> crate::Result<Vec<Tas
                 )));
             }
         }
+
+        for dep in &task.on_change {
+            if !seen.insert(dep) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "task '{}' declares duplicate dependency '{}' for host '{}'",
+                    task.id, dep, host_id
+                )));
+            }
+            if !by_id.contains_key(dep) {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "task '{}' has on_change reference to task '{}' which is not scheduled for host '{}'",
+                    task.id, dep, host_id
+                )));
+            }
+            if dep == &task.id {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "task '{}' lists itself in on_change for host '{}'",
+                    task.id, host_id
+                )));
+            }
+        }
     }
 
     let mut emitted = BTreeSet::new();
@@ -298,7 +322,11 @@ fn order_tasks(host_id: &str, tasks: Vec<TaskInstance>) -> crate::Result<Vec<Tas
                 continue;
             }
 
-            let ready = task.depends_on.iter().all(|dep| emitted.contains(dep));
+            let ready = task
+                .depends_on
+                .iter()
+                .chain(task.on_change.iter())
+                .all(|dep| emitted.contains(dep));
             if ready {
                 emitted.insert(task.id.clone());
                 ordered.push(task.clone());

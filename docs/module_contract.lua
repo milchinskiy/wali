@@ -19,6 +19,7 @@
 --   ctx.task.module               module name
 --   ctx.task.tags                 task tags
 --   ctx.task.depends_on           task dependency ids; dependencies must succeed before this task runs
+--   ctx.task.on_change            change-gated dependency ids; apply runs this task only if any changed
 --   ctx.vars                      effective manifest/host/task variables; shallow merge, task wins
 --   ctx.run_as                    optional effective run_as spec
 --   ctx.host.id                   host id

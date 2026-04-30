@@ -33,6 +33,7 @@ struct PlanTask {
     module: String,
     tags: Vec<String>,
     depends_on: Vec<String>,
+    on_change: Vec<String>,
     run_as: Option<PlanRunAs>,
     has_when: bool,
     var_keys: Vec<String>,
@@ -105,6 +106,7 @@ impl PlanTask {
             module: task.module.clone(),
             tags: task.tags.iter().cloned().collect(),
             depends_on: task.depends_on.to_vec(),
+            on_change: task.on_change.to_vec(),
             run_as: task.run_as.as_ref().map(PlanRunAs::from_run_as),
             has_when: task.when.is_some(),
             var_keys: task.vars.keys().cloned().collect(),
@@ -168,6 +170,9 @@ fn render_text(report: &PlanReport) -> crate::Result {
             println!("      {}. {} -> {}", idx + 1, task.id, task.module);
             if !task.depends_on.is_empty() {
                 println!("         depends_on: {}", task.depends_on.join(", "));
+            }
+            if !task.on_change.is_empty() {
+                println!("         on_change: {}", task.on_change.join(", "));
             }
             if !task.tags.is_empty() {
                 println!("         tags: {}", task.tags.join(", "));

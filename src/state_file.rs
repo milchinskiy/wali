@@ -45,6 +45,8 @@ struct TaskSnapshot {
     id: String,
     module: String,
     depends_on: Vec<String>,
+    #[serde(default)]
+    on_change: Vec<String>,
     tags: BTreeSet<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -247,6 +249,7 @@ impl From<&crate::plan::TaskInstance> for TaskSnapshot {
             id: task.id.clone(),
             module: task.module.clone(),
             depends_on: task.depends_on.clone(),
+            on_change: task.on_change.clone(),
             tags: task.tags.clone(),
             run_as: task.run_as.clone(),
         }
@@ -318,6 +321,7 @@ fn cleanup_task(idx: usize, item: CleanupItem) -> TaskInstance {
         tags: BTreeSet::new(),
         vars: BTreeMap::new(),
         depends_on: Vec::new(),
+        on_change: Vec::new(),
         when: None,
         run_as: item.run_as,
         module: "wali.builtin.remove".to_string(),
@@ -396,6 +400,7 @@ mod tests {
             tags: BTreeSet::new(),
             vars: BTreeMap::new(),
             depends_on: Vec::new(),
+            on_change: Vec::new(),
             when: None,
             run_as: None,
             module: module.to_string(),
