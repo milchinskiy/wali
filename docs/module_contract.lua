@@ -29,12 +29,17 @@
 --   ctx.host.path.*               join/normalize/parent/is_absolute/basename/strip_prefix
 --   ctx.controller.path.*         controller path helpers; relative paths resolve against base_path
 --   ctx.controller.fs.*           read-only controller filesystem helpers
+--   ctx.json.*                    JSON decode/encode helpers
 --   ctx.template.*                pure MiniJinja rendering helpers
 --   ctx.transfer.*                controller/host file transfer helpers
 --
 -- validate ctx.controller.fs exposes read-only controller helpers:
 --   metadata, stat, lstat, exists, read, read_text, list_dir, read_link
 --   list_dir output is sorted deterministically by entry name.
+--
+-- validate ctx.json exposes pure JSON helpers:
+--   decode(text), encode(value), encode_pretty(value)
+--   JSON null maps to the global null sentinel.
 --
 -- validate ctx.template exposes pure rendering helpers:
 --   render(source, vars)

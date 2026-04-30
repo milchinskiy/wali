@@ -517,6 +517,11 @@ ctx.host.fs.read
 ctx.host.fs.list_dir
 ctx.host.fs.walk
 ctx.host.fs.read_link
+ctx.controller.path.*
+ctx.controller.fs.*
+ctx.json.*
+ctx.template.*
+ctx.transfer.*
 ```
 
 Validation context does not expose mutation helpers, command execution, random
@@ -661,6 +666,29 @@ where the transfer operation itself owns the write semantics.
 `metadata` follows symlinks by default, matching `stat`. Use `lstat` or
 `metadata(path, { follow = false })` when the module owns the path itself.
 `list_dir` returns entries sorted by name for deterministic module behavior.
+
+## JSON API
+
+`ctx.json` is available during validation and apply. It is the primitive JSON
+codec for module authors, backed by wali's existing Serde JSON handling. Use it
+when reading structured controller files, parsing JSON command output, or emitting
+machine-readable result data.
+
+```lua
+ctx.json.decode(text)
+ctx.json.encode(value)
+ctx.json.encode_pretty(value)
+```
+
+`decode` expects a Lua string containing UTF-8 JSON text and returns ordinary Lua
+values. JSON `null` is represented by wali's global `null` sentinel. `encode`
+returns compact JSON; `encode_pretty` returns indented JSON. Functions, threads,
+userdata, and other non-JSON Lua values are rejected with a clear error.
+
+```lua
+local cfg = ctx.json.decode(ctx.controller.fs.read_text("config.json"))
+local text = ctx.json.encode({ name = cfg.name, optional = null })
+```
 
 ## Template API
 
