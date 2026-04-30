@@ -224,6 +224,62 @@ Ensures a symbolic link path exists or is absent.
 `replace = true` may replace files and symlinks, but it refuses to replace
 directories.
 
+## `wali.builtin.template`
+
+Renders a MiniJinja template and writes the rendered content to the target host.
+A template may come from a controller-side file via `src`, or directly from an
+inline string via `content`. Source paths may be absolute or relative. Relative
+source paths are resolved against manifest `base_path`, exactly like
+`wali.builtin.push_file`.
+
+```lua
+{
+    id = "write app config",
+    module = "wali.builtin.template",
+    vars = { port = 8080 },
+    args = {
+        src = "templates/app.conf.j2",
+        dest = "/etc/example/app.conf",
+        vars = { env = "prod" },
+        create_parents = true,
+        replace = true,
+        mode = "0644",
+        owner = { user = "root", group = "root" },
+    },
+}
+```
+
+Inline content is useful for small templates that do not deserve a separate file:
+
+```lua
+{
+    id = "write tiny config",
+    module = "wali.builtin.template",
+    args = {
+        content = "port={{ port }}\\n",
+        dest = "/etc/example/tiny.conf",
+    },
+}
+```
+
+The template context is a shallow merge of effective `ctx.vars` and optional
+`args.vars`; `args.vars` overrides duplicate top-level keys only for this
+template render. Rendering uses MiniJinja with strict undefined-variable
+behavior, so `wali check` fails when the template references a missing variable.
+A trailing newline in the template source is preserved.
+
+Template module behavior:
+
+- exactly one of `src` or `content` must be set;
+- `src` is a controller-side template path;
+- `content` is an inline template string;
+- `dest` is a target-host file path written through the effective backend;
+- `create_parents`, `replace`, `mode`, and `owner` match `wali.builtin.file`
+  write semantics;
+- source files must be regular UTF-8 text files;
+- inline `content` is rendered with the same MiniJinja environment as `src`;
+- template rendering is checked during validation before any mutation.
+
 ## `wali.builtin.remove`
 
 Ensures any filesystem path is absent. Use this when the existing path kind is

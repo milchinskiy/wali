@@ -3,6 +3,7 @@ use mlua::LuaSerdeExt;
 pub mod api;
 pub(crate) mod builtins;
 pub mod module;
+mod template;
 mod transfer;
 
 pub struct LuaRuntime {

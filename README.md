@@ -180,6 +180,29 @@ Inside `custom.write_config`, the effective values are available as
 `ctx.vars.app`, `ctx.vars.role`, `ctx.vars.port`, and
 `ctx.vars.config_name`.
 
+Variables are especially useful with `wali.builtin.template`, which renders either a
+controller-side MiniJinja template file or inline template content and writes the
+result to the target host:
+
+```lua
+{
+    id = "write app config",
+    module = "wali.builtin.template",
+    args = {
+        src = "templates/app.conf.j2",
+        dest = "/etc/demo/app.conf",
+        create_parents = true,
+        mode = "0644",
+    },
+}
+```
+
+When `src` is used, template source paths use the same controller-side `base_path`
+rules as `wali.builtin.push_file`. `content` can be used instead for inline
+templates. Exactly one of `src` or `content` must be set. The template context is
+`ctx.vars` plus optional `args.vars`, where `args.vars` wins on duplicate
+top-level keys.
+
 Tasks may also declare a host-aware `when` predicate. `when` is evaluated after
 the host connection is established and before module `requires`, schema
 normalization, validation, or apply. A task whose predicate does not match is

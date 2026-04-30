@@ -590,6 +590,29 @@ intentionally wants the symlink target.
 `walk` returns lstat-style metadata. Use `order = "pre"` for parent-before-child
 planning and `order = "post"` for child-before-parent planning.
 
+## Template API
+
+`ctx.template` is available during validation and apply. It exposes the same
+read-only rendering helpers in both phases, so custom modules can validate
+template syntax and required variables during `wali check` before writing
+anything during `wali apply`.
+
+```lua
+ctx.template.check_source(src)      -- validates a controller-side template file
+ctx.template.render(source, vars)   -- renders an inline template string
+ctx.template.render_file(src, vars) -- renders a controller-side template file
+```
+
+`check_source` resolves `src` against manifest `base_path` when the path is
+relative and returns `{ ok = true, path = resolved_path }` or
+`{ ok = false, message = error }`. `render_file` uses the same path policy and
+requires a regular UTF-8 text file. `vars` must be an object/table. Rendering is
+strict: referencing an undefined variable is an error. A trailing newline in the
+template source is preserved. The environment is intentionally minimal: standard
+Jinja control syntax and Serde-backed collections are available, but extra
+MiniJinja builtins, filters, loaders, macros, and debug features are not part of
+the wali contract.
+
 ## Transfer API
 
 `ctx.transfer` is available during validation and apply. During validation it

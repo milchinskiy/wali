@@ -44,6 +44,17 @@ function lib.schema.owner_props()
 	return deepcopy(lib.schema.owner().props)
 end
 
+function lib.shallow_merge(base, extra)
+	local out = {}
+	for key, value in pairs(base or {}) do
+		out[key] = value
+	end
+	for key, value in pairs(extra or {}) do
+		out[key] = value
+	end
+	return out
+end
+
 function lib.validation_ok(message)
 	return api.result.validation():ok(message):build()
 end

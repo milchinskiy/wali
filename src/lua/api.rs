@@ -48,6 +48,7 @@ pub fn build_task_ctx(
     }
 
     ctx.set("host", build_host_table(lua, host_id, transport, backend.clone(), phase)?)?;
+    ctx.set("template", crate::lua::template::build_template_table(lua, base_path)?)?;
     ctx.set("transfer", crate::lua::transfer::build_transfer_table(lua, backend, base_path, phase.allows_mutation())?)?;
 
     if phase.allows_mutation() {

@@ -25,7 +25,11 @@
 --   ctx.host.transport            "local" or "ssh"
 --   ctx.host.facts.*              os/arch/hostname/env/user/group/which/etc
 --   ctx.host.path.*               join/normalize/parent/is_absolute/basename/strip_prefix
+--   ctx.template.*                controller-side MiniJinja rendering helpers
 --   ctx.transfer.*                controller/host file transfer helpers
+--
+-- validate ctx.template exposes read-only template helpers:
+--   check_source(src), render(source, vars), render_file(src, vars)
 --
 -- validate ctx.transfer exposes only read-only transfer validation helpers:
 --   check_push_file_source(src) validates that controller src resolves to

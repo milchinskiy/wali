@@ -71,6 +71,11 @@ pub(crate) const MODULES: &[BuiltinModule] = &[
         task_module: true,
     },
     BuiltinModule {
+        name: "wali.builtin.template",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/template.lua")),
+        task_module: true,
+    },
+    BuiltinModule {
         name: "wali.builtin.command",
         content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/command.lua")),
         task_module: true,
