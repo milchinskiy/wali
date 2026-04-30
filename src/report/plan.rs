@@ -35,6 +35,7 @@ struct PlanTask {
     depends_on: Vec<String>,
     run_as: Option<PlanRunAs>,
     has_when: bool,
+    var_keys: Vec<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -106,6 +107,7 @@ impl PlanTask {
             depends_on: task.depends_on.to_vec(),
             run_as: task.run_as.as_ref().map(PlanRunAs::from_run_as),
             has_when: task.when.is_some(),
+            var_keys: task.vars.keys().cloned().collect(),
         }
     }
 }

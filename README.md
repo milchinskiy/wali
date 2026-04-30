@@ -134,6 +134,52 @@ dependency ids are rejected. If a dependency fails or is skipped, its dependents
 are skipped with a dependency-specific reason, while unrelated later tasks
 continue to run. `check` and `apply` use the same dependency semantics.
 
+## Variables
+
+Manifests, hosts, and tasks may define `vars`. Variables are copied into each
+task context after a shallow, deterministic merge:
+
+```text
+manifest vars < host vars < task vars
+```
+
+Later levels replace earlier values with the same top-level key. Values preserve
+their Lua/JSON shape: strings, numbers, booleans, lists, objects, and explicit
+`null` are passed to modules through `ctx.vars`. Variable keys must not be empty
+and must not have leading or trailing whitespace. Plan output exposes only
+variable keys, not values, so variables are useful for ordinary configuration
+but are not a secret-management mechanism.
+
+```lua
+return {
+    vars = {
+        app = "demo",
+        base_dir = "/opt/demo",
+    },
+
+    hosts = {
+        {
+            id = "web-1",
+            transport = "local",
+            vars = { role = "web", port = 8080 },
+        },
+    },
+
+    tasks = {
+        {
+            id = "write config",
+            module = "custom.write_config",
+            vars = { config_name = "demo.conf" },
+            args = {},
+        },
+    },
+}
+```
+
+Inside `custom.write_config`, the effective values are available as
+`ctx.vars.app`, `ctx.vars.role`, `ctx.vars.port`, and
+`ctx.vars.config_name`.
+
 Tasks may also declare a host-aware `when` predicate. `when` is evaluated after
 the host connection is established and before module `requires`, schema
 normalization, validation, or apply. A task whose predicate does not match is

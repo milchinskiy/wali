@@ -170,7 +170,7 @@ fn read_ssh_string<'a>(cursor: &mut &'a [u8]) -> crate::Result<&'a [u8]> {
 pub struct TaskInstance {
     pub id: String,
     pub tags: BTreeSet<String>,
-    pub vars: BTreeMap<String, String>,
+    pub vars: BTreeMap<String, serde_json::Value>,
     pub depends_on: Vec<String>,
     pub when: Option<predicate::When>,
     pub run_as: Option<RunAs>,
@@ -197,7 +197,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                     Ok(TaskInstance {
                         id: task.id.clone(),
                         tags: task.tags.clone().unwrap_or_default(),
-                        vars: host.vars.clone(),
+                        vars: merged_vars(&manifest.vars, &host.vars, &task.vars),
                         depends_on: task.depends_on.clone().unwrap_or_default(),
                         when: task.when.clone(),
                         run_as: match &task.run_as {
@@ -234,6 +234,17 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
         manifest_path: manifest.file.clone(),
         hosts,
     })
+}
+
+fn merged_vars(
+    manifest_vars: &BTreeMap<String, serde_json::Value>,
+    host_vars: &BTreeMap<String, serde_json::Value>,
+    task_vars: &BTreeMap<String, serde_json::Value>,
+) -> BTreeMap<String, serde_json::Value> {
+    let mut vars = manifest_vars.clone();
+    vars.extend(host_vars.clone());
+    vars.extend(task_vars.clone());
+    vars
 }
 
 fn task_matches_host(task: &task::Task, host: &host::Host) -> bool {

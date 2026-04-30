@@ -489,6 +489,11 @@ ctx.host.fs.read_link
 Validation context does not expose mutation helpers, command execution, random
 helpers, or sleep helpers.
 
+`ctx.vars` contains the effective manifest/host/task variables for the current
+host task. The merge is shallow and deterministic: manifest variables are the
+base, host variables override them, and task variables override both. Modules
+should treat `ctx.vars` as read-only configuration data.
+
 Keep validation deterministic. It should answer whether the task is well-formed
 and safe to attempt, not perform the task early.
 

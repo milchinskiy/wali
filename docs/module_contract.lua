@@ -19,7 +19,7 @@
 --   ctx.task.module               module name
 --   ctx.task.tags                 task tags
 --   ctx.task.depends_on           task dependency ids; dependencies must succeed before this task runs
---   ctx.vars                      task variables
+--   ctx.vars                      effective manifest/host/task variables; shallow merge, task wins
 --   ctx.run_as                    optional effective run_as spec
 --   ctx.host.id                   host id
 --   ctx.host.transport            "local" or "ssh"

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::spec::predicate::When;
 
@@ -13,6 +13,8 @@ pub struct Task {
     pub when: Option<When>,
     pub host: Option<super::host::HostSelector>,
     pub run_as: Option<String>,
+    #[serde(default = "BTreeMap::new")]
+    pub vars: BTreeMap<String, serde_json::Value>,
     pub module: String,
     pub args: serde_json::Value,
 }

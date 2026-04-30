@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+use serde_json::Value;
 
 use self::host::HostSelector;
 
@@ -17,6 +20,8 @@ pub struct Manifest {
     pub name: String,
     #[serde(default)]
     pub base_path: PathBuf,
+    #[serde(default = "BTreeMap::new")]
+    pub vars: BTreeMap<String, Value>,
 
     #[serde(default)]
     pub hosts: Vec<host::Host>,
@@ -86,11 +91,14 @@ fn resolve_base_path(manifest_dir: &Path, base_path: &Path) -> crate::Result<Pat
 }
 
 fn check_validity(manifest: &Manifest) -> crate::Result {
+    validate_vars("manifest vars", &manifest.vars)?;
+
     let mut host_id_set = std::collections::HashSet::with_capacity(manifest.hosts.len());
     for host in &manifest.hosts {
         if !host_id_set.insert(host.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Host id '{}' is not unique", host.id)));
         }
+        validate_vars(&format!("Host '{}' vars", host.id), &host.vars)?;
         if host.command_timeout.is_some_and(|timeout| timeout.is_zero()) {
             return Err(crate::Error::InvalidManifest(format!(
                 "Host '{}' command_timeout must be greater than zero",
@@ -107,6 +115,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
         if !task_id_set.insert(task.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Task id '{}' is not unique", task.id)));
         }
+        validate_vars(&format!("Task '{}' vars", task.id), &task.vars)?;
     }
 
     modules::validate_sources(&manifest.modules)?;
@@ -167,6 +176,49 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
                 }
             }
         }
+    }
+
+    Ok(())
+}
+
+fn validate_vars(scope: &str, vars: &BTreeMap<String, Value>) -> crate::Result {
+    validate_var_entries(scope, vars.iter())
+}
+
+fn validate_var_entries<'a, I>(scope: &str, entries: I) -> crate::Result
+where
+    I: IntoIterator<Item = (&'a String, &'a Value)>,
+{
+    for (key, value) in entries {
+        validate_var_key(scope, key)?;
+        validate_var_value(&format!("{scope}.{key}"), value)?;
+    }
+
+    Ok(())
+}
+
+fn validate_var_key(scope: &str, key: &str) -> crate::Result {
+    if key.is_empty() {
+        return Err(crate::Error::InvalidManifest(format!("{scope} contains an empty variable key")));
+    }
+    if key.trim() != key {
+        return Err(crate::Error::InvalidManifest(format!(
+            "{scope} contains variable key '{key}' with leading or trailing whitespace"
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_var_value(scope: &str, value: &Value) -> crate::Result {
+    match value {
+        Value::Array(items) => {
+            for (idx, item) in items.iter().enumerate() {
+                validate_var_value(&format!("{scope}[{idx}]"), item)?;
+            }
+        }
+        Value::Object(object) => validate_var_entries(scope, object.iter())?,
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
 
     Ok(())

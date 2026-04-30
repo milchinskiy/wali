@@ -14,7 +14,7 @@ pub struct Host {
     #[serde(default = "BTreeSet::new")]
     pub tags: BTreeSet<super::Tag>,
     #[serde(default = "BTreeMap::new")]
-    pub vars: BTreeMap<String, String>,
+    pub vars: BTreeMap<String, serde_json::Value>,
     #[serde(default = "Vec::new")]
     pub run_as: Vec<RunAs>,
 
