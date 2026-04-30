@@ -17,14 +17,25 @@ return {
 		},
 	},
 
-	validate = function(_, args)
+	validate = function(ctx, args)
 		if args.src == "" then
 			return lib.validation_error("src must not be empty")
 		end
 		if args.dest == "" then
 			return lib.validation_error("dest must not be empty")
 		end
-		return lib.validate_mode_owner(args)
+
+		local metadata_error = lib.validate_mode_owner(args)
+		if metadata_error ~= nil then
+			return metadata_error
+		end
+
+		local source = ctx.transfer.check_push_file_source(args.src)
+		if not source.ok then
+			return lib.validation_error(source.message)
+		end
+
+		return nil
 	end,
 
 	apply = function(ctx, args)

@@ -42,8 +42,17 @@ return {
         if ctx.sleep_ms ~= nil then
             return fail("validate context must not expose sleep_ms")
         end
-        if ctx.transfer ~= nil then
-            return fail("validate context must not expose transfer")
+        if ctx.transfer == nil then
+            return fail("validate context must expose read-only transfer validation helpers")
+        end
+        if ctx.transfer.check_push_file_source == nil then
+            return fail("validate context must expose transfer source validation")
+        end
+        if ctx.transfer.push_file ~= nil then
+            return fail("validate context must not expose transfer.push_file")
+        end
+        if ctx.transfer.pull_file ~= nil then
+            return fail("validate context must not expose transfer.pull_file")
         end
         if ctx.host.fs.write ~= nil then
             return fail("validate context must not expose fs.write")

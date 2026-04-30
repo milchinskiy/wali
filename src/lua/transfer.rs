@@ -24,9 +24,23 @@ impl Default for PullFileOpts {
     }
 }
 
-pub fn build_transfer_table(lua: &Lua, backend: Backend, base_path: &Path) -> mlua::Result<Table> {
+pub fn build_transfer_table(
+    lua: &Lua,
+    backend: Backend,
+    base_path: &Path,
+    allow_mutation: bool,
+) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     let base_path = base_path.to_path_buf();
+
+    table.set("check_push_file_source", {
+        let base_path = base_path.clone();
+        lua.create_function(move |lua, src: String| push_file_source_check(lua, &base_path, &src))?
+    })?;
+
+    if !allow_mutation {
+        return Ok(table);
+    }
 
     table.set("push_file", {
         let backend = backend.clone();
@@ -57,6 +71,34 @@ fn push_file(
     dest: &str,
     opts: WriteOpts,
 ) -> crate::Result<ExecutionResult> {
+    let src = resolve_push_file_source(base_path, src)?;
+
+    let bytes = std::fs::read(&src).map_err(|error| {
+        crate::Error::Io(std::io::Error::new(
+            error.kind(),
+            format!("failed to read transfer source '{}': {error}", src.display()),
+        ))
+    })?;
+
+    backend.write(&TargetPath::from(dest), &bytes, opts)
+}
+
+fn push_file_source_check(lua: &Lua, base_path: &Path, src: &str) -> mlua::Result<Table> {
+    let table = lua.create_table()?;
+    match resolve_push_file_source(base_path, src) {
+        Ok(path) => {
+            table.set("ok", true)?;
+            table.set("path", path.to_string_lossy().into_owned())?;
+        }
+        Err(error) => {
+            table.set("ok", false)?;
+            table.set("message", error.to_string())?;
+        }
+    }
+    Ok(table)
+}
+
+fn resolve_push_file_source(base_path: &Path, src: &str) -> crate::Result<PathBuf> {
     let src = resolve_local_path(base_path, src)?;
     let metadata = std::fs::metadata(&src).map_err(|error| {
         crate::Error::Io(std::io::Error::new(
@@ -67,15 +109,7 @@ fn push_file(
     if !metadata.is_file() {
         return Err(crate::Error::CommandExec(format!("transfer source must be a regular file: {}", src.display())));
     }
-
-    let bytes = std::fs::read(&src).map_err(|error| {
-        crate::Error::Io(std::io::Error::new(
-            error.kind(),
-            format!("failed to read transfer source '{}': {error}", src.display()),
-        ))
-    })?;
-
-    backend.write(&TargetPath::from(dest), &bytes, opts)
+    Ok(src)
 }
 
 fn pull_file(

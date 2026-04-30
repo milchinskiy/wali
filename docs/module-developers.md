@@ -587,15 +587,22 @@ planning and `order = "post"` for child-before-parent planning.
 
 ## Transfer API
 
-`ctx.transfer` is available only during apply. It moves bytes between the wali
-controller process and the effective target host backend. Use it when a module
-needs controller-to-host or host-to-controller file transfer; use
+`ctx.transfer` is available during validation and apply. During validation it
+exposes only read-only transfer validation helpers. During apply it also moves
+bytes between the wali controller process and the effective target host
+backend. Use it when a module needs controller-to-host or host-to-controller
+file transfer; use
 `ctx.host.fs.copy_file(...)` for same-host copies.
 
 ```lua
-ctx.transfer.push_file(src, dest, opts)
-ctx.transfer.pull_file(src, dest, opts)
+ctx.transfer.check_push_file_source(src) -- validate phase and apply phase
+ctx.transfer.push_file(src, dest, opts)  -- apply phase only
+ctx.transfer.pull_file(src, dest, opts)  -- apply phase only
 ```
+
+`check_push_file_source` resolves `src` with the same controller-side path
+policy as `push_file` and returns `{ ok = true, path = resolved_path }` or
+`{ ok = false, message = error }`. It performs no mutation.
 
 `push_file` reads `src` from the controller and writes `dest` on the target
 host. `pull_file` reads `src` from the target host and writes `dest` on the

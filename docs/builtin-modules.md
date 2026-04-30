@@ -161,7 +161,8 @@ Behavior:
   `base_path` is resolved from the manifest directory, and an omitted
   `base_path` defaults to the manifest directory; `base_path` must resolve to
   an existing directory;
-- `src` must resolve to a regular file;
+- `src` must resolve to a regular file; `wali check` validates this
+  controller-side source before apply;
 - `dest` is a target-host path and is written through the effective host
   backend, including `run_as` when configured;
 - `create_parents`, `replace`, `mode`, and `owner` match

@@ -272,6 +272,68 @@ return {{
 }
 
 #[test]
+fn check_validates_push_file_controller_source_without_pushing() {
+    let sandbox = Sandbox::new("transfer-check-source-ok");
+    let local_src = sandbox.path("source.txt");
+    let host_dest = sandbox.path("host/dest.txt");
+
+    std::fs::write(&local_src, "checked source\n").expect("failed to write local source");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "check push source",
+            module = "wali.builtin.push_file",
+            args = {{ src = {}, dest = {}, create_parents = true }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&local_src),
+        lua_string(&host_dest),
+    ));
+
+    let report = run_check(&manifest);
+    assert_task_unchanged(&report, "check push source");
+    assert!(!host_dest.exists(), "wali check must not push controller file to host");
+}
+
+#[test]
+fn check_rejects_missing_push_file_controller_source() {
+    let sandbox = Sandbox::new("transfer-check-source-missing");
+    let missing_src = sandbox.path("missing.txt");
+    let host_dest = sandbox.path("host/dest.txt");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "missing push source",
+            module = "wali.builtin.push_file",
+            args = {{ src = {}, dest = {}, create_parents = true }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&missing_src),
+        lua_string(&host_dest),
+    ));
+
+    let report = run_wali_failure_json(&["--json", "check", manifest.to_str().expect("non-utf8 manifest path")]);
+    assert_task_failed_contains(&report, "missing push source", "failed to inspect transfer source");
+    assert!(!host_dest.exists(), "wali check must not create destination for invalid push source");
+}
+
+#[test]
 fn push_file_rejects_non_file_controller_source() {
     let sandbox = Sandbox::new("transfer-push-source-kind");
     let source_dir = sandbox.mkdir("source-dir");

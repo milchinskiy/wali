@@ -48,9 +48,9 @@ pub fn build_task_ctx(
     }
 
     ctx.set("host", build_host_table(lua, host_id, transport, backend.clone(), phase)?)?;
+    ctx.set("transfer", crate::lua::transfer::build_transfer_table(lua, backend, base_path, phase.allows_mutation())?)?;
 
     if phase.allows_mutation() {
-        ctx.set("transfer", crate::lua::transfer::build_transfer_table(lua, backend, base_path)?)?;
         ctx.set("rand", build_rand_table(lua)?)?;
         ctx.set(
             "sleep_ms",
