@@ -329,7 +329,7 @@ return {{
     ));
 
     let report = run_wali_failure_json(&["--json", "check", manifest.to_str().expect("non-utf8 manifest path")]);
-    assert_task_failed_contains(&report, "missing push source", "failed to inspect transfer source");
+    assert_task_failed_contains(&report, "missing push source", "transfer source does not exist");
     assert!(!host_dest.exists(), "wali check must not create destination for invalid push source");
 }
 

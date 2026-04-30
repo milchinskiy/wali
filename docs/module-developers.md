@@ -623,47 +623,76 @@ intentionally wants the symlink target.
 `walk` returns lstat-style metadata. Use `order = "pre"` for parent-before-child
 planning and `order = "post"` for child-before-parent planning.
 
-## Template API
+## Controller API
 
-`ctx.template` is available during validation and apply. It exposes the same
-read-only rendering helpers in both phases, so custom modules can validate
-template syntax and required variables during `wali check` before writing
-anything during `wali apply`.
+`ctx.controller` is available during validation and apply. It is the single
+namespace for controller-side path and read-only filesystem access. Use it when a
+module needs to inspect or read files from the machine running wali. The name is
+intentional: `local` would be ambiguous when the target host also uses local
+transport.
 
 ```lua
-ctx.template.check_source(src)      -- validates a controller-side template file
-ctx.template.render(source, vars)   -- renders an inline template string
-ctx.template.render_file(src, vars) -- renders a controller-side template file
+ctx.controller.path.resolve(path)
+ctx.controller.path.is_absolute(path)
+ctx.controller.path.join(base, child)
+ctx.controller.path.parent(path)
+ctx.controller.path.basename(path)
+
+ctx.controller.fs.metadata(path, opts) -- opts.follow defaults to true
+ctx.controller.fs.stat(path)
+ctx.controller.fs.lstat(path)
+ctx.controller.fs.exists(path)
+ctx.controller.fs.read(path)      -- raw bytes as a Lua string
+ctx.controller.fs.read_text(path) -- UTF-8 text only
+ctx.controller.fs.list_dir(path)
+ctx.controller.fs.read_link(path)
 ```
 
-`check_source` resolves `src` against manifest `base_path` when the path is
-relative and returns `{ ok = true, path = resolved_path }` or
-`{ ok = false, message = error }`. `render_file` uses the same path policy and
-requires a regular UTF-8 text file. `vars` must be an object/table. Rendering is
-strict: referencing an undefined variable is an error. A trailing newline in the
-template source is preserved. The environment is intentionally minimal: standard
-Jinja control syntax and Serde-backed collections are available, but extra
-MiniJinja builtins, filters, loaders, macros, and debug features are not part of
-the wali contract.
+Controller paths may be absolute or relative. Relative paths are resolved against
+manifest `base_path`; a relative `base_path` is resolved from the manifest
+directory, and an omitted `base_path` defaults to the manifest directory. Empty
+controller paths are rejected. No project-root boundary is imposed. wali assumes
+the manifest author controls which controller files may be read.
+
+The controller filesystem API is intentionally read-only. Controller-side writes
+currently happen only through `wali.builtin.pull_file` / `ctx.transfer.pull_file`,
+where the transfer operation itself owns the write semantics.
+
+`metadata` follows symlinks by default, matching `stat`. Use `lstat` or
+`metadata(path, { follow = false })` when the module owns the path itself.
+`list_dir` returns entries sorted by name for deterministic module behavior.
+
+## Template API
+
+`ctx.template` is available during validation and apply. It is a pure
+MiniJinja rendering helper. Controller-side template files should be read through
+`ctx.controller.fs.read_text(...)`; this avoids a second controller-file access
+contract in the template namespace.
+
+```lua
+ctx.template.render(source, vars)
+```
+
+`vars` must be an object/table. Rendering is strict: referencing an undefined
+variable is an error. A trailing newline in the template source is preserved. The
+environment is intentionally minimal: standard Jinja control syntax and
+Serde-backed collections are available, but extra MiniJinja builtins, filters,
+loaders, macros, and debug features are not part of the wali contract.
 
 ## Transfer API
 
-`ctx.transfer` is available during validation and apply. During validation it
-exposes only read-only transfer validation helpers. During apply it also moves
+`ctx.transfer` is available during validation and apply. During validation it is
+present but exposes no duplicated controller-file validation helpers. During
+apply it moves
 bytes between the wali controller process and the effective target host
 backend. Use it when a module needs controller-to-host or host-to-controller
 file transfer; use
 `ctx.host.fs.copy_file(...)` for same-host copies.
 
 ```lua
-ctx.transfer.check_push_file_source(src) -- validate phase and apply phase
 ctx.transfer.push_file(src, dest, opts)  -- apply phase only
 ctx.transfer.pull_file(src, dest, opts)  -- apply phase only
 ```
-
-`check_push_file_source` resolves `src` with the same controller-side path
-policy as `push_file` and returns `{ ok = true, path = resolved_path }` or
-`{ ok = false, message = error }`. It performs no mutation.
 
 `push_file` reads `src` from the controller and writes `dest` on the target
 host. `pull_file` reads `src` from the target host and writes `dest` on the

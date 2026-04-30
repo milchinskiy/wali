@@ -2,6 +2,7 @@ use mlua::LuaSerdeExt;
 
 pub mod api;
 pub(crate) mod builtins;
+mod controller;
 pub mod module;
 mod template;
 mod transfer;

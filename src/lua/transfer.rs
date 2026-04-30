@@ -33,11 +33,6 @@ pub fn build_transfer_table(
     let table = lua.create_table()?;
     let base_path = base_path.to_path_buf();
 
-    table.set("check_push_file_source", {
-        let base_path = base_path.clone();
-        lua.create_function(move |lua, src: String| push_file_source_check(lua, &base_path, &src))?
-    })?;
-
     if !allow_mutation {
         return Ok(table);
     }
@@ -71,45 +66,10 @@ fn push_file(
     dest: &str,
     opts: WriteOpts,
 ) -> crate::Result<ExecutionResult> {
-    let src = resolve_push_file_source(base_path, src)?;
-
-    let bytes = std::fs::read(&src).map_err(|error| {
-        crate::Error::Io(std::io::Error::new(
-            error.kind(),
-            format!("failed to read transfer source '{}': {error}", src.display()),
-        ))
-    })?;
+    let src = crate::lua::controller::resolve_regular_file(base_path, src, "transfer source")?;
+    let bytes = crate::lua::controller::read(&src)?;
 
     backend.write(&TargetPath::from(dest), &bytes, opts)
-}
-
-fn push_file_source_check(lua: &Lua, base_path: &Path, src: &str) -> mlua::Result<Table> {
-    let table = lua.create_table()?;
-    match resolve_push_file_source(base_path, src) {
-        Ok(path) => {
-            table.set("ok", true)?;
-            table.set("path", path.to_string_lossy().into_owned())?;
-        }
-        Err(error) => {
-            table.set("ok", false)?;
-            table.set("message", error.to_string())?;
-        }
-    }
-    Ok(table)
-}
-
-fn resolve_push_file_source(base_path: &Path, src: &str) -> crate::Result<PathBuf> {
-    let src = resolve_local_path(base_path, src)?;
-    let metadata = std::fs::metadata(&src).map_err(|error| {
-        crate::Error::Io(std::io::Error::new(
-            error.kind(),
-            format!("failed to inspect transfer source '{}': {error}", src.display()),
-        ))
-    })?;
-    if !metadata.is_file() {
-        return Err(crate::Error::CommandExec(format!("transfer source must be a regular file: {}", src.display())));
-    }
-    Ok(src)
 }
 
 fn pull_file(
@@ -120,21 +80,8 @@ fn pull_file(
     opts: PullFileOpts,
 ) -> crate::Result<ExecutionResult> {
     let bytes = backend.read(&TargetPath::from(src))?;
-    let dest = resolve_local_path(base_path, dest)?;
+    let dest = crate::lua::controller::resolve_path(base_path, dest)?;
     write_local_file(&dest, &bytes, &opts)
-}
-
-fn resolve_local_path(base_path: &Path, path: &str) -> crate::Result<PathBuf> {
-    if path.is_empty() {
-        return Err(crate::Error::CommandExec("transfer local path must not be empty".into()));
-    }
-
-    let path = Path::new(path);
-    if path.is_absolute() {
-        Ok(path.to_path_buf())
-    } else {
-        Ok(base_path.join(path))
-    }
 }
 
 fn write_local_file(path: &Path, content: &[u8], opts: &PullFileOpts) -> crate::Result<ExecutionResult> {

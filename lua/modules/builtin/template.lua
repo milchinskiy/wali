@@ -28,6 +28,34 @@ local function validate_source_args(args)
 	return nil
 end
 
+local function resolved_path(ctx, path)
+	local ok, resolved_or_error = pcall(ctx.controller.path.resolve, path)
+	if ok then
+		return resolved_or_error
+	end
+	return path
+end
+
+local function read_template_source(ctx, src)
+	local ok, metadata_or_error = pcall(ctx.controller.fs.metadata, src)
+	if not ok then
+		return nil, metadata_or_error
+	end
+	local metadata = metadata_or_error
+	if metadata == nil then
+		return nil, "template source does not exist: " .. resolved_path(ctx, src)
+	end
+	if metadata.kind ~= "file" then
+		return nil, "template source must be a regular file: " .. resolved_path(ctx, src)
+	end
+
+	local content_ok, content_or_error = pcall(ctx.controller.fs.read_text, src)
+	if not content_ok then
+		return nil, content_or_error
+	end
+	return content_or_error, nil
+end
+
 return {
 	name = "builtin template",
 	description = "Render a MiniJinja template and write it to the target host.",
@@ -61,18 +89,16 @@ return {
 			return metadata_error
 		end
 
-		local vars = template_vars(ctx, args.vars)
-		local ok, err
+		local source = args.content
 		if args.src ~= nil then
-			local source = ctx.template.check_source(args.src)
-			if not source.ok then
-				return lib.validation_error(source.message)
+			local err
+			source, err = read_template_source(ctx, args.src)
+			if err ~= nil then
+				return lib.validation_error(err)
 			end
-			ok, err = pcall(ctx.template.render_file, args.src, vars)
-		else
-			ok, err = pcall(ctx.template.render, args.content, vars)
 		end
 
+		local ok, err = pcall(ctx.template.render, source, template_vars(ctx, args.vars))
 		if not ok then
 			return lib.validation_error(render_validation_error(err))
 		end
@@ -81,13 +107,15 @@ return {
 	end,
 
 	apply = function(ctx, args)
-		local vars = template_vars(ctx, args.vars)
-		local content
+		local source = args.content
 		if args.src ~= nil then
-			content = ctx.template.render_file(args.src, vars)
-		else
-			content = ctx.template.render(args.content, vars)
+			local err
+			source, err = read_template_source(ctx, args.src)
+			if err ~= nil then
+				error(err)
+			end
 		end
+		local content = ctx.template.render(source, template_vars(ctx, args.vars))
 		return ctx.host.fs.write(args.dest, content, lib.write_file_opts(args))
 	end,
 }

@@ -1,5 +1,28 @@
 local lib = require("wali.builtin.lib")
 
+local function resolved_path(ctx, path)
+	local ok, resolved_or_error = pcall(ctx.controller.path.resolve, path)
+	if ok then
+		return resolved_or_error
+	end
+	return path
+end
+
+local function validate_source(ctx, src)
+	local ok, metadata_or_error = pcall(ctx.controller.fs.metadata, src)
+	if not ok then
+		return lib.validation_error(metadata_or_error)
+	end
+	local metadata = metadata_or_error
+	if metadata == nil then
+		return lib.validation_error("transfer source does not exist: " .. resolved_path(ctx, src))
+	end
+	if metadata.kind ~= "file" then
+		return lib.validation_error("transfer source must be a regular file: " .. resolved_path(ctx, src))
+	end
+	return nil
+end
+
 return {
 	name = "builtin push file",
 	description = "Transfer a regular file from the wali controller to the target host.",
@@ -30,12 +53,7 @@ return {
 			return metadata_error
 		end
 
-		local source = ctx.transfer.check_push_file_source(args.src)
-		if not source.ok then
-			return lib.validation_error(source.message)
-		end
-
-		return nil
+		return validate_source(ctx, args.src)
 	end,
 
 	apply = function(ctx, args)

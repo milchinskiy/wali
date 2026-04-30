@@ -105,7 +105,7 @@ return {{
 
     assert_wali_failure_contains(
         &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
-        "failed to inspect template source",
+        "template source does not exist",
     );
 }
 

@@ -42,11 +42,20 @@ return {
         if ctx.sleep_ms ~= nil then
             return fail("validate context must not expose sleep_ms")
         end
-        if ctx.transfer == nil then
-            return fail("validate context must expose read-only transfer validation helpers")
+        if ctx.controller == nil or ctx.controller.fs == nil or ctx.controller.path == nil then
+            return fail("validate context must expose controller path and filesystem helpers")
         end
-        if ctx.transfer.check_push_file_source == nil then
-            return fail("validate context must expose transfer source validation")
+        if ctx.controller.fs.read_text == nil or ctx.controller.fs.metadata == nil then
+            return fail("validate context must expose controller read-only filesystem helpers")
+        end
+        if ctx.template.render_file ~= nil or ctx.template.check_source ~= nil then
+            return fail("validate context must not expose duplicated controller template file helpers")
+        end
+        if ctx.transfer == nil then
+            return fail("validate context must expose transfer namespace")
+        end
+        if ctx.transfer.check_push_file_source ~= nil then
+            return fail("validate context must not expose duplicated transfer source validation")
         end
         if ctx.transfer.push_file ~= nil then
             return fail("validate context must not expose transfer.push_file")

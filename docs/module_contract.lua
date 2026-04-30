@@ -3,13 +3,14 @@
 -- requires  -> checked by Rust against the effective backend before module Lua
 --              validation/apply. It is for host capability checks only.
 -- validate  -> receives a read/probe-only ctx. It may inspect facts, paths,
---              metadata, directory listings, file contents, symlink targets,
---              tree walk output, and controller-side transfer source checks.
+--              target-host metadata, directory listings, file contents,
+--              symlink targets, tree walk output, and controller-side read-only
+--              files through ctx.controller.
 --              It must not mutate host state and does not expose ctx.host.cmd,
 --              ctx.rand, ctx.sleep_ms, or transfer mutation helpers.
--- apply     -> receives the full ctx, including mutating filesystem functions,
---              command execution, transfer mutation helpers, random helpers,
---              and sleep_ms.
+-- apply     -> receives the full ctx, including mutating target filesystem
+--              functions, command execution, transfer mutation helpers,
+--              random helpers, and sleep_ms.
 --
 -- wali check runs requires + validate only. It never calls apply().
 --
@@ -26,15 +27,21 @@
 --   ctx.host.transport            "local" or "ssh"
 --   ctx.host.facts.*              os/arch/hostname/env/user/group/which/etc
 --   ctx.host.path.*               join/normalize/parent/is_absolute/basename/strip_prefix
---   ctx.template.*                controller-side MiniJinja rendering helpers
+--   ctx.controller.path.*         controller path helpers; relative paths resolve against base_path
+--   ctx.controller.fs.*           read-only controller filesystem helpers
+--   ctx.template.*                pure MiniJinja rendering helpers
 --   ctx.transfer.*                controller/host file transfer helpers
 --
--- validate ctx.template exposes read-only template helpers:
---   check_source(src), render(source, vars), render_file(src, vars)
+-- validate ctx.controller.fs exposes read-only controller helpers:
+--   metadata, stat, lstat, exists, read, read_text, list_dir, read_link
+--   list_dir output is sorted deterministically by entry name.
 --
--- validate ctx.transfer exposes only read-only transfer validation helpers:
---   check_push_file_source(src) validates that controller src resolves to
---   a regular file.
+-- validate ctx.template exposes pure rendering helpers:
+--   render(source, vars)
+--
+-- validate ctx.transfer is present but intentionally exposes no duplicated
+-- controller source-check helpers. Use ctx.controller.fs for controller-side
+-- inspection and reads.
 --
 -- validate ctx.host.fs exposes only read/probe helpers:
 --   metadata, stat, lstat, exists, read, list_dir, walk, read_link
