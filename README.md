@@ -299,7 +299,7 @@ Critical source rules:
 - `check` and `apply` prepare and lock Git checkouts until execution finishes;
 - every system `git` process has a timeout. `git.timeout` defaults to `5m` when omitted.
 
-Custom Lua modules receive `ctx.controller` for controller-side path resolution and read-only filesystem access. Controller paths may be absolute or relative to manifest `base_path`; there is no project-root sandbox. Domain modules should use this primitive API rather than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`. Modules also receive `ctx.json` for compact JSON decoding and encoding without vendoring Lua JSON parsers or shelling out to external tools.
+Custom Lua modules receive `ctx.controller` for controller-side path resolution and read-only filesystem access. Controller paths may be absolute or relative to manifest `base_path`; there is no project-root sandbox. Domain modules should use this primitive API rather than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`. Modules also receive `ctx.json` for compact JSON decoding and encoding, and `ctx.codec` for byte-oriented codecs such as Base64, without vendoring Lua parsers or shelling out to external tools.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).

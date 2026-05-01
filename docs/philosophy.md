@@ -35,16 +35,19 @@ The CLI currently has three execution layers plus explicit cleanup:
 1. `plan` compiles and prints the per-host task plan without host access.
 2. `check` performs host-aware, non-mutating validation.
 3. `apply` runs the same validation and then mutates host state.
-4. `cleanup` uses a previous successful apply state file to remove filesystem entries that were reported as created within the current selected manifest scope.
+4. `cleanup` uses a previous successful apply state file to remove filesystem
+   entries that were reported as created within the current selected manifest
+   scope.
 
 This split is central. A user should be able to inspect task expansion before
 connecting to anything, then validate against real hosts before applying
 changes.
 
-Hosts may run in parallel. `check --jobs N`, `apply --jobs N`, and `cleanup --jobs N` cap the number
-of hosts executing at once; `--jobs 1` runs hosts serially in manifest order.
-Tasks within one host run sequentially. This keeps the per-host mental model
-imperative while still allowing useful concurrency.
+Hosts may run in parallel. `check --jobs N`, `apply --jobs N`, and
+`cleanup --jobs N` cap the number of hosts executing at once; `--jobs 1` runs
+hosts serially in manifest order. Tasks within one host run sequentially. This
+keeps the per-host mental model imperative while still allowing useful
+concurrency.
 
 CLI host and task selectors are plan-level narrowing primitives. They mutate the
 compiled plan before rendering, secret collection, module source preparation, or
@@ -52,8 +55,8 @@ worker launch. Host ids and host tags form an inclusive host selector. Task ids
 and task tags form an inclusive task selector. Host and task dimensions are
 intersected. Task selection is dependency-inclusive: selected task instances
 bring their transitive same-host dependencies, but not their downstream
-dependents. This keeps `plan`, `check`, `apply`, and cleanup scope aligned around one concrete
-working set.
+dependents. This keeps `plan`, `check`, `apply`, and cleanup scope aligned
+around one concrete working set.
 
 ## Boundaries
 
@@ -229,8 +232,7 @@ Important properties to test:
 - when-skip and requires-failure are reported correctly;
 - task ordering and dependency errors are deterministic;
 - runtime dependency semantics are deterministic: failed or skipped tasks block
-  only declared dependents, while independent tasks continue
-  on the same host.
+  only declared dependents, while independent tasks continue on the same host.
 
 Doc-tests are useful for critical Rust contracts such as schema normalization,
 run_as defaults, and execution result serialization. They should be small and
@@ -255,4 +257,5 @@ The current priority order is:
 2. keep integration tests ahead of new builtins;
 3. document module authoring and current builtin behavior;
 4. add new modules only when their safety semantics are clear;
-5. keep cleanup conservative; destructive sync-style pruning or revert features need stronger ownership semantics first.
+5. keep cleanup conservative; destructive sync-style pruning or revert features
+   need stronger ownership semantics first.

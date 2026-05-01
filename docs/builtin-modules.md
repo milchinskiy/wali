@@ -125,8 +125,8 @@ Behavior:
 
 - `src` must be an existing regular file;
 - source symlinks are refused instead of followed;
-- destination directories, including symlinks to directories, and special entries
-  are refused;
+- destination directories, including symlinks to directories, and special
+  entries are refused;
 - an existing identical regular file is unchanged unless requested metadata must
   be updated;
 - an existing symlink destination is preserved unchanged when `replace = false`;
@@ -157,16 +157,16 @@ Behavior:
 
 - `src` is a controller-side path;
 - absolute controller paths are used as-is;
-- relative controller paths are resolved against manifest `base_path`; a relative
-  `base_path` is resolved from the manifest directory, and an omitted
-  `base_path` defaults to the manifest directory; `base_path` must resolve to
-  an existing directory;
+- relative controller paths are resolved against manifest `base_path`; a
+  relative `base_path` is resolved from the manifest directory, and an omitted
+  `base_path` defaults to the manifest directory; `base_path` must resolve to an
+  existing directory;
 - `src` must resolve to a regular file; `wali check` validates this
   controller-side source before apply;
 - `dest` is a target-host path and is written through the effective host
   backend, including `run_as` when configured;
-- `create_parents`, `replace`, `mode`, and `owner` match
-  `wali.builtin.file` write semantics.
+- `create_parents`, `replace`, `mode`, and `owner` match `wali.builtin.file`
+  write semantics.
 
 ## `wali.builtin.pull_file`
 
@@ -191,10 +191,10 @@ Behavior:
 - `src` is a target-host path and is read through the effective host backend;
 - `dest` is a controller-side path;
 - absolute controller paths are used as-is;
-- relative controller paths are resolved against manifest `base_path`; a relative
-  `base_path` is resolved from the manifest directory, and an omitted
-  `base_path` defaults to the manifest directory; `base_path` must resolve to
-  an existing directory;
+- relative controller paths are resolved against manifest `base_path`; a
+  relative `base_path` is resolved from the manifest directory, and an omitted
+  `base_path` defaults to the manifest directory; `base_path` must resolve to an
+  existing directory;
 - an existing identical local regular file is unchanged unless requested mode
   bits must be updated;
 - `replace = false` preserves any existing local file or symlink destination and
@@ -249,7 +249,8 @@ source paths are resolved against manifest `base_path`, exactly like
 }
 ```
 
-Inline content is useful for small templates that do not deserve a separate file:
+Inline content is useful for small templates that do not deserve a separate
+file:
 
 ```lua
 {
@@ -428,8 +429,8 @@ directory or symlink is created.
 - destination directories are created or verified;
 - destination directories are never replaced by files or links;
 - destination special entries are refused for copied files;
-- destination symlinks that resolve to directories or special entries are refused
-  during preflight where copied files are expected;
+- destination symlinks that resolve to directories or special entries are
+  refused during preflight where copied files are expected;
 - destination file/symlink paths may be replaced only when `replace = true`;
 - extra destination entries are not pruned.
 

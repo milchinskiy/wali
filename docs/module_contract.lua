@@ -29,6 +29,7 @@
 --   ctx.host.path.*               join/normalize/parent/is_absolute/basename/strip_prefix
 --   ctx.controller.path.*         controller path helpers; relative paths resolve against base_path
 --   ctx.controller.fs.*           read-only controller filesystem helpers
+--   ctx.codec.*                   byte/string codec helpers
 --   ctx.json.*                    JSON decode/encode helpers
 --   ctx.template.*                pure MiniJinja rendering helpers
 --   ctx.transfer.*                controller/host file transfer helpers
@@ -36,6 +37,9 @@
 -- validate ctx.controller.fs exposes read-only controller helpers:
 --   metadata, stat, lstat, exists, read, read_text, list_dir, read_link
 --   list_dir output is sorted deterministically by entry name.
+--
+-- validate ctx.codec exposes pure byte/string codec helpers:
+--   base64_encode(bytes), base64_decode(text)
 --
 -- validate ctx.json exposes pure JSON helpers:
 --   decode(text), encode(value), encode_pretty(value)
@@ -102,20 +106,20 @@ return {
 		},
 	},
 
-    ---Input arguments (required).
-    ---Supported argument types:
-    ---  any
-    ---  null
-    ---  string
-    ---  number
-    ---  integer
-    ---  boolean
-    ---  list
-    ---  tuple
-    ---  enum
-    ---  object
-    ---  map
-    ---@type table
+	---Input arguments (required).
+	---Supported argument types:
+	---  any
+	---  null
+	---  string
+	---  number
+	---  integer
+	---  boolean
+	---  list
+	---  tuple
+	---  enum
+	---  object
+	---  map
+	---@type table
 	schema = {
 		type = "object",
 		required = true,

@@ -49,6 +49,7 @@ pub fn build_task_ctx(
 
     ctx.set("host", build_host_table(lua, host_id, transport, backend.clone(), phase)?)?;
     ctx.set("controller", crate::lua::controller::build_controller_table(lua, base_path)?)?;
+    ctx.set("codec", crate::lua::codec::build_codec_table(lua)?)?;
     ctx.set("json", crate::lua::json::build_json_table(lua)?)?;
     ctx.set("template", crate::lua::template::build_template_table(lua)?)?;
     ctx.set("transfer", crate::lua::transfer::build_transfer_table(lua, backend, base_path, phase.allows_mutation())?)?;

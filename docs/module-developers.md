@@ -221,8 +221,8 @@ return {
 
 ## Shared helper library
 
-Custom modules may import `wali.builtin.lib` when they want the same small helper
-surface used by the builtin modules:
+Custom modules may import `wali.builtin.lib` when they want the same small
+helper surface used by the builtin modules:
 
 ```lua
 local lib = require("wali.builtin.lib")
@@ -237,13 +237,14 @@ filesystem policies. The most useful public helpers are:
 - `lib.schema.mode()` and `lib.schema.owner()` schema fragments for manifest
   fields that later become executor mode/owner option tables;
 - `lib.mode_bits("0644")`, `lib.owner(table)`, `lib.validate_mode_owner(args)`,
-  `lib.mode_owner_opts(args)`, and `lib.apply_mode_owner(ctx, result, path, args)`;
+  `lib.mode_owner_opts(args)`, and
+  `lib.apply_mode_owner(ctx, result, path, args)`;
 - `lib.validate_absolute_path(ctx, path, field)`,
   `lib.validate_safe_remove_path(ctx, path)`, and
   `lib.validate_tree_roots(ctx, src, dest)` for common path-safety checks;
 - `lib.output_text(output)`, `lib.status_text(status)`,
-  `lib.command_error(output, detail)`, and `lib.assert_command_ok(output, detail)`
-  for command modules;
+  `lib.command_error(output, detail)`, and
+  `lib.assert_command_ok(output, detail)` for command modules;
 - `lib.is_file(metadata)`, `lib.is_dir(metadata)`, and
   `lib.is_symlink(metadata)` for readable metadata predicates.
 
@@ -342,8 +343,8 @@ in manifests.
 ## Task dependencies and `on_change`
 
 `depends_on` and `on_change` are host-local task references. Both forms order
-the current task after the referenced source tasks, and selecting a task by id or
-tag includes both normal dependencies and change-gated source tasks.
+the current task after the referenced source tasks, and selecting a task by id
+or tag includes both normal dependencies and change-gated source tasks.
 
 `depends_on` is the ordinary success gate: the current task runs only when every
 listed dependency succeeded. `on_change` is a success-and-change gate during
@@ -433,7 +434,6 @@ arguments are rejected during manifest validation.
 Use task `when` for deployment decisions. Use module `requires` for capabilities
 that the module itself needs regardless of who uses it.
 
-
 ## Requires
 
 `requires` describes host capabilities needed by the module. It is checked by
@@ -519,6 +519,7 @@ ctx.host.fs.walk
 ctx.host.fs.read_link
 ctx.controller.path.*
 ctx.controller.fs.*
+ctx.codec.*
 ctx.json.*
 ctx.template.*
 ctx.transfer.*
@@ -620,7 +621,8 @@ Low-level mutation helpers enforce the same safety invariants for builtin and
 custom modules. `remove_dir` refuses empty, root, current-directory,
 parent-directory, and parent-escaping lexical targets before shell execution.
 `rename` is exact-path semantics: an existing directory destination is refused
-instead of being treated like a request to move the source inside that directory.
+instead of being treated like a request to move the source inside that
+directory.
 
 Use `lstat` when your module owns the path itself. Use `stat` when your module
 intentionally wants the symlink target.
@@ -631,9 +633,9 @@ planning and `order = "post"` for child-before-parent planning.
 ## Controller API
 
 `ctx.controller` is available during validation and apply. It is the single
-namespace for controller-side path and read-only filesystem access. Use it when a
-module needs to inspect or read files from the machine running wali. The name is
-intentional: `local` would be ambiguous when the target host also uses local
+namespace for controller-side path and read-only filesystem access. Use it when
+a module needs to inspect or read files from the machine running wali. The name
+is intentional: `local` would be ambiguous when the target host also uses local
 transport.
 
 ```lua
@@ -653,26 +655,49 @@ ctx.controller.fs.list_dir(path)
 ctx.controller.fs.read_link(path)
 ```
 
-Controller paths may be absolute or relative. Relative paths are resolved against
-manifest `base_path`; a relative `base_path` is resolved from the manifest
-directory, and an omitted `base_path` defaults to the manifest directory. Empty
-controller paths are rejected. No project-root boundary is imposed. wali assumes
-the manifest author controls which controller files may be read.
+Controller paths may be absolute or relative. Relative paths are resolved
+against manifest `base_path`; a relative `base_path` is resolved from the
+manifest directory, and an omitted `base_path` defaults to the manifest
+directory. Empty controller paths are rejected. No project-root boundary is
+imposed. wali assumes the manifest author controls which controller files may be
+read.
 
 The controller filesystem API is intentionally read-only. Controller-side writes
-currently happen only through `wali.builtin.pull_file` / `ctx.transfer.pull_file`,
-where the transfer operation itself owns the write semantics.
+currently happen only through `wali.builtin.pull_file` /
+`ctx.transfer.pull_file`, where the transfer operation itself owns the write
+semantics.
 
 `metadata` follows symlinks by default, matching `stat`. Use `lstat` or
 `metadata(path, { follow = false })` when the module owns the path itself.
 `list_dir` returns entries sorted by name for deterministic module behavior.
 
+## Codec API
+
+`ctx.codec` is available during validation and apply. It contains small pure
+byte/string codecs for module authors. The first supported codec is standard
+padded Base64. It accepts and returns Lua strings, so binary bytes are
+preserved.
+
+```lua
+ctx.codec.base64_encode(bytes)
+ctx.codec.base64_decode(text)
+```
+
+`base64_decode` accepts ASCII whitespace in encoded text and rejects malformed
+input with a clear error. It does not perform filesystem access, command
+execution, or any mutation.
+
+```lua
+local encoded = ctx.codec.base64_encode(ctx.controller.fs.read("payload.bin"))
+local bytes = ctx.codec.base64_decode(encoded)
+```
+
 ## JSON API
 
 `ctx.json` is available during validation and apply. It is the primitive JSON
 codec for module authors, backed by wali's existing Serde JSON handling. Use it
-when reading structured controller files, parsing JSON command output, or emitting
-machine-readable result data.
+when reading structured controller files, parsing JSON command output, or
+emitting machine-readable result data.
 
 ```lua
 ctx.json.decode(text)
@@ -680,10 +705,11 @@ ctx.json.encode(value)
 ctx.json.encode_pretty(value)
 ```
 
-`decode` expects a Lua string containing UTF-8 JSON text and returns ordinary Lua
-values. JSON `null` is represented by wali's global `null` sentinel. `encode`
-returns compact JSON; `encode_pretty` returns indented JSON. Functions, threads,
-userdata, and other non-JSON Lua values are rejected with a clear error.
+`decode` expects a Lua string containing UTF-8 JSON text and returns ordinary
+Lua values. JSON `null` is represented by wali's global `null` sentinel.
+`encode` returns compact JSON; `encode_pretty` returns indented JSON. Functions,
+threads, userdata, and other non-JSON Lua values are rejected with a clear
+error.
 
 ```lua
 local cfg = ctx.json.decode(ctx.controller.fs.read_text("config.json"))
@@ -692,8 +718,8 @@ local text = ctx.json.encode({ name = cfg.name, optional = null })
 
 ## Template API
 
-`ctx.template` is available during validation and apply. It is a pure
-MiniJinja rendering helper. Controller-side template files should be read through
+`ctx.template` is available during validation and apply. It is a pure MiniJinja
+rendering helper. Controller-side template files should be read through
 `ctx.controller.fs.read_text(...)`; this avoids a second controller-file access
 contract in the template namespace.
 
@@ -702,8 +728,8 @@ ctx.template.render(source, vars)
 ```
 
 `vars` must be an object/table. Rendering is strict: referencing an undefined
-variable is an error. A trailing newline in the template source is preserved. The
-environment is intentionally minimal: standard Jinja control syntax and
+variable is an error. A trailing newline in the template source is preserved.
+The environment is intentionally minimal: standard Jinja control syntax and
 Serde-backed collections are available, but extra MiniJinja builtins, filters,
 loaders, macros, and debug features are not part of the wali contract.
 
@@ -711,11 +737,10 @@ loaders, macros, and debug features are not part of the wali contract.
 
 `ctx.transfer` is available during validation and apply. During validation it is
 present but exposes no duplicated controller-file validation helpers. During
-apply it moves
-bytes between the wali controller process and the effective target host
-backend. Use it when a module needs controller-to-host or host-to-controller
-file transfer; use
-`ctx.host.fs.copy_file(...)` for same-host copies.
+apply it moves bytes between the wali controller process and the effective
+target host backend. Use it when a module needs controller-to-host or
+host-to-controller file transfer; use `ctx.host.fs.copy_file(...)` for same-host
+copies.
 
 ```lua
 ctx.transfer.push_file(src, dest, opts)  -- apply phase only
@@ -729,9 +754,9 @@ controller.
 Controller-side paths may be absolute or relative. Relative controller paths are
 resolved against manifest `base_path`. A relative `base_path` is resolved from
 the manifest directory, and an omitted `base_path` defaults to the manifest
-directory. `base_path` must resolve to an existing directory.
-No project-root boundary is imposed: wali assumes the manifest author controls
-which local files may be read or written.
+directory. `base_path` must resolve to an existing directory. No project-root
+boundary is imposed: wali assumes the manifest author controls which local files
+may be read or written.
 
 `push_file` accepts the same write options as `ctx.host.fs.write(...)`:
 
@@ -781,10 +806,10 @@ reject unknown fields. Environment variables are passed as a string map and
 names must match `[A-Za-z_][A-Za-z0-9_]*`. Empty programs, empty shell scripts,
 and zero-duration timeouts are rejected.
 
-If a command request omits `timeout`, Wali uses the host-level
-`command_timeout` default when it is configured. The same host default bounds
-the initial fact probe performed during connection. An explicit request timeout
-always overrides the host default.
+If a command request omits `timeout`, Wali uses the host-level `command_timeout`
+default when it is configured. The same host default bounds the initial fact
+probe performed during connection. An explicit request timeout always overrides
+the host default.
 
 Command output uses split streams by default:
 
@@ -813,7 +838,8 @@ requires = { command = "tar" }
 
 ## Path handling
 
-Use host path helpers instead of manual string concatenation or fragile prefix checks:
+Use host path helpers instead of manual string concatenation or fragile prefix
+checks:
 
 ```lua
 ctx.host.path.join(root, relative)

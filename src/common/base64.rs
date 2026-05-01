@@ -45,6 +45,8 @@ pub(crate) fn decode(input: &[u8]) -> Result<Vec<u8>, String> {
     let mut index = 0;
     while index < clean.len() {
         let chunk = &clean[index..index + 4];
+        validate_padding(chunk, index + 4 == clean.len())?;
+
         let values = [
             decode_char(chunk[0])?,
             decode_char(chunk[1])?,
@@ -67,6 +69,22 @@ pub(crate) fn decode(input: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+fn validate_padding(chunk: &[u8], is_last_chunk: bool) -> Result<(), String> {
+    if chunk[0] == b'=' || chunk[1] == b'=' {
+        return Err("unexpected base64 padding in required position".to_owned());
+    }
+
+    if chunk[2] == b'=' && chunk[3] != b'=' {
+        return Err("invalid base64 padding".to_owned());
+    }
+
+    if (chunk[2] == b'=' || chunk[3] == b'=') && !is_last_chunk {
+        return Err("base64 padding is only allowed in the final chunk".to_owned());
+    }
+
+    Ok(())
+}
+
 fn decode_char(byte: u8) -> Result<u8, String> {
     match byte {
         b'A'..=b'Z' => Ok(byte - b'A'),
@@ -83,5 +101,24 @@ fn decode_pad(byte: u8) -> Result<u8, String> {
     match byte {
         b'=' => Ok(0),
         _ => decode_char(byte),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_trips_binary_data() {
+        let input = [0, b'h', b'i', 255];
+        let encoded = encode(&input);
+        assert_eq!(encoded, "AGhp/w==");
+        assert_eq!(decode(encoded.as_bytes()).unwrap(), input.to_vec());
+    }
+
+    #[test]
+    fn rejects_invalid_padding() {
+        assert!(decode(b"AA=A").is_err());
+        assert!(decode(b"AA==AAAA").is_err());
     }
 }
