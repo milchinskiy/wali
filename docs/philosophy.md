@@ -20,7 +20,7 @@ The intended scope is:
 - local and SSH hosts;
 - host-local task execution;
 - mostly imperative task order;
-- small desired-state modules for common filesystem and command operations;
+- small primitive modules for common filesystem, command, transfer, template, and data operations;
 - custom Lua modules for user-specific work;
 - predictable plan, check, and apply phases.
 
@@ -126,23 +126,27 @@ user through `run_as`, operations such as `write`, `create_dir`, `chmod`, and
 
 ## Builtin module philosophy
 
-Builtin modules should be desired-state resources whenever possible.
+Rust-core and builtin functionality should stay primitive-oriented. Wali should
+provide reliable low-level operations that are difficult to implement
+portably or safely in Lua, while domain policy belongs in custom Lua modules.
 
-Good builtin modules describe an intended state:
+Good core primitives include:
 
-- this directory exists;
-- this file has this content;
-- this symlink points here;
-- this tree is copied here;
-- this path is absent.
+- target-host filesystem and command execution operations;
+- controller-side path and read-only filesystem inspection;
+- file transfer between controller and host;
+- pure data helpers such as JSON, Base64, and template rendering;
+- carefully bounded filesystem builtins that compose those primitives.
 
-They should not merely expose syscall-shaped wrappers such as `mkdir`, `rm`, or
-`ln`. Low-level host operations are already available to custom modules through
-`ctx.host.*` during apply.
+Core builtins should not grow into service-manager, package-manager, database,
+container, or other domain-specific resource abstractions unless there is a
+concrete primitive that cannot be expressed cleanly in Lua. External Lua modules
+can own those policies using the public `ctx.*` APIs.
 
 A builtin module should normally be:
 
-- idempotent;
+- tight in scope;
+- idempotent when it represents filesystem reconciliation;
 - strict about invalid input;
 - explicit about destructive behavior;
 - conservative around special filesystem entries;

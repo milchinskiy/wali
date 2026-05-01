@@ -31,7 +31,7 @@ mod tests {
         let encode: mlua::Function = table.get("base64_encode").unwrap();
         let decode: mlua::Function = table.get("base64_decode").unwrap();
 
-        let raw = lua.create_string(&[0, b'h', b'i', 255]).unwrap();
+        let raw = lua.create_string([0, b'h', b'i', 255]).unwrap();
         let encoded: String = encode.call(raw.clone()).unwrap();
         assert_eq!(encoded, "AGhp/w==");
 

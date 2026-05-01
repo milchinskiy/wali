@@ -27,7 +27,7 @@
 --   ctx.host.transport            "local" or "ssh"
 --   ctx.host.facts.*              os/arch/hostname/env/user/group/which/etc
 --   ctx.host.path.*               join/normalize/parent/is_absolute/basename/strip_prefix
---   ctx.controller.path.*         controller path helpers; relative paths resolve against base_path
+--   ctx.controller.path.*         resolve/is_absolute/join/normalize/parent/basename/strip_prefix
 --   ctx.controller.fs.*           read-only controller filesystem helpers
 --   ctx.codec.*                   byte/string codec helpers
 --   ctx.json.*                    JSON decode/encode helpers
@@ -35,8 +35,10 @@
 --   ctx.transfer.*                controller/host file transfer helpers
 --
 -- validate ctx.controller.fs exposes read-only controller helpers:
---   metadata, stat, lstat, exists, read, read_text, list_dir, read_link
+--   metadata, stat, lstat, exists, read, read_text, list_dir, walk, read_link
 --   list_dir output is sorted deterministically by entry name.
+--   walk output uses lstat-style metadata, does not follow symlinks, and
+--   defaults to deterministic pre-order.
 --
 -- validate ctx.codec exposes pure byte/string codec helpers:
 --   base64_encode(bytes), base64_decode(text)
@@ -151,7 +153,7 @@ return {
 		-- error("unexpected validation error")
 	end,
 
-	---Apply desired state. Return an ExecutionResult-compatible table.
+	---Apply the task. Return an ExecutionResult-compatible table.
 	---@param ctx table
 	---@param args any
 	---@return { changes: table[], message: string?, data: any? }
@@ -185,6 +187,7 @@ return {
 --   wali.builtin.copy_tree
 --   wali.builtin.permissions
 --   wali.builtin.command
+--   wali.builtin.template
 -- Shared builtin Lua helpers are available as wali.builtin.lib.
 
 -- Shared helper library for custom modules:

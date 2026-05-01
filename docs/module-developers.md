@@ -533,6 +533,18 @@ host task. The merge is shallow and deterministic: manifest variables are the
 base, host variables override them, and task variables override both. Modules
 should treat `ctx.vars` as read-only configuration data.
 
+`ctx.controller.path` exposes lexical controller path helpers: `resolve`,
+`is_absolute`, `join`, `normalize`, `parent`, `basename`, and `strip_prefix`.
+`resolve` converts relative paths to manifest `base_path`; the other helpers are
+raw lexical path operations, mirroring `ctx.host.path` semantics for module
+authors.
+
+`ctx.controller.fs` exposes read-only controller filesystem helpers:
+`metadata`, `stat`, `lstat`, `exists`, `read`, `read_text`, `list_dir`,
+`walk`, and `read_link`. `walk` returns the same entry shape as
+`ctx.host.fs.walk`, does not follow symlinks, and defaults to deterministic
+pre-order.
+
 Keep validation deterministic. It should answer whether the task is well-formed
 and safe to attempt, not perform the task early.
 
@@ -642,8 +654,10 @@ transport.
 ctx.controller.path.resolve(path)
 ctx.controller.path.is_absolute(path)
 ctx.controller.path.join(base, child)
+ctx.controller.path.normalize(path)
 ctx.controller.path.parent(path)
 ctx.controller.path.basename(path)
+ctx.controller.path.strip_prefix(base, path)
 
 ctx.controller.fs.metadata(path, opts) -- opts.follow defaults to true
 ctx.controller.fs.stat(path)
@@ -652,6 +666,7 @@ ctx.controller.fs.exists(path)
 ctx.controller.fs.read(path)      -- raw bytes as a Lua string
 ctx.controller.fs.read_text(path) -- UTF-8 text only
 ctx.controller.fs.list_dir(path)
+ctx.controller.fs.walk(path, opts)
 ctx.controller.fs.read_link(path)
 ```
 
@@ -670,6 +685,9 @@ semantics.
 `metadata` follows symlinks by default, matching `stat`. Use `lstat` or
 `metadata(path, { follow = false })` when the module owns the path itself.
 `list_dir` returns entries sorted by name for deterministic module behavior.
+`walk` returns the same entry shape as `ctx.host.fs.walk`, uses lstat-style
+metadata, does not follow symlinks, and supports `include_root`, `max_depth`,
+and `order` options.
 
 ## Codec API
 
@@ -872,8 +890,8 @@ destinations.
 
 ## Idempotence
 
-A desired-state module should report `unchanged` when the host already matches
-the requested state.
+A module that reconciles filesystem content should report `unchanged` when the
+host already matches the requested input.
 
 Avoid modules that report `updated` every time simply because they called a
 command. If a module must be imperative, expose guard options such as `creates`
@@ -929,7 +947,7 @@ clear safety contract.
 
 Before adding a builtin, define:
 
-- exact desired state;
+- exact primitive contract;
 - validation rules;
 - idempotence behavior;
 - symlink behavior;

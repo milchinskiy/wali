@@ -2,8 +2,8 @@
 
 wali is a small agentless automation tool written in Rust. Manifests and modules
 are written in embedded Lua. The current implementation focuses on local and SSH
-hosts, strict execution flow, host-aware checks, and desired-state filesystem
-modules.
+hosts, strict execution flow, host-aware checks, and small primitive
+filesystem/data modules.
 
 The project is still in active development. Public contracts may change while
 the executor, module API, and builtin module set are being stabilized.
@@ -299,7 +299,7 @@ Critical source rules:
 - `check` and `apply` prepare and lock Git checkouts until execution finishes;
 - every system `git` process has a timeout. `git.timeout` defaults to `5m` when omitted.
 
-Custom Lua modules receive `ctx.controller` for controller-side path resolution and read-only filesystem access. Controller paths may be absolute or relative to manifest `base_path`; there is no project-root sandbox. Domain modules should use this primitive API rather than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`. Modules also receive `ctx.json` for compact JSON decoding and encoding, and `ctx.codec` for byte-oriented codecs such as Base64, without vendoring Lua parsers or shelling out to external tools.
+Custom Lua modules receive `ctx.controller` for controller-side path helpers and read-only filesystem access, including deterministic tree walking. Controller filesystem paths may be absolute or relative to manifest `base_path`; there is no project-root sandbox. Domain modules should use this primitive API rather than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`. Modules also receive `ctx.json` for compact JSON decoding and encoding, and `ctx.codec` for byte-oriented codecs such as Base64, without vendoring Lua parsers or shelling out to external tools.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).

@@ -3,6 +3,7 @@
 mod common;
 
 use common::*;
+use serde_json::Value;
 
 #[test]
 fn controller_api_resolves_reads_and_inspects_controller_files_in_check_and_apply() {
@@ -266,4 +267,206 @@ return {{
 
     let check = run_check(&manifest);
     assert_task_unchanged(&check, "link probe");
+}
+
+#[test]
+fn controller_path_normalize_strip_prefix_and_walk_are_available_in_check_and_apply() {
+    let sandbox = Sandbox::new("controller-walk");
+    let base = sandbox.mkdir("base");
+    let modules = sandbox.mkdir("modules");
+
+    std::fs::create_dir_all(base.join("tree/a")).expect("failed to create tree/a");
+    std::fs::create_dir_all(base.join("tree/b")).expect("failed to create tree/b");
+    std::fs::write(base.join("tree/a/file.txt"), "file\n").expect("failed to write tree file");
+    std::os::unix::fs::symlink("a/file.txt", base.join("tree/link.txt")).expect("failed to create tree symlink");
+
+    std::fs::write(
+        modules.join("walk_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+local function fail(message)
+    return api.result.validation():fail(message):build()
+end
+
+local function inspect(ctx)
+    local path = ctx.controller.path
+    local fs = ctx.controller.fs
+
+    if path.normalize("tree/./a/../b") ~= "tree/b" then
+        return nil, "unexpected normalized relative path: " .. tostring(path.normalize("tree/./a/../b"))
+    end
+    if not path.normalize("/tmp/../tmp/wali"):match("^/tmp/wali$") then
+        return nil, "unexpected normalized absolute path"
+    end
+    if path.strip_prefix("tree", "tree/a/file.txt") ~= "a/file.txt" then
+        return nil, "strip_prefix did not return child suffix"
+    end
+    if path.strip_prefix("tree", "tree") ~= "." then
+        return nil, "strip_prefix same path did not return dot"
+    end
+    if path.strip_prefix("tree", "tree2/file.txt") ~= nil then
+        return nil, "strip_prefix should be segment-aware"
+    end
+
+    local entries = fs.walk("tree", { include_root = true })
+    local summary = {}
+    for _, entry in ipairs(entries) do
+        table.insert(summary, {
+            relative_path = entry.relative_path,
+            depth = entry.depth,
+            kind = entry.kind,
+            link_target = entry.link_target,
+            metadata_kind = entry.metadata.kind,
+        })
+    end
+
+    local shallow = fs.walk("tree", { max_depth = 1 })
+    local shallow_paths = {}
+    for _, entry in ipairs(shallow) do
+        table.insert(shallow_paths, entry.relative_path)
+    end
+
+    return {
+        summary = summary,
+        shallow_paths = shallow_paths,
+    }, nil
+end
+
+return {
+    validate = function(ctx)
+        local data, err = inspect(ctx)
+        if err ~= nil then
+            return fail(err)
+        end
+        if ctx.json.encode(data) == nil then
+            return fail("controller walk output should be JSON-compatible")
+        end
+        return nil
+    end,
+
+    apply = function(ctx)
+        local data, err = inspect(ctx)
+        if err ~= nil then
+            error(err)
+        end
+        return api.result.apply():command("unchanged", "controller walk probe"):data(data):build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write custom module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    base_path = {},
+    hosts = {{ {{ id = "localhost", transport = "local" }} }},
+    modules = {{ {{ path = {} }} }},
+    tasks = {{ {{ id = "walk probe", module = "walk_probe", args = {{}} }} }},
+}}
+"#,
+        lua_string(&base),
+        lua_string(&modules),
+    ));
+
+    let check = run_check(&manifest);
+    assert_task_unchanged(&check, "walk probe");
+
+    let apply = run_apply(&manifest);
+    let data = task_result(&apply, "walk probe")
+        .get("data")
+        .expect("walk probe should return data");
+
+    let summary = data
+        .get("summary")
+        .and_then(Value::as_array)
+        .expect("summary should be an array");
+    let rows = summary
+        .iter()
+        .map(|entry| {
+            (
+                entry
+                    .get("relative_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<missing>"),
+                entry.get("kind").and_then(Value::as_str).unwrap_or("<missing>"),
+                entry.get("depth").and_then(Value::as_u64).unwrap_or(u64::MAX),
+                entry.get("link_target").and_then(Value::as_str),
+                entry
+                    .get("metadata_kind")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<missing>"),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        rows,
+        vec![
+            ("", "dir", 0, None, "dir"),
+            ("a", "dir", 1, None, "dir"),
+            ("a/file.txt", "file", 2, None, "file"),
+            ("b", "dir", 1, None, "dir"),
+            ("link.txt", "symlink", 1, Some("a/file.txt"), "symlink"),
+        ]
+    );
+
+    let shallow_paths = data
+        .get("shallow_paths")
+        .and_then(Value::as_array)
+        .expect("shallow_paths should be an array")
+        .iter()
+        .map(|value| value.as_str().expect("shallow path should be a string"))
+        .collect::<Vec<_>>();
+    assert_eq!(shallow_paths, vec!["a", "b", "link.txt"]);
+}
+
+#[test]
+fn controller_walk_rejects_non_directory_roots() {
+    let sandbox = Sandbox::new("controller-walk-invalid-root");
+    let base = sandbox.mkdir("base");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(base.join("file.txt"), "file\n").expect("failed to write file root");
+
+    std::fs::write(
+        modules.join("walk_invalid_root.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    validate = function(ctx)
+        local ok, err = pcall(ctx.controller.fs.walk, "file.txt")
+        if ok then
+            return api.result.validation():fail("controller walk accepted a file root"):build()
+        end
+        if tostring(err):find("walk root must be a directory") == nil then
+            return api.result.validation():fail("unexpected walk error: " .. tostring(err)):build()
+        end
+        return nil
+    end,
+
+    apply = function()
+        return api.result.apply():command("unchanged", "validated invalid walk root"):build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write custom module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    base_path = {},
+    hosts = {{ {{ id = "localhost", transport = "local" }} }},
+    modules = {{ {{ path = {} }} }},
+    tasks = {{ {{ id = "walk invalid root", module = "walk_invalid_root", args = {{}} }} }},
+}}
+"#,
+        lua_string(&base),
+        lua_string(&modules),
+    ));
+
+    let check = run_check(&manifest);
+    assert_task_unchanged(&check, "walk invalid root");
 }

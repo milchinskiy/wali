@@ -9,9 +9,9 @@ arguments, behavior, and safety notes. The shared Lua phase and custom module
 contracts are described in `module-developers.md`; the design rationale is in
 `philosophy.md`.
 
-General builtin expectations are stable across this file: prefer desired state,
-be idempotent by default, validate unsafe input before mutation, and return
-structured `ExecutionResult` changes.
+General builtin expectations are stable across this file: keep scope tight,
+be idempotent where the primitive reconciles filesystem content, validate unsafe
+input before mutation, and return structured `ExecutionResult` changes.
 
 ## Naming note: `link` versus `copy_file`
 
@@ -481,7 +481,7 @@ read-only commands.
 `wali.builtin.copy_tree` and `wali.builtin.link_tree` are built on
 `ctx.host.fs.walk(...)`, the host filesystem traversal primitive exposed to
 custom modules. Wali does not provide a separate `wali.builtin.walk` task
-module; tree inspection is a module-authoring concern rather than desired state
+module; tree inspection is a module-authoring concern rather than a builtin mutation primitive
 by itself.
 
 For the full `ctx.host.fs.walk(...)` API contract, see `module-developers.md`.
