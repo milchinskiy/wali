@@ -195,6 +195,12 @@ created, updated, removed, or unchanged; subject; path or detail when useful.
 Successful apply state converts those task results into explicit resource
 records. Cleanup consumes those resource records, not renderer JSON internals.
 
+The result boundary is strict where state correctness depends on it. Changed
+filesystem entries must report non-empty absolute target-host paths, because
+apply state and cleanup cannot safely reason about anonymous or relative
+resources. Cosmetic fields such as empty messages are normalized away instead of
+turning a successful operation into a failure.
+
 ## Reporting model
 
 Workers send events. Renderers consume state derived from events.

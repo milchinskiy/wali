@@ -101,7 +101,13 @@ impl Module {
         }
     }
 
-    pub fn apply(&self, lua: &mlua::Lua, ctx: mlua::Table, args: mlua::Value) -> crate::Result<ExecutionResult> {
+    pub fn apply(
+        &self,
+        lua: &mlua::Lua,
+        ctx: mlua::Table,
+        args: mlua::Value,
+        paths: &impl crate::executor::PathSemantics,
+    ) -> crate::Result<ExecutionResult> {
         let value = self
             .module
             .get::<mlua::Function>("apply")?
@@ -111,10 +117,20 @@ impl Module {
             return Ok(ExecutionResult::default());
         }
 
-        lua.from_value::<ExecutionResult>(value)
+        let mut result = lua
+            .from_value::<ExecutionResult>(value)
             .map_err(|error| crate::Error::ModuleApply {
                 id: self.name.clone(),
                 message: format!("invalid apply result: {error}"),
-            })
+            })?;
+
+        result
+            .normalize_apply_contract(paths)
+            .map_err(|message| crate::Error::ModuleApply {
+                id: self.name.clone(),
+                message: format!("invalid apply result: {message}"),
+            })?;
+
+        Ok(result)
     }
 }

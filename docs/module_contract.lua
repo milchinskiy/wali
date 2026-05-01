@@ -177,6 +177,13 @@ return {
 		-- or
 		-- error("error message")
 	end,
+
+	-- Apply-result contract notes:
+	--   changed fs_entry records (created/updated/removed) require a non-empty
+	--   absolute target-host path;
+	--   unchanged fs_entry records may omit path when no concrete resource changed;
+	--   command records use detail; path is ignored for command changes;
+	--   whitespace-only message/detail fields are treated as absent.
 }
 
 -- Builtin modules are reserved under the wali.builtin.* namespace:

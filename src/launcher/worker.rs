@@ -264,7 +264,7 @@ impl Worker {
                         &self.plan.base_path,
                         crate::lua::api::TaskCtxPhase::Apply,
                     )?;
-                    result = module.apply(lua.lua(), ctx, args)?;
+                    result = module.apply(lua.lua(), ctx, args, &backend)?;
                 }
             }
         }

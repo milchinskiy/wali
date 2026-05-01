@@ -149,6 +149,38 @@ impl ExecutionResult {
         self.changes.iter().any(ExecutionChange::changed)
     }
 
+    /// Normalize and validate the apply-result contract at the Rust boundary.
+    ///
+    /// This is intentionally strict only where accepting a malformed result
+    /// would corrupt state or make cleanup ambiguous. Cosmetic fields are
+    /// normalized instead: empty messages/details are removed and command paths
+    /// are ignored because command changes are described by `detail`, not by a
+    /// target-host filesystem path.
+    ///
+    /// Changed `fs_entry` records are state resources, so they must identify a
+    /// non-empty absolute target-host path under the backend path semantics.
+    pub fn normalize_apply_contract(&mut self, paths: &impl super::PathSemantics) -> Result<(), String> {
+        trim_empty_string(&mut self.message);
+
+        for (idx, change) in self.changes.iter_mut().enumerate() {
+            let field = format!("changes[{}]", idx + 1);
+            trim_empty_string(&mut change.detail);
+
+            match change.subject {
+                ChangeSubject::FsEntry => validate_fs_entry_change(change, paths, &field)?,
+                ChangeSubject::Command => {
+                    // A command result has no path semantics. Older or generic
+                    // module helpers may accidentally carry a `path`; dropping
+                    // it is safer and less surprising than failing a task for
+                    // a field that Wali does not consume for command changes.
+                    change.path = None;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn merge(&mut self, other: Self) {
         self.changes.extend(other.changes);
         if self.message.is_none() {
@@ -157,6 +189,50 @@ impl ExecutionResult {
         if self.data.is_none() {
             self.data = other.data;
         }
+    }
+}
+
+fn validate_fs_entry_change(
+    change: &mut ExecutionChange,
+    paths: &impl super::PathSemantics,
+    field: &str,
+) -> Result<(), String> {
+    let context = fs_entry_context(change.kind);
+
+    if change.path.is_none() {
+        if change.kind.changed() {
+            return Err(format!("{field}.path is required for {context}"));
+        }
+        return Ok(());
+    }
+
+    if change.path.as_ref().is_some_and(|path| path.as_str().trim().is_empty()) {
+        change.path = None;
+        if change.kind.changed() {
+            return Err(format!("{field}.path must not be empty for {context}"));
+        }
+        return Ok(());
+    }
+
+    if change.kind.changed() && change.path.as_ref().is_some_and(|path| !paths.is_absolute(path)) {
+        return Err(format!("{field}.path must be absolute for {context}"));
+    }
+
+    Ok(())
+}
+
+fn fs_entry_context(kind: ChangeKind) -> &'static str {
+    match kind {
+        ChangeKind::Created => "created fs_entry change",
+        ChangeKind::Updated => "updated fs_entry change",
+        ChangeKind::Removed => "removed fs_entry change",
+        ChangeKind::Unchanged => "unchanged fs_entry change",
+    }
+}
+
+fn trim_empty_string(value: &mut Option<String>) {
+    if value.as_deref().is_some_and(|value| value.trim().is_empty()) {
+        *value = None;
     }
 }
 

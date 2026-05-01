@@ -607,6 +607,21 @@ Current subjects include:
 - fs_entry
 - command
 
+Apply-result contract rules:
+
+- changed `fs_entry` records (`created`, `updated`, or `removed`) must include
+  a non-empty absolute target-host `path`;
+- unchanged `fs_entry` records may omit `path` when the module only wants to
+  explain that no mutation happened;
+- `command` records are described by `detail`; `path` has no meaning for command
+  changes and is ignored by Wali;
+- empty or whitespace-only `message` / `detail` fields are treated as absent;
+- `data` remains unrestricted JSON-compatible structured data.
+
+These checks happen at the Rust boundary after `apply` returns. They are strict
+for state-affecting filesystem changes because apply state and cleanup rely on
+those paths being complete and deterministic.
+
 ## Host filesystem API
 
 Important read/probe helpers:
