@@ -514,6 +514,7 @@ ctx.host.fs.stat
 ctx.host.fs.lstat
 ctx.host.fs.exists
 ctx.host.fs.read
+ctx.host.fs.read_text
 ctx.host.fs.list_dir
 ctx.host.fs.walk
 ctx.host.fs.read_link
@@ -609,11 +610,16 @@ ctx.host.fs.stat(path)      -- follows symlinks
 ctx.host.fs.lstat(path)     -- does not follow symlinks
 ctx.host.fs.metadata(path, { follow = true })
 ctx.host.fs.exists(path)
-ctx.host.fs.read(path)
+ctx.host.fs.read(path)       -- raw bytes
+ctx.host.fs.read_text(path)  -- UTF-8 text, rejects invalid UTF-8
 ctx.host.fs.read_link(path)
 ctx.host.fs.list_dir(path)
 ctx.host.fs.walk(path, { include_root = true, order = "pre" })
 ```
+
+Use `ctx.host.fs.read(...)` when byte preservation matters. Use
+`ctx.host.fs.read_text(...)` when the target file is expected to be UTF-8 text;
+it fails clearly instead of performing lossy conversion.
 
 Important mutation helpers available only during apply:
 

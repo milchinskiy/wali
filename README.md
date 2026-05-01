@@ -49,8 +49,9 @@ wali --json cleanup --state-file apply-state.json manifest.lua
 wali --json-pretty apply manifest.lua
 ```
 
-`check`, `apply`, and `cleanup` run hosts concurrently by default. Use `--jobs N` on any
-of those commands to cap host concurrency without changing per-host task order:
+`check`, `apply`, and `cleanup` run hosts concurrently by default. Use
+`--jobs N` on any of those commands to cap host concurrency without changing
+per-host task order:
 
 ```sh
 wali check --jobs 1 manifest.lua
@@ -67,9 +68,9 @@ records, and the final apply report state. Failed applies do not overwrite the
 state file. This explicit resource snapshot is the durable state contract used
 by cleanup.
 
-Use `--host ID`, `--host-tag TAG`, `--task ID`, and `--task-tag TAG`
-on `plan`, `check`, `apply`, or `cleanup` to select a smaller working set
-without changing the manifest:
+Use `--host ID`, `--host-tag TAG`, `--task ID`, and `--task-tag TAG` on `plan`,
+`check`, `apply`, or `cleanup` to select a smaller working set without changing
+the manifest:
 
 ```sh
 wali plan --host web-1 manifest.lua
@@ -81,13 +82,14 @@ wali cleanup --host-tag web --task-tag deploy --state-file apply-state.json mani
 Selectors are exact ids or exact tags and may be repeated. Host id and host tag
 selectors select the union of matching hosts. Task id and task tag selectors
 select the union of matching tasks. Host and task dimensions are intersected.
-Selecting a task by id or tag includes its transitive `depends_on` and `on_change`
-source tasks on the same host, but it does not include downstream dependents. `plan` prints
-the same selected plan that `check` and `apply` would execute. For selected
-plans, module source preparation and validation are limited to modules required
-by the selected tasks. For `cleanup`, host id/tag selectors limit cleanup to
-previous created entries on selected hosts. Task id/tag selectors limit cleanup
-to previous created entries from the selected task dependency closure.
+Selecting a task by id or tag includes its transitive `depends_on` and
+`on_change` source tasks on the same host, but it does not include downstream
+dependents. `plan` prints the same selected plan that `check` and `apply` would
+execute. For selected plans, module source preparation and validation are
+limited to modules required by the selected tasks. For `cleanup`, host id/tag
+selectors limit cleanup to previous created entries on selected hosts. Task
+id/tag selectors limit cleanup to previous created entries from the selected
+task dependency closure.
 
 ## Minimal manifest
 
@@ -127,17 +129,17 @@ return {
 }
 ```
 
-Task dependencies are execution dependencies, not only ordering hints. A task with
-`depends_on` runs only when every declared dependency completed successfully on
-the same host. `on_change` is also an execution dependency, but in `apply` it
-runs the gated task only when at least one referenced source task reported a real
-change. If all `on_change` sources succeeded unchanged, the gated task is skipped
-with a clear reason. In `check`, `on_change` still orders and validates the gated
-task because no apply-time change result exists yet. Dependencies must be
-scheduled for the same host; duplicate dependency ids and duplicate references
-between `depends_on` and `on_change` are rejected. If a dependency fails or is
-skipped, its dependents are skipped with a dependency-specific reason, while
-unrelated later tasks continue to run.
+Task dependencies are execution dependencies, not only ordering hints. A task
+with `depends_on` runs only when every declared dependency completed
+successfully on the same host. `on_change` is also an execution dependency, but
+in `apply` it runs the gated task only when at least one referenced source task
+reported a real change. If all `on_change` sources succeeded unchanged, the
+gated task is skipped with a clear reason. In `check`, `on_change` still orders
+and validates the gated task because no apply-time change result exists yet.
+Dependencies must be scheduled for the same host; duplicate dependency ids and
+duplicate references between `depends_on` and `on_change` are rejected. If a
+dependency fails or is skipped, its dependents are skipped with a
+dependency-specific reason, while unrelated later tasks continue to run.
 
 ## Variables
 
@@ -182,12 +184,11 @@ return {
 ```
 
 Inside `custom.write_config`, the effective values are available as
-`ctx.vars.app`, `ctx.vars.role`, `ctx.vars.port`, and
-`ctx.vars.config_name`.
+`ctx.vars.app`, `ctx.vars.role`, `ctx.vars.port`, and `ctx.vars.config_name`.
 
-Variables are especially useful with `wali.builtin.template`, which renders either a
-controller-side MiniJinja template file or inline template content and writes the
-result to the target host:
+Variables are especially useful with `wali.builtin.template`, which renders
+either a controller-side MiniJinja template file or inline template content and
+writes the result to the target host:
 
 ```lua
 {
@@ -202,11 +203,11 @@ result to the target host:
 }
 ```
 
-When `src` is used, template source paths use the same controller-side `base_path`
-rules as `wali.builtin.push_file`. `content` can be used instead for inline
-templates. Exactly one of `src` or `content` must be set. The template context is
-`ctx.vars` plus optional `args.vars`, where `args.vars` wins on duplicate
-top-level keys.
+When `src` is used, template source paths use the same controller-side
+`base_path` rules as `wali.builtin.push_file`. `content` can be used instead for
+inline templates. Exactly one of `src` or `content` must be set. The template
+context is `ctx.vars` plus optional `args.vars`, where `args.vars` wins on
+duplicate top-level keys.
 
 Tasks may also declare a host-aware `when` predicate. `when` is evaluated after
 the host connection is established and before module `requires`, schema
@@ -297,9 +298,19 @@ Critical source rules:
 - ambiguous unnamespaced module names fail instead of depending on search order;
 - `plan` does not fetch Git sources;
 - `check` and `apply` prepare and lock Git checkouts until execution finishes;
-- every system `git` process has a timeout. `git.timeout` defaults to `5m` when omitted.
+- every system `git` process has a timeout. `git.timeout` defaults to `5m` when
+  omitted.
 
-Custom Lua modules receive `ctx.controller` for controller-side path helpers and read-only filesystem access, including deterministic tree walking. Controller filesystem paths may be absolute or relative to manifest `base_path`; there is no project-root sandbox. Domain modules should use this primitive API rather than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`. Modules also receive `ctx.json` for compact JSON decoding and encoding, `ctx.codec` for byte-oriented codecs such as Base64, and `ctx.hash` for one-way byte digests such as SHA-256, without vendoring Lua parsers or shelling out to external tools.
+Custom Lua modules receive `ctx.controller` for controller-side path helpers and
+read-only filesystem access, including deterministic tree walking. Controller
+filesystem paths may be absolute or relative to manifest `base_path`; there is
+no project-root sandbox. Domain modules should use this primitive API rather
+than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`.
+Target-host filesystem reads expose both raw bytes through `ctx.host.fs.read`
+and strict UTF-8 text through `ctx.host.fs.read_text`. Modules also receive
+`ctx.json` for compact JSON decoding and encoding, and `ctx.codec` for
+byte-oriented codecs such as Base64, without vendoring Lua parsers or shelling
+out to external tools.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).

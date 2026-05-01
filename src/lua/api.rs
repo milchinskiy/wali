@@ -304,6 +304,20 @@ fn build_fs_table(lua: &Lua, backend: Backend, phase: TaskCtxPhase) -> mlua::Res
         })?
     })?;
 
+    table.set("read_text", {
+        let backend = backend.clone();
+        lua.create_function(move |_, path: String| {
+            let target = TargetPath::from(path);
+            let bytes = backend.read(&target).map_err(mlua::Error::external)?;
+            String::from_utf8(bytes).map_err(|error| {
+                mlua::Error::external(crate::Error::CommandExec(format!(
+                    "host file is not valid UTF-8 text '{}': {error}",
+                    target
+                )))
+            })
+        })?
+    })?;
+
     table.set("list_dir", {
         let backend = backend.clone();
         lua.create_function(move |lua, path: String| {

@@ -59,7 +59,7 @@
 -- inspection and reads.
 --
 -- validate ctx.host.fs exposes only read/probe helpers:
---   metadata, stat, lstat, exists, read, list_dir, walk, read_link
+--   metadata, stat, lstat, exists, read, read_text, list_dir, walk, read_link
 --   list_dir output is sorted deterministically by entry name.
 --
 -- apply ctx.transfer additionally exposes mutation helpers:
