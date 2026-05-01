@@ -16,7 +16,12 @@ return {
 		},
 	},
 
-	validate = function(_, args)
+	validate = function(ctx, args)
+		local path_error = lib.validate_absolute_path(ctx, args.path, "path")
+		if path_error ~= nil then
+			return path_error
+		end
+
 		local metadata_error = lib.validate_mode_owner(args)
 		if metadata_error ~= nil then
 			return metadata_error

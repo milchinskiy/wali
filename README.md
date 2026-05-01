@@ -338,7 +338,10 @@ wali.builtin.template
 wali.builtin.touch
 ```
 
-See [`docs/builtin-modules.md`](docs/builtin-modules.md) for module-specific
+Builtin fields that manage target-host filesystem objects require absolute
+host paths unless documented otherwise. Controller-side transfer and template
+paths may still be absolute or relative to manifest `base_path`. See
+[`docs/builtin-modules.md`](docs/builtin-modules.md) for module-specific
 arguments, behavior, and safety notes.
 
 ## Module phases

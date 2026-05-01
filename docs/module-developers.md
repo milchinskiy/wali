@@ -240,6 +240,8 @@ filesystem policies. The most useful public helpers are:
   `lib.mode_owner_opts(args)`, and
   `lib.apply_mode_owner(ctx, result, path, args)`;
 - `lib.validate_absolute_path(ctx, path, field)`,
+  `lib.validate_absolute_paths(ctx, args, fields)`,
+  `lib.validate_optional_absolute_path(ctx, path, field)`,
   `lib.validate_safe_remove_path(ctx, path)`, and
   `lib.validate_tree_roots(ctx, src, dest)` for common path-safety checks;
 - `lib.output_text(output)`, `lib.status_text(status)`,
@@ -912,6 +914,13 @@ That makes containment checks a one-liner without unsafe string-prefix logic:
 ```lua
 local inside = ctx.host.path.strip_prefix(parent, candidate) ~= nil
 ```
+
+For target-host mutation fields, prefer absolute paths unless your module
+explicitly documents different semantics. Absolute host paths keep behavior
+independent of controller cwd, SSH login directories, and `run_as` execution
+context. This is the policy used by Wali builtins for managed host paths;
+relative symlink targets remain valid because symlink target text is not the
+managed path itself.
 
 For destructive operations, normalize and reject unsafe paths explicitly. At
 minimum, reject empty path, `/`, `.`, and `..` when removing paths or using tree

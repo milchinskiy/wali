@@ -150,6 +150,8 @@ A builtin module should normally be:
 - strict about invalid input;
 - explicit about destructive behavior;
 - conservative around special filesystem entries;
+- deterministic about target-host path interpretation, normally by requiring
+  absolute managed host paths;
 - structured in its execution result;
 - covered by integration tests before more modules are added on top of it.
 

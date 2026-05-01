@@ -80,8 +80,9 @@ return {
 		if source_error ~= nil then
 			return source_error
 		end
-		if args.dest == "" then
-			return lib.validation_error("dest must not be empty")
+		local dest_error = lib.validate_absolute_path(ctx, args.dest, "dest")
+		if dest_error ~= nil then
+			return dest_error
 		end
 
 		local metadata_error = lib.validate_mode_owner(args)

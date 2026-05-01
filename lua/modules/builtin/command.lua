@@ -22,7 +22,7 @@ return {
 		},
 	},
 
-	validate = function(_, args)
+	validate = function(ctx, args)
 		if args.program == nil and args.script == nil then
 			return lib.validation_error("either program or script is required")
 		end
@@ -35,6 +35,14 @@ return {
 		if args.script ~= nil and args.script:match("%S") == nil then
 			return lib.validation_error("script must not be empty")
 		end
+
+		for _, field in ipairs({ "cwd", "creates", "removes" }) do
+			local path_error = lib.validate_optional_absolute_path(ctx, args[field], field)
+			if path_error ~= nil then
+				return path_error
+			end
+		end
+
 		return nil
 	end,
 

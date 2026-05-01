@@ -15,9 +15,16 @@ return {
 		},
 	},
 
-	validate = function(_, args)
+	validate = function(ctx, args)
+		local path_error = lib.validate_absolute_path(ctx, args.path, "path")
+		if path_error ~= nil then
+			return path_error
+		end
 		if args.state == "present" and args.target == nil then
 			return lib.validation_error("target is required when state is present")
+		end
+		if args.target == "" then
+			return lib.validation_error("target must not be empty")
 		end
 		return nil
 	end,

@@ -364,9 +364,27 @@ function lib.validate_absolute_path(ctx, path, field)
 	return nil
 end
 
+function lib.validate_absolute_paths(ctx, args, fields)
+	for _, field in ipairs(fields) do
+		local err = lib.validate_absolute_path(ctx, args[field], field)
+		if err ~= nil then
+			return err
+		end
+	end
+	return nil
+end
+
+function lib.validate_optional_absolute_path(ctx, path, field)
+	if path == nil then
+		return nil
+	end
+	return lib.validate_absolute_path(ctx, path, field)
+end
+
 function lib.validate_safe_remove_path(ctx, path)
-	if path == nil or path == "" then
-		return lib.validation_error("path must not be empty")
+	local absolute_error = lib.validate_absolute_path(ctx, path, "path")
+	if absolute_error ~= nil then
+		return absolute_error
 	end
 
 	local normalized = ctx.host.path.normalize(path)

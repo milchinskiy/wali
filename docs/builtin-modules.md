@@ -13,6 +13,13 @@ General builtin expectations are stable across this file: keep scope tight,
 be idempotent where the primitive reconciles filesystem content, validate unsafe
 input before mutation, and return structured `ExecutionResult` changes.
 
+Builtin fields that name target-host filesystem objects must be absolute paths
+unless a module explicitly says otherwise. This keeps behavior independent of
+the local process cwd, the SSH login directory, and `run_as` command context.
+Controller-side paths are different: transfer and template source/destination
+fields that operate on the controller may be absolute or relative to manifest
+`base_path`.
+
 ## Naming note: `link` versus `copy_file`
 
 `wali.builtin.link` manages one symbolic-link path. It is intentionally named
@@ -123,6 +130,7 @@ executor on the host side; file bytes are not routed through Lua.
 
 Behavior:
 
+- `src` and `dest` must be absolute target-host paths;
 - `src` must be an existing regular file;
 - source symlinks are refused instead of followed;
 - destination directories, including symlinks to directories, and special
@@ -163,8 +171,8 @@ Behavior:
   existing directory;
 - `src` must resolve to a regular file; `wali check` validates this
   controller-side source before apply;
-- `dest` is a target-host path and is written through the effective host
-  backend, including `run_as` when configured;
+- `dest` is an absolute target-host path and is written through the effective
+  host backend, including `run_as` when configured;
 - `create_parents`, `replace`, `mode`, and `owner` match `wali.builtin.file`
   write semantics.
 
@@ -188,7 +196,8 @@ Transfers one regular file from the target host to the wali controller.
 
 Behavior:
 
-- `src` is a target-host path and is read through the effective host backend;
+- `src` is an absolute target-host path and is read through the effective host
+  backend;
 - `dest` is a controller-side path;
 - absolute controller paths are used as-is;
 - relative controller paths are resolved against manifest `base_path`; a
@@ -221,6 +230,8 @@ Ensures a symbolic link path exists or is absent.
 }
 ```
 
+`path` must be an absolute target-host path. `target` is link text and may be
+absolute, relative, or missing; relative symlink targets are preserved exactly.
 `replace = true` may replace files and symlinks, but it refuses to replace
 directories.
 
@@ -274,7 +285,8 @@ Template module behavior:
 - exactly one of `src` or `content` must be set;
 - `src` is a controller-side template path;
 - `content` is an inline template string;
-- `dest` is a target-host file path written through the effective backend;
+- `dest` is an absolute target-host file path written through the effective
+  backend;
 - `create_parents`, `replace`, `mode`, and `owner` match `wali.builtin.file`
   write semantics;
 - source files must be regular UTF-8 text files;
@@ -300,6 +312,7 @@ directory. It is idempotent: an already absent path is reported as unchanged.
 
 Safety rules:
 
+- `path` must be an absolute target-host path;
 - empty path, `/`, `.`, and `..` are rejected after host path normalization;
 - directories require `recursive = true` when they are non-empty;
 - special filesystem entries are rejected unless `allow_special = true`;
@@ -326,6 +339,7 @@ another command.
 
 Behavior:
 
+- `path` must be an absolute target-host path;
 - absent path creates an empty file;
 - existing regular file is left intact;
 - existing non-file path is rejected;
@@ -348,7 +362,7 @@ Ensures mode and/or owner metadata on an existing file or directory.
 }
 ```
 
-`expect` may be `"any"`, `"file"`, or `"dir"`.
+`path` must be an absolute target-host path. `expect` may be `"any"`, `"file"`, or `"dir"`.
 
 By default, `follow = true`, so a symlink to a file or directory is resolved and
 `chmod` / `chown` affect the target, matching normal POSIX command behavior. Set
@@ -471,7 +485,8 @@ Shell form:
 }
 ```
 
-`timeout` is a human-readable string such as `"10s"` or `"2m"`. When omitted,
+`cwd`, `creates`, and `removes` must be absolute target-host paths when
+provided. `timeout` is a human-readable string such as `"10s"` or `"2m"`. When omitted,
 the host-level `command_timeout` default is used if configured. `env` is a
 string map, for example `{ FOO = "bar" }`. `changed = "never"` can be used for
 read-only commands.

@@ -16,9 +16,10 @@ return {
 		},
 	},
 
-	validate = function(_, args)
-		if args.src == "" then
-			return lib.validation_error("src must not be empty")
+	validate = function(ctx, args)
+		local src_error = lib.validate_absolute_path(ctx, args.src, "src")
+		if src_error ~= nil then
+			return src_error
 		end
 		if args.dest == "" then
 			return lib.validation_error("dest must not be empty")

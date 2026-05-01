@@ -18,7 +18,12 @@ return {
 		},
 	},
 
-	validate = function(_, args)
+	validate = function(ctx, args)
+		local path_error = lib.validate_absolute_paths(ctx, args, { "src", "dest" })
+		if path_error ~= nil then
+			return path_error
+		end
+
 		return lib.validate_mode_owner(args)
 	end,
 
