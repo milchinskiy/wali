@@ -23,10 +23,15 @@ impl Module {
 
         let requires = match module.get::<mlua::Value>("requires")? {
             mlua::Value::Nil => None,
-            value => Some(
-                lua.from_value::<Requires>(value)
-                    .map_err(|error| mlua::Error::external(format!("invalid requires contract: {error}")))?,
-            ),
+            value => {
+                let requires = lua
+                    .from_value::<Requires>(value)
+                    .map_err(|error| mlua::Error::external(format!("invalid requires contract: {error}")))?;
+                requires
+                    .validate()
+                    .map_err(|message| mlua::Error::external(format!("invalid requires contract: {message}")))?;
+                Some(requires)
+            }
         };
 
         let _: mlua::Function = module.get("apply")?;

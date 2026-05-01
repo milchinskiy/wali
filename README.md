@@ -308,9 +308,9 @@ no project-root sandbox. Domain modules should use this primitive API rather
 than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`.
 Target-host filesystem reads expose both raw bytes through `ctx.host.fs.read`
 and strict UTF-8 text through `ctx.host.fs.read_text`. Modules also receive
-`ctx.json` for compact JSON decoding and encoding, and `ctx.codec` for
-byte-oriented codecs such as Base64, without vendoring Lua parsers or shelling
-out to external tools.
+`ctx.json` for compact JSON decoding and encoding, `ctx.codec` for
+byte-oriented codecs such as Base64, and `ctx.hash` for one-way digests such
+as SHA-256, without vendoring Lua parsers or shelling out to external tools.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).

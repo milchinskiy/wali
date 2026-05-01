@@ -17,6 +17,26 @@ pub enum Requires {
 }
 
 impl Requires {
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_at("requires")
+    }
+
+    fn validate_at(&self, path: &str) -> Result<(), String> {
+        match self {
+            Self::All(items) => validate_items(path, "all", items),
+            Self::Any(items) => validate_items(path, "any", items),
+            Self::Not(item) => item.validate_at(&format!("{path}.not")),
+            Self::Command(command) => validate_non_empty(path, "command", command),
+            Self::Path(path_value) => validate_non_empty(path, "path", path_value.as_str()),
+            Self::Env(key) => validate_non_empty(path, "env", key),
+            Self::Os(value) => validate_non_empty(path, "os", value),
+            Self::Arch(value) => validate_non_empty(path, "arch", value),
+            Self::Hostname(value) => validate_non_empty(path, "hostname", value),
+            Self::User(value) => validate_non_empty(path, "user", value),
+            Self::Group(value) => validate_non_empty(path, "group", value),
+        }
+    }
+
     pub fn check(&self, backend: &Backend) -> crate::Result {
         use crate::executor::{Facts, Fs};
 
@@ -93,6 +113,25 @@ impl std::fmt::Display for Requires {
             Self::Group(value) => write!(f, "group {value:?}"),
         }
     }
+}
+
+fn validate_items(path: &str, kind: &str, items: &[Requires]) -> Result<(), String> {
+    if items.is_empty() {
+        return Err(format!("{path}.{kind} must contain at least one requirement"));
+    }
+
+    for (index, item) in items.iter().enumerate() {
+        item.validate_at(&format!("{path}.{kind}[{index}]"))?;
+    }
+
+    Ok(())
+}
+
+fn validate_non_empty(path: &str, field: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("{path}.{field} must not be empty"));
+    }
+    Ok(())
 }
 
 fn check_fact(name: &str, expected: &str, actual: String) -> crate::Result {

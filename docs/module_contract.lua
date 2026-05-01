@@ -96,9 +96,10 @@ return {
 	---  { hostname = "web-1" }
 	---  { user = "root" }
 	---  { group = "root" }
-	---  { not = { command = "busybox" } }
+	---  { ["not"] = { command = "busybox" } }
 	---  { all = { ... } }
 	---  { any = { ... } }
+	--- Empty all/any lists and empty or whitespace-only string arguments are invalid.
 	---@type table
 	requires = {
 		all = {

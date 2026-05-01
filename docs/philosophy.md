@@ -135,7 +135,7 @@ Good core primitives include:
 - target-host filesystem and command execution operations;
 - controller-side path and read-only filesystem inspection;
 - file transfer between controller and host;
-- pure data helpers such as JSON, Base64, and template rendering;
+- pure data helpers such as JSON, Base64, SHA-256 hashing, and template rendering;
 - carefully bounded filesystem builtins that compose those primitives.
 
 Core builtins should not grow into service-manager, package-manager, database,

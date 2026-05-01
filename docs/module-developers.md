@@ -464,10 +464,14 @@ requires = {
                 { command = "wget" },
             },
         },
-        { not = { command = "busybox" } },
+        { ["not"] = { command = "busybox" } },
     },
 }
 ```
+
+Empty `all`/`any` lists and empty or whitespace-only requirement arguments are
+rejected when the module is loaded. Nested errors include the requirement path,
+for example `requires.all[1].any[1].command must not be empty`.
 
 Use `requires` for host capability checks. Do not use `validate` to run commands
 just to find out whether a command exists.
