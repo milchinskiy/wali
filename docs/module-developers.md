@@ -520,6 +520,7 @@ ctx.host.fs.read_link
 ctx.controller.path.*
 ctx.controller.fs.*
 ctx.codec.*
+ctx.hash.*
 ctx.json.*
 ctx.template.*
 ctx.transfer.*
@@ -708,6 +709,24 @@ execution, or any mutation.
 ```lua
 local encoded = ctx.codec.base64_encode(ctx.controller.fs.read("payload.bin"))
 local bytes = ctx.codec.base64_decode(encoded)
+```
+
+## Hash API
+
+`ctx.hash` is available during validation and apply. It contains small pure
+one-way byte digest helpers for module authors. The first supported hash is
+SHA-256. It accepts Lua strings as raw bytes and returns a lowercase hex digest.
+
+```lua
+ctx.hash.sha256(bytes)
+```
+
+SHA-256 is not an encoding and has no decode operation. For file hashing, compose
+it with the controller or host read primitives instead of adding file-specific
+shortcuts:
+
+```lua
+local digest = ctx.hash.sha256(ctx.controller.fs.read("payload.bin"))
 ```
 
 ## JSON API

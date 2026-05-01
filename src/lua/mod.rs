@@ -4,6 +4,7 @@ pub mod api;
 pub(crate) mod builtins;
 mod codec;
 mod controller;
+mod hash;
 mod json;
 pub mod module;
 mod template;

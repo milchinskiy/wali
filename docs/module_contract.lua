@@ -30,6 +30,7 @@
 --   ctx.controller.path.*         resolve/is_absolute/join/normalize/parent/basename/strip_prefix
 --   ctx.controller.fs.*           read-only controller filesystem helpers
 --   ctx.codec.*                   byte/string codec helpers
+--   ctx.hash.*                    one-way byte digest helpers
 --   ctx.json.*                    JSON decode/encode helpers
 --   ctx.template.*                pure MiniJinja rendering helpers
 --   ctx.transfer.*                controller/host file transfer helpers
@@ -42,6 +43,9 @@
 --
 -- validate ctx.codec exposes pure byte/string codec helpers:
 --   base64_encode(bytes), base64_decode(text)
+--
+-- validate ctx.hash exposes pure one-way byte digest helpers:
+--   sha256(bytes)
 --
 -- validate ctx.json exposes pure JSON helpers:
 --   decode(text), encode(value), encode_pretty(value)
