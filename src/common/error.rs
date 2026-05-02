@@ -72,7 +72,7 @@ impl std::error::Error for Error {
             Self::ModuleRequirement { .. } => None,
             Self::ModuleValidation { .. } => None,
             Self::ModuleApply { .. } => None,
-            Self::MissingSecret { .. } => None,
+            Self::MissingSecret(_) => None,
             Self::SshProtocol(_) => None,
             Self::FactProbe(_) => None,
             Self::CommandExec(_) => None,
