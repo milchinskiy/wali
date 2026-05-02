@@ -5,28 +5,20 @@ mod common;
 use common::*;
 
 #[test]
-fn manifest_root_unknown_fields_are_rejected() {
-    let sandbox = Sandbox::new("unknown-root-field");
-    let manifest = sandbox.write_manifest(
-        r#"
+fn manifest_unknown_fields_are_rejected() {
+    let cases = [
+        (
+            "unknown-root-field",
+            r#"
 return {
     unexpected = true,
     tasks = {},
 }
 "#,
-    );
-
-    assert_wali_failure_contains(
-        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-        "unknown field",
-    );
-}
-
-#[test]
-fn host_unknown_fields_are_rejected() {
-    let sandbox = Sandbox::new("unknown-host-field");
-    let manifest = sandbox.write_manifest(
-        r#"
+        ),
+        (
+            "unknown-host-field",
+            r#"
 return {
     hosts = {
         { id = "localhost", transport = "local", typo = true },
@@ -34,19 +26,10 @@ return {
     tasks = {},
 }
 "#,
-    );
-
-    assert_wali_failure_contains(
-        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-        "unknown field",
-    );
-}
-
-#[test]
-fn task_unknown_fields_are_rejected() {
-    let sandbox = Sandbox::new("unknown-task-field");
-    let manifest = sandbox.write_manifest(
-        r#"
+        ),
+        (
+            "unknown-task-field",
+            r#"
 return {
     hosts = {
         { id = "localhost", transport = "local" },
@@ -61,19 +44,10 @@ return {
     },
 }
 "#,
-    );
-
-    assert_wali_failure_contains(
-        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-        "unknown field",
-    );
-}
-
-#[test]
-fn run_as_unknown_fields_are_rejected() {
-    let sandbox = Sandbox::new("unknown-runas-field");
-    let manifest = sandbox.write_manifest(
-        r#"
+        ),
+        (
+            "unknown-runas-field",
+            r#"
 return {
     hosts = {
         {
@@ -87,12 +61,14 @@ return {
     tasks = {},
 }
 "#,
-    );
+        ),
+    ];
 
-    assert_wali_failure_contains(
-        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-        "unknown field",
-    );
+    for (name, source) in cases {
+        let sandbox = Sandbox::new(name);
+        let manifest = sandbox.write_manifest(source);
+        assert_plan_failure_contains(&manifest, "unknown field");
+    }
 }
 
 #[test]
@@ -111,10 +87,7 @@ return {
 "#,
     );
 
-    assert_wali_failure_contains(
-        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-        "invalid segment",
-    );
+    assert_plan_failure_contains(&manifest, "invalid segment");
 }
 
 #[test]
@@ -133,10 +106,7 @@ return {
 "#,
     );
 
-    assert_wali_failure_contains(
-        &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-        "not a known wali builtin module",
-    );
+    assert_plan_failure_contains(&manifest, "not a known wali builtin module");
 }
 
 #[test]
@@ -165,10 +135,7 @@ return {{
             lua_string(&modules),
         ));
 
-        assert_wali_failure_contains(
-            &["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")],
-            "unsafe for Lua package.path",
-        );
+        assert_plan_failure_contains(&manifest, "unsafe for Lua package.path");
     }
 }
 
@@ -268,10 +235,7 @@ return {{
             lua_string(&modules),
         ));
 
-        assert_wali_failure_contains(
-            &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
-            "unknown field",
-        );
+        assert_check_failure_contains(&manifest, "unknown field");
     }
 }
 
@@ -325,7 +289,11 @@ return {{
             lua_string(&modules),
         ));
 
-        assert_wali_failure_contains(&["--json", command, manifest.to_str().expect("non-utf8 manifest path")], needle);
+        match command {
+            "check" => assert_check_failure_contains(&manifest, needle),
+            "apply" => assert_apply_failure_contains(&manifest, needle),
+            _ => unreachable!("unsupported test command {command}"),
+        }
     }
 }
 
@@ -361,6 +329,6 @@ return {{
             ssh_config
         ));
 
-        assert_wali_failure_contains(&["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")], needle);
+        assert_plan_failure_contains(&manifest, needle);
     }
 }

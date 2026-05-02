@@ -144,6 +144,22 @@ pub fn run_wali_failure_json(args: &[&str]) -> Value {
     })
 }
 
+pub fn manifest_path(manifest: &Path) -> &str {
+    manifest.to_str().expect("non-utf8 manifest path")
+}
+
+pub fn assert_plan_failure_contains(manifest: &Path, needle: &str) {
+    assert_wali_failure_contains(&["--json", "plan", manifest_path(manifest)], needle);
+}
+
+pub fn assert_check_failure_contains(manifest: &Path, needle: &str) {
+    assert_wali_failure_contains(&["--json", "check", manifest_path(manifest)], needle);
+}
+
+pub fn assert_apply_failure_contains(manifest: &Path, needle: &str) {
+    assert_wali_failure_contains(&["--json", "apply", manifest_path(manifest)], needle);
+}
+
 pub fn run_apply(manifest: &Path) -> Value {
     run_wali_json(&["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")])
 }

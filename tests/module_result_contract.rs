@@ -47,72 +47,51 @@ return {{
 }
 
 #[test]
-fn changed_fs_entry_result_requires_path() {
-    let sandbox = Sandbox::new("result-contract-missing-path");
-    let modules = sandbox.mkdir("modules");
-    write_module(
-        &modules,
-        "missing_path",
-        r#"
+fn changed_fs_entry_result_rejects_missing_empty_or_relative_path() {
+    let cases = [
+        (
+            "missing_path",
+            r#"
         return {
             changes = {
                 { kind = "created", subject = "fs_entry" },
             },
         }
 "#,
-    );
-    let manifest = manifest_for_module(&sandbox, &modules, "missing_path");
-
-    assert_wali_failure_contains(
-        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
-        "invalid apply result: changes[1].path is required for created fs_entry change",
-    );
-}
-
-#[test]
-fn changed_fs_entry_result_rejects_empty_path() {
-    let sandbox = Sandbox::new("result-contract-empty-path");
-    let modules = sandbox.mkdir("modules");
-    write_module(
-        &modules,
-        "empty_path",
-        r#"
+            "invalid apply result: changes[1].path is required for created fs_entry change",
+        ),
+        (
+            "empty_path",
+            r#"
         return {
             changes = {
                 { kind = "updated", subject = "fs_entry", path = "   " },
             },
         }
 "#,
-    );
-    let manifest = manifest_for_module(&sandbox, &modules, "empty_path");
-
-    assert_wali_failure_contains(
-        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
-        "invalid apply result: changes[1].path must not be empty for updated fs_entry change",
-    );
-}
-
-#[test]
-fn changed_fs_entry_result_rejects_relative_path() {
-    let sandbox = Sandbox::new("result-contract-relative-path");
-    let modules = sandbox.mkdir("modules");
-    write_module(
-        &modules,
-        "relative_path",
-        r#"
+            "invalid apply result: changes[1].path must not be empty for updated fs_entry change",
+        ),
+        (
+            "relative_path",
+            r#"
         return {
             changes = {
                 { kind = "removed", subject = "fs_entry", path = "relative/path" },
             },
         }
 "#,
-    );
-    let manifest = manifest_for_module(&sandbox, &modules, "relative_path");
+            "invalid apply result: changes[1].path must be absolute for removed fs_entry change",
+        ),
+    ];
 
-    assert_wali_failure_contains(
-        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
-        "invalid apply result: changes[1].path must be absolute for removed fs_entry change",
-    );
+    for (name, body, needle) in cases {
+        let sandbox = Sandbox::new(&format!("result-contract-{name}"));
+        let modules = sandbox.mkdir("modules");
+        write_module(&modules, name, body);
+        let manifest = manifest_for_module(&sandbox, &modules, name);
+
+        assert_apply_failure_contains(&manifest, needle);
+    }
 }
 
 #[test]
