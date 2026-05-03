@@ -95,10 +95,13 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
 
     let mut host_id_set = std::collections::HashSet::with_capacity(manifest.hosts.len());
     for host in &manifest.hosts {
+        validate_manifest_label("Host id", &host.id)?;
         if !host_id_set.insert(host.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Host id '{}' is not unique", host.id)));
         }
+        validate_tags(&format!("Host '{}'", host.id), &host.tags)?;
         validate_vars(&format!("Host '{}' vars", host.id), &host.vars)?;
+        validate_run_as_entries(host)?;
         if host.command_timeout.is_some_and(|timeout| timeout.is_zero()) {
             return Err(crate::Error::InvalidManifest(format!(
                 "Host '{}' command_timeout must be greater than zero",
@@ -112,8 +115,12 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
 
     let mut task_id_set = std::collections::HashSet::with_capacity(manifest.tasks.len());
     for task in &manifest.tasks {
+        validate_manifest_label("Task id", &task.id)?;
         if !task_id_set.insert(task.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Task id '{}' is not unique", task.id)));
+        }
+        if let Some(tags) = &task.tags {
+            validate_tags(&format!("Task '{}'", task.id), tags)?;
         }
         validate_vars(&format!("Task '{}' vars", task.id), &task.vars)?;
     }
@@ -133,6 +140,10 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
 
         validate_task_references(task, &task_id_set)?;
 
+        if let Some(hsel) = task.host.as_ref() {
+            validate_host_selector(&task.id, "host", hsel)?;
+        }
+
         if let Some(hsel) = task.host.as_ref()
             && let host::HostSelector::Id(id) = hsel
             && !host_id_set.contains(id)
@@ -144,6 +155,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
         }
 
         if let Some(run_as) = &task.run_as {
+            validate_manifest_label(&format!("Task '{}' run_as", task.id), run_as)?;
             for host in manifest
                 .hosts
                 .iter()
@@ -157,6 +169,68 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
                 }
             }
         }
+    }
+
+    Ok(())
+}
+
+fn validate_manifest_label(scope: &str, value: &str) -> crate::Result {
+    if value.is_empty() {
+        return Err(crate::Error::InvalidManifest(format!("{scope} must not be empty")));
+    }
+    if value.trim() != value {
+        return Err(crate::Error::InvalidManifest(format!("{scope} must not contain leading or trailing whitespace")));
+    }
+    if value.chars().any(char::is_control) {
+        return Err(crate::Error::InvalidManifest(format!("{scope} must not contain control characters")));
+    }
+
+    Ok(())
+}
+
+fn validate_tags(scope: &str, tags: &std::collections::BTreeSet<String>) -> crate::Result {
+    for tag in tags {
+        validate_manifest_label(&format!("{scope} tag"), tag)?;
+    }
+
+    Ok(())
+}
+
+fn validate_run_as_entries(host: &host::Host) -> crate::Result {
+    let mut ids = std::collections::HashSet::with_capacity(host.run_as.len());
+    for entry in &host.run_as {
+        validate_manifest_label(&format!("Host '{}' run_as id", host.id), &entry.id)?;
+        validate_manifest_label(&format!("Host '{}' run_as user", host.id), &entry.user)?;
+        if !ids.insert(entry.id.as_str()) {
+            return Err(crate::Error::InvalidManifest(format!(
+                "Host '{}' run_as id '{}' is not unique",
+                host.id, entry.id
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_host_selector(task_id: &str, path: &str, selector: &host::HostSelector) -> crate::Result {
+    match selector {
+        host::HostSelector::Id(id) => validate_manifest_label(&format!("Task '{task_id}' {path}.id"), id),
+        host::HostSelector::Tag(tag) => validate_manifest_label(&format!("Task '{task_id}' {path}.tag"), tag),
+        host::HostSelector::Not(inner) => validate_host_selector(task_id, &format!("{path}.not"), inner),
+        host::HostSelector::All(items) => validate_host_selector_items(task_id, path, "all", items),
+        host::HostSelector::Any(items) => validate_host_selector_items(task_id, path, "any", items),
+    }
+}
+
+fn validate_host_selector_items(task_id: &str, path: &str, kind: &str, items: &[host::HostSelector]) -> crate::Result {
+    if items.is_empty() {
+        return Err(crate::Error::InvalidManifest(format!(
+            "Task '{task_id}' {path}.{kind} must contain at least one selector"
+        )));
+    }
+
+    for (idx, item) in items.iter().enumerate() {
+        validate_host_selector(task_id, &format!("{path}.{kind}[{idx}]"), item)?;
     }
 
     Ok(())

@@ -15,6 +15,8 @@ Initial public release.
 - Local and SSH host execution.
 - Lua manifests with per-host task expansion.
 - Optional `manifest` Lua helper module for compact host and task definitions.
+- Strict manifest label validation for host ids, task ids, tags, and `run_as`
+  entries.
 - `plan`, `check`, `apply`, and explicit state-file based `cleanup` commands.
 - Host and task selectors: `--host`, `--host-tag`, `--task`, and `--task-tag`.
 - Per-host concurrency control with `--jobs`.

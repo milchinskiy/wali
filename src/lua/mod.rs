@@ -61,6 +61,7 @@ impl LuaRuntime {
         P: AsRef<std::path::Path>,
     {
         let path = path.as_ref();
+        validate_include_path(path)?;
         let package = self.lua.globals().get::<mlua::Table>("package")?;
         let current_path = package.get::<String>("path")?;
         let extra_paths =
@@ -126,5 +127,33 @@ impl LuaRuntime {
     {
         let module: mlua::Table = self.require(load_name.as_ref())?;
         module::Module::new(display_name, &self.lua, module)
+    }
+}
+
+fn validate_include_path(path: &std::path::Path) -> mlua::Result<()> {
+    let value = path.to_string_lossy();
+    if value.contains(';') || value.contains('?') {
+        return Err(mlua::Error::external(format!(
+            "Lua include path contains characters that are unsafe for package.path: {}",
+            path.display()
+        )));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn include_path_rejects_lua_package_path_control_characters() {
+        let runtime = LuaRuntime::new().expect("runtime should initialize");
+
+        let error = runtime
+            .add_include_path(std::path::Path::new("/tmp/wali;bad"))
+            .expect_err("unsafe include path should fail");
+
+        assert!(error.to_string().contains("unsafe for package.path"));
     }
 }

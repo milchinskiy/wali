@@ -173,9 +173,13 @@ host options use the same names as `m.host.localhost`.
 when `args` is omitted; otherwise it leaves `args` exactly as provided. Optional
 task options are `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`,
 and `vars`. Unknown helper option names and non-table option values are rejected
-instead of being silently ignored. Task `host` selectors use the normal manifest
-shape, for example `{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`,
-`{ any = { ... } }`, or `{ ["not"] = ... }`.
+instead of being silently ignored. Helper ids and task module names must be
+strings and must not be empty, contain leading/trailing whitespace, or contain
+control characters. `m.host.ssh` requires at least `user` and `host` options;
+deeper SSH option validation is still performed by the normal manifest loader.
+Task `host` selectors use the normal manifest shape, for example
+`{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`, `{ any = { ... } }`,
+or `{ ["not"] = ... }`.
 
 ## Minimal manifest
 
@@ -220,7 +224,10 @@ and validates the gated task because no apply-time change result exists yet.
 Dependencies must be scheduled for the same host; duplicate dependency ids and
 duplicate references between `depends_on` and `on_change` are rejected. If a
 dependency fails or is skipped, its dependents are skipped with a
-dependency-specific reason, while unrelated later tasks continue to run.
+dependency-specific reason, while unrelated later tasks continue to run. Host
+ids, task ids, tags, and `run_as` ids/users must not be empty, must not contain
+leading or trailing whitespace, and must not contain control characters. Task
+ids may still contain ordinary internal spaces, as shown in the examples above.
 
 ## Variables
 

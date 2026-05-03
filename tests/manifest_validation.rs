@@ -92,6 +92,103 @@ return {
 }
 
 #[test]
+fn manifest_labels_and_host_selectors_are_validated() {
+    let cases = [
+        (
+            "empty-host-id",
+            r#"
+return {
+    hosts = {
+        { id = "", transport = "local" },
+    },
+    tasks = {},
+}
+"#,
+            "Host id must not be empty",
+        ),
+        (
+            "whitespace-host-tag",
+            r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local", tags = { " local" } },
+    },
+    tasks = {},
+}
+"#,
+            "Host 'localhost' tag must not contain leading or trailing whitespace",
+        ),
+        (
+            "empty-task-id",
+            r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        { id = "", module = "wali.builtin.command", args = { program = "true" } },
+    },
+}
+"#,
+            "Task id must not be empty",
+        ),
+        (
+            "empty-task-tag",
+            r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        { id = "noop", tags = { "" }, module = "wali.builtin.command", args = { program = "true" } },
+    },
+}
+"#,
+            "Task 'noop' tag must not be empty",
+        ),
+        (
+            "duplicate-run-as-id",
+            r#"
+return {
+    hosts = {
+        {
+            id = "localhost",
+            transport = "local",
+            run_as = {
+                { id = "root", user = "root" },
+                { id = "root", user = "admin" },
+            },
+        },
+    },
+    tasks = {},
+}
+"#,
+            "Host 'localhost' run_as id 'root' is not unique",
+        ),
+        (
+            "empty-host-selector-all",
+            r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        { id = "noop", host = { all = {} }, module = "wali.builtin.command", args = { program = "true" } },
+    },
+}
+"#,
+            "Task 'noop' host.all must contain at least one selector",
+        ),
+    ];
+
+    for (name, source, needle) in cases {
+        let sandbox = Sandbox::new(name);
+        let manifest = sandbox.write_manifest(source);
+        assert_plan_failure_contains(&manifest, needle);
+    }
+}
+
+#[test]
 fn unknown_wali_builtin_modules_are_rejected_before_execution() {
     let sandbox = Sandbox::new("unknown-wali-builtin");
     let manifest = sandbox.write_manifest(
@@ -453,6 +550,50 @@ return {
 }
 "#,
             "host.localhost options must be a table",
+        ),
+        (
+            "manifest-helper-empty-host-id",
+            r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.localhost(""),
+    },
+    tasks = {},
+}
+"#,
+            "host.localhost id must not be empty",
+        ),
+        (
+            "manifest-helper-ssh-requires-user",
+            r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.ssh("remote", { host = "192.0.2.1" }),
+    },
+    tasks = {},
+}
+"#,
+            "host.ssh option 'user' is required",
+        ),
+        (
+            "manifest-helper-empty-task-module",
+            r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.localhost("localhost"),
+    },
+    tasks = {
+        m.task("noop")("", {}),
+    },
+}
+"#,
+            "task module must not be empty",
         ),
     ];
 

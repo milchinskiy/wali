@@ -134,6 +134,12 @@ fn validate_selector_value(value: &OsStr) -> Result<(), &'static str> {
     if raw.is_empty() {
         return Err("selector values must not be empty");
     }
+    if raw.trim() != raw {
+        return Err("selector values must not contain leading or trailing whitespace");
+    }
+    if raw.chars().any(char::is_control) {
+        return Err("selector values must not contain control characters");
+    }
     Ok(())
 }
 

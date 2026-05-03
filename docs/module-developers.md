@@ -45,7 +45,8 @@ hosts = {
 `{ id = id, transport = { ssh = { ... } }, ... }`. Common host options are
 `tags`, `vars`, `run_as`, and `command_timeout`. SSH-specific options are
 `user`, `host`, `port`, `host_key_policy`, `auth`, `connect_timeout`, and
-`keepalive_interval`.
+`keepalive_interval`. `m.host.ssh` requires `user` and `host`; the remaining SSH
+fields keep the same defaults as the raw manifest contract.
 
 Task helper:
 
@@ -64,13 +65,19 @@ tasks = {
 
 `m.task(id)(module, args, opts)` uses an empty table when `args` is omitted;
 otherwise it leaves `args` unchanged and copies optional task fields from
-`opts`: `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`,
-and `vars`. Unknown helper option names and non-table option values are
-rejected instead of being silently ignored. Task `host` selectors use the normal
-manifest shape, for example
+`opts`: `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`, and `vars`.
+Unknown helper option names and non-table option values are rejected instead of
+being silently ignored. Helper ids and task module names must be strings and
+must not be empty, contain leading/trailing whitespace, or contain control
+characters. Task `host` selectors use the normal manifest shape, for example
 `{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`, `{ any = { ... } }`,
 or `{ ["not"] = ... }`. Use raw task tables whenever that is clearer for a
 specific case.
+
+The manifest loader applies the same label discipline to raw tables: host ids,
+task ids, tags, and `run_as` ids/users must not be empty, must not have leading
+or trailing whitespace, and must not contain control characters. Task ids may
+contain ordinary internal spaces.
 
 ## Module source contract
 
@@ -189,7 +196,9 @@ They must resolve to existing directories during manifest loading.
 
 Because wali intentionally uses native Lua `package.path` for the selected
 source, local source paths must be representable as Lua package-path templates.
-Paths containing `;` or `?` are rejected.
+Paths containing `;` or `?` are rejected. The same package-path safety rule is
+applied to the manifest directory that is temporarily added while evaluating the
+manifest chunk.
 
 ## Git source rules
 

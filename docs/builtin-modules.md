@@ -232,6 +232,7 @@ Ensures a symbolic link path exists or is absent.
 
 `path` must be an absolute target-host path. `target` is link text and may be
 absolute, relative, or missing; relative symlink targets are preserved exactly.
+`state` may be `"present"` or `"absent"` and defaults to `"present"`.
 `replace = true` may replace files and symlinks, but it refuses to replace
 directories.
 
@@ -404,6 +405,9 @@ directory or symlink is created.
 - destination file/symlink conflicts are refused unless `replace = true`;
 - destination directory conflicts are never replaced by links;
 - source `other` entries are refused unless `allow_special = true`;
+- `max_depth` limits the source walk depth when provided;
+- `dir_mode` and `dir_owner` apply only to created or updated destination
+  directories;
 - extra destination entries are not pruned.
 
 ## `wali.builtin.copy_tree`
@@ -447,6 +451,7 @@ directory or symlink is created.
 - destination symlinks that resolve to directories or special entries are
   refused during preflight where copied files are expected;
 - destination file/symlink paths may be replaced only when `replace = true`;
+- `max_depth` limits the source walk depth when provided;
 - extra destination entries are not pruned.
 
 `dir_mode` / `file_mode` override source modes. Without overrides,
@@ -489,8 +494,9 @@ Shell form:
 `cwd`, `creates`, and `removes` must be absolute target-host paths when
 provided. `timeout` is a human-readable string such as `"10s"` or `"2m"`. When
 omitted, the host-level `command_timeout` default is used if configured. `env`
-is a string map, for example `{ FOO = "bar" }`. `changed = "never"` can be used
-for read-only commands.
+is a string map, for example `{ FOO = "bar" }`. `stdin` is passed to the child
+process as text bytes. `pty` may be `"never"`, `"auto"`, or `"require"` and
+defaults to `"auto"`. `changed = "never"` can be used for read-only commands.
 
 ## Tree traversal primitive
 

@@ -32,6 +32,23 @@ local LOCAL_HOST_OPTIONS = option_set(LOCAL_HOST_KEYS)
 local SSH_HOST_OPTIONS = option_set(SSH_HOST_KEYS)
 local TASK_OPTIONS = option_set(TASK_KEYS)
 
+local function require_clean_string(kind, field, value)
+	if type(value) ~= "string" then
+		error(kind .. " " .. field .. " must be a string", 3)
+	end
+	if value == "" then
+		error(kind .. " " .. field .. " must not be empty", 3)
+	end
+	if value:match("^%s") ~= nil or value:match("%s$") ~= nil then
+		error(kind .. " " .. field .. " must not contain leading or trailing whitespace", 3)
+	end
+	if value:find("%c") ~= nil then
+		error(kind .. " " .. field .. " must not contain control characters", 3)
+	end
+
+	return value
+end
+
 local function options_or_empty(kind, opts)
 	if opts == nil then
 		return {}
@@ -41,6 +58,14 @@ local function options_or_empty(kind, opts)
 	end
 
 	return opts
+end
+
+local function require_option(kind, opts, key)
+	if opts[key] == nil then
+		error(kind .. " option '" .. key .. "' is required", 3)
+	end
+
+	return opts[key]
 end
 
 local function check_options(kind, opts, allowed)
@@ -69,7 +94,7 @@ function host.localhost(id, opts)
 	check_options("host.localhost", opts, LOCAL_HOST_OPTIONS)
 
 	return copy_fields({
-		id = id,
+		id = require_clean_string("host.localhost", "id", id),
 		transport = "local",
 	}, opts, LOCAL_HOST_KEYS)
 end
@@ -77,14 +102,18 @@ end
 function host.ssh(id, opts)
 	opts = options_or_empty("host.ssh", opts)
 	check_options("host.ssh", opts, SSH_HOST_OPTIONS)
+	require_clean_string("host.ssh", "option 'user'", require_option("host.ssh", opts, "user"))
+	require_clean_string("host.ssh", "option 'host'", require_option("host.ssh", opts, "host"))
 
 	return copy_fields({
-		id = id,
+		id = require_clean_string("host.ssh", "id", id),
 		transport = { ssh = copy_fields({}, opts, SSH_KEYS) },
 	}, opts, COMMON_HOST_KEYS)
 end
 
 local function task(id)
+	require_clean_string("task", "id", id)
+
 	return function(module, args, opts)
 		opts = options_or_empty("task", opts)
 		check_options("task", opts, TASK_OPTIONS)
@@ -95,7 +124,7 @@ local function task(id)
 
 		return copy_fields({
 			id = id,
-			module = module,
+			module = require_clean_string("task", "module", module),
 			args = args,
 		}, opts, TASK_KEYS)
 	end
