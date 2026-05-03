@@ -14,6 +14,7 @@ Initial public release.
 
 - Local and SSH host execution.
 - Lua manifests with per-host task expansion.
+- Optional `manifest` Lua helper module for compact host and task definitions.
 - `plan`, `check`, `apply`, and explicit state-file based `cleanup` commands.
 - Host and task selectors: `--host`, `--host-tag`, `--task`, and `--task-tag`.
 - Per-host concurrency control with `--jobs`.
@@ -29,6 +30,6 @@ Initial public release.
   `link_tree`, `permissions`, `pull_file`, `push_file`, `remove`, `template`,
   and `touch`.
 - Public Lua helper APIs for controller filesystem reads, host filesystem
-  operations, command execution, path handling, JSON, Base64, SHA-256,
-  MiniJinja template rendering, and controller/host file transfer.
+  operations, command execution, path handling, JSON, Base64, SHA-256, MiniJinja
+  template rendering, and controller/host file transfer.
 - Human, plain-text, and JSON output modes.

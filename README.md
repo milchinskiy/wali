@@ -1,8 +1,8 @@
 # wali
 
-wali is a small agentless automation tool written in Rust. Manifests and
-modules are written in embedded Lua. The first public release focuses on local
-and SSH hosts, explicit execution flow, host-aware checks, and small primitive
+wali is a small agentless automation tool written in Rust. Manifests and modules
+are written in embedded Lua. The first public release focuses on local and SSH
+hosts, explicit execution flow, host-aware checks, and small primitive
 filesystem, command, transfer, template, and data helpers.
 
 ## Status and compatibility
@@ -11,8 +11,8 @@ The current release line is `0.1.x`. The documented manifest, module, and
 state-file contracts are intended to be usable, but they are not yet a 1.0
 stability promise. Changes before 1.0 should be made deliberately, documented in
 `CHANGELOG.md`, and reflected in `docs/module-developers.md`,
-`docs/builtin-modules.md`, and `docs/module_contract.lua` when they affect module
-authors.
+`docs/builtin-modules.md`, and `docs/module_contract.lua` when they affect
+module authors.
 
 ## Build and install
 
@@ -20,8 +20,8 @@ Requirements:
 
 - Rust 1.94.0 or newer;
 - a C toolchain for native dependencies;
-- `pkg-config` and OpenSSL development headers on platforms where the native
-  SSH dependency does not find them automatically;
+- `pkg-config` and OpenSSL development headers on platforms where the native SSH
+  dependency does not find them automatically;
 - system `git` when manifests use Git module sources or when running the Git
   module-source tests.
 
@@ -41,7 +41,7 @@ For development, the repository includes a Nix shell with the Rust toolchain,
 Clippy, rustfmt, Git, pkg-config, and OpenSSL development inputs:
 
 ```sh
-nix develop
+nix develop -c $SHELL
 ```
 
 ## Basic model
@@ -127,6 +127,56 @@ selectors limit cleanup to previous created entries on selected hosts. Task
 id/tag selectors limit cleanup to previous created entries from the selected
 task dependency closure.
 
+## Manifest helper module
+
+Manifest files are ordinary Lua chunks. During manifest loading, wali preloads a
+small `manifest` helper module:
+
+```lua
+local m = require("manifest")
+```
+
+The helper is available only while the manifest itself is evaluated. It is
+optional and intentionally thin: it returns ordinary manifest tables and does
+not hide the underlying contract. Raw tables remain valid and may be mixed with
+helper-generated tables.
+
+```lua
+hosts = {
+    m.host.localhost("localhost", {
+        tags = { "local" },
+        vars = { role = "controller" },
+        command_timeout = "30s",
+    }),
+
+    m.host.ssh("web-1", {
+        user = "deploy",
+        host = "web-1.example.invalid",
+        port = 22,
+        auth = "agent",
+        connect_timeout = "10s",
+        keepalive_interval = "30s",
+        tags = { "web" },
+    }),
+}
+```
+
+`m.host.localhost(id, opts)` emits a local host. Common host options are `tags`,
+`vars`, `run_as`, and `command_timeout`.
+
+`m.host.ssh(id, opts)` emits the nested SSH transport shape expected by the
+manifest contract. SSH connection options are `user`, `host`, `port`,
+`host_key_policy`, `auth`, `connect_timeout`, and `keepalive_interval`; common
+host options use the same names as `m.host.localhost`.
+
+`m.task(id)(module, args, opts)` emits a task. The helper uses an empty table
+when `args` is omitted; otherwise it leaves `args` exactly as provided. Optional
+task options are `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`,
+and `vars`. Unknown helper option names and non-table option values are rejected
+instead of being silently ignored. Task `host` selectors use the normal manifest
+shape, for example `{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`,
+`{ any = { ... } }`, or `{ ["not"] = ... }`.
+
 ## Minimal manifest
 
 Hosts may set `command_timeout = "30s"` to provide a default timeout for host
@@ -134,33 +184,28 @@ commands, including the initial fact probe performed during connection.
 Per-command `timeout` values override the host default.
 
 ```lua
+local m = require("manifest")
+
 return {
     hosts = {
-        { id = "localhost", transport = "local" },
+        m.host.localhost("localhost"),
     },
 
     tasks = {
-        {
-            id = "create demo dir",
-            module = "wali.builtin.dir",
-            args = {
-                path = "/tmp/wali-demo",
-                state = "present",
-                parents = true,
-                mode = "0755",
-            },
-        },
-        {
-            id = "write message",
+        m.task("create demo dir")("wali.builtin.dir", {
+            path = "/tmp/wali-demo",
+            state = "present",
+            parents = true,
+            mode = "0755",
+        }),
+        m.task("write message")("wali.builtin.file", {
+            path = "/tmp/wali-demo/message.txt",
+            content = "managed by wali\n",
+            create_parents = true,
+            mode = "0644",
+        }, {
             depends_on = { "create demo dir" },
-            module = "wali.builtin.file",
-            args = {
-                path = "/tmp/wali-demo/message.txt",
-                content = "managed by wali\n",
-                create_parents = true,
-                mode = "0644",
-            },
-        },
+        }),
     },
 }
 ```
@@ -344,9 +389,9 @@ no project-root sandbox. Domain modules should use this primitive API rather
 than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`.
 Target-host filesystem reads expose both raw bytes through `ctx.host.fs.read`
 and strict UTF-8 text through `ctx.host.fs.read_text`. Modules also receive
-`ctx.json` for compact JSON decoding and encoding, `ctx.codec` for
-byte-oriented codecs such as Base64, and `ctx.hash` for one-way digests such
-as SHA-256, without vendoring Lua parsers or shelling out to external tools.
+`ctx.json` for compact JSON decoding and encoding, `ctx.codec` for byte-oriented
+codecs such as Base64, and `ctx.hash` for one-way digests such as SHA-256,
+without vendoring Lua parsers or shelling out to external tools.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).
@@ -374,9 +419,9 @@ wali.builtin.template
 wali.builtin.touch
 ```
 
-Builtin fields that manage target-host filesystem objects require absolute
-host paths unless documented otherwise. Controller-side transfer and template
-paths may still be absolute or relative to manifest `base_path`. See
+Builtin fields that manage target-host filesystem objects require absolute host
+paths unless documented otherwise. Controller-side transfer and template paths
+may still be absolute or relative to manifest `base_path`. See
 [`docs/builtin-modules.md`](docs/builtin-modules.md) for module-specific
 arguments, behavior, and safety notes.
 

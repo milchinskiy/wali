@@ -3,6 +3,7 @@
 mod common;
 
 use common::*;
+use serde_json::Value;
 
 #[test]
 fn manifest_unknown_fields_are_rejected() {
@@ -294,6 +295,171 @@ return {{
             "apply" => assert_apply_failure_contains(&manifest, needle),
             _ => unreachable!("unsupported test command {command}"),
         }
+    }
+}
+
+#[test]
+fn manifest_helper_localhost_and_task_compile_to_normal_manifest_shape() {
+    let sandbox = Sandbox::new("manifest-helper-localhost");
+    let manifest = sandbox.write_manifest(
+        r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.localhost("localhost", {
+            tags = { "local" },
+            vars = { role = "controller" },
+            command_timeout = "30s",
+        }),
+    },
+    tasks = {
+        m.task("prepare")("wali.builtin.command", {
+            program = "true",
+        }, {
+            tags = { "setup" },
+            vars = { enabled = false },
+        }),
+        m.task("write")("wali.builtin.command", {
+            program = "true",
+        }, {
+            depends_on = { "prepare" },
+        }),
+        m.task("empty args")("wali.builtin.command"),
+    },
+}
+"#,
+    );
+
+    let report = run_plan(&manifest);
+    let hosts = report
+        .get("hosts")
+        .and_then(Value::as_array)
+        .expect("plan report should contain hosts");
+    assert_eq!(hosts.len(), 1);
+    assert_eq!(hosts[0].get("id").and_then(Value::as_str), Some("localhost"));
+    assert_eq!(hosts[0].pointer("/transport/kind").and_then(Value::as_str), Some("local"));
+
+    let tasks = hosts[0]
+        .get("tasks")
+        .and_then(Value::as_array)
+        .expect("localhost plan should contain tasks");
+    let task_ids = tasks
+        .iter()
+        .map(|task| task.get("id").and_then(Value::as_str).expect("task id missing"))
+        .collect::<Vec<_>>();
+    assert_eq!(task_ids, vec!["prepare", "write", "empty args"]);
+}
+
+#[test]
+fn manifest_helper_ssh_emits_nested_ssh_transport() {
+    let sandbox = Sandbox::new("manifest-helper-ssh");
+    let manifest = sandbox.write_manifest(
+        r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.ssh("remote", {
+            user = "nobody",
+            host = "192.0.2.1",
+            port = 2222,
+            auth = "password",
+            connect_timeout = "5s",
+            keepalive_interval = "30s",
+            command_timeout = "1m",
+            tags = { "remote" },
+        }),
+    },
+    tasks = {
+        m.task("noop")("wali.builtin.command", { program = "true" }),
+    },
+}
+"#,
+    );
+
+    let report = run_plan(&manifest);
+    let host = report
+        .get("hosts")
+        .and_then(Value::as_array)
+        .and_then(|hosts| hosts.first())
+        .expect("plan report should contain ssh host");
+
+    assert_eq!(host.get("id").and_then(Value::as_str), Some("remote"));
+    assert_eq!(host.pointer("/transport/kind").and_then(Value::as_str), Some("ssh"));
+}
+
+#[test]
+fn manifest_helper_rejects_unknown_options() {
+    let cases = [
+        (
+            "manifest-helper-unknown-localhost-option",
+            r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.localhost("localhost", { tagz = { "local" } }),
+    },
+    tasks = {},
+}
+"#,
+            "host.localhost option 'tagz' is not supported",
+        ),
+        (
+            "manifest-helper-unknown-ssh-option",
+            r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.ssh("remote", {
+            user = "nobody",
+            host = "192.0.2.1",
+            ssh_timeout = "5s",
+        }),
+    },
+    tasks = {},
+}
+"#,
+            "host.ssh option 'ssh_timeout' is not supported",
+        ),
+        (
+            "manifest-helper-unknown-task-option",
+            r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.localhost("localhost"),
+    },
+    tasks = {
+        m.task("noop")("wali.builtin.command", { program = "true" }, { depens_on = {} }),
+    },
+}
+"#,
+            "task option 'depens_on' is not supported",
+        ),
+        (
+            "manifest-helper-non-table-options",
+            r#"
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.localhost("localhost", false),
+    },
+    tasks = {},
+}
+"#,
+            "host.localhost options must be a table",
+        ),
+    ];
+
+    for (name, source, needle) in cases {
+        let sandbox = Sandbox::new(name);
+        let manifest = sandbox.write_manifest(source);
+        assert_plan_failure_contains(&manifest, needle);
     }
 }
 

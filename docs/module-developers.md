@@ -4,6 +4,74 @@ This is the canonical guide for custom Lua modules and custom module sources.
 The short README examples intentionally omit most edge cases; this document
 keeps the detailed authoring and source-loading contract in one place.
 
+## Manifest author helper
+
+Manifest files are plain Lua chunks. Wali preloads a small helper module named
+`manifest` during manifest evaluation:
+
+```lua
+local m = require("manifest")
+```
+
+The helper is available only while the manifest itself is evaluated. It is a
+convenience layer over the normal manifest table shape, not a separate DSL, and
+it can be mixed freely with raw manifest tables.
+
+Host helpers:
+
+```lua
+hosts = {
+    m.host.localhost("localhost", {
+        tags = { "local" },
+        vars = { role = "controller" },
+        command_timeout = "30s",
+    }),
+
+    m.host.ssh("web-1", {
+        user = "deploy",
+        host = "web-1.example.invalid",
+        port = 22,
+        auth = "agent",
+        host_key_policy = { strict = {} },
+        connect_timeout = "10s",
+        keepalive_interval = "30s",
+        tags = { "web" },
+    }),
+}
+```
+
+`m.host.localhost(id, opts)` emits `{ id = id, transport = "local", ... }`.
+`m.host.ssh(id, opts)` emits the required nested SSH transport shape,
+`{ id = id, transport = { ssh = { ... } }, ... }`. Common host options are
+`tags`, `vars`, `run_as`, and `command_timeout`. SSH-specific options are
+`user`, `host`, `port`, `host_key_policy`, `auth`, `connect_timeout`, and
+`keepalive_interval`.
+
+Task helper:
+
+```lua
+tasks = {
+    m.task("write config")("wali.builtin.template", {
+        src = "templates/app.conf.j2",
+        dest = "/etc/demo/app.conf",
+    }, {
+        depends_on = { "prepare" },
+        tags = { "deploy" },
+        when = { os = "linux" },
+    }),
+}
+```
+
+`m.task(id)(module, args, opts)` uses an empty table when `args` is omitted;
+otherwise it leaves `args` unchanged and copies optional task fields from
+`opts`: `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`,
+and `vars`. Unknown helper option names and non-table option values are
+rejected instead of being silently ignored. Task `host` selectors use the normal
+manifest shape, for example
+`{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`, `{ any = { ... } }`,
+or `{ ["not"] = ... }`. Use raw task tables whenever that is clearer for a
+specific case.
+
 ## Module source contract
 
 A manifest may add one or more module sources. A source is either a local path
