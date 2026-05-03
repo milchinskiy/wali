@@ -20,7 +20,8 @@ The intended scope is:
 - local and SSH hosts;
 - host-local task execution;
 - mostly imperative task order;
-- small primitive modules for common filesystem, command, transfer, template, and data operations;
+- small primitive modules for common filesystem, command, transfer, template,
+  and data operations;
 - custom Lua modules for user-specific work;
 - predictable plan, check, and apply phases.
 
@@ -127,15 +128,16 @@ user through `run_as`, operations such as `write`, `create_dir`, `chmod`, and
 ## Builtin module philosophy
 
 Rust-core and builtin functionality should stay primitive-oriented. Wali should
-provide reliable low-level operations that are difficult to implement
-portably or safely in Lua, while domain policy belongs in custom Lua modules.
+provide reliable low-level operations that are difficult to implement portably
+or safely in Lua, while domain policy belongs in custom Lua modules.
 
 Good core primitives include:
 
 - target-host filesystem and command execution operations;
 - controller-side path and read-only filesystem inspection;
 - file transfer between controller and host;
-- pure data helpers such as JSON, Base64, SHA-256 hashing, and template rendering;
+- pure data helpers such as JSON, Base64, SHA-256 hashing, and template
+  rendering;
 - carefully bounded filesystem builtins that compose those primitives.
 
 Core builtins should not grow into service-manager, package-manager, database,
@@ -260,6 +262,25 @@ The implementation may use shell commands where needed for portability across
 local and SSH backends, but those shell snippets should be narrow, quoted
 carefully, and shared where possible. Internal executor probes should not use
 login shells.
+
+## Release discipline
+
+Release-facing changes must keep metadata, docs, and tests in sync. A release
+should have a clear changelog entry, an accurate README, an explicit license
+file matching `Cargo.toml`, and tests that protect public contract lists where
+reasonable.
+
+Before tagging a release, run at least:
+
+```sh
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo package --allow-dirty
+```
+
+`cargo package --allow-dirty` is for local release-candidate verification before
+tagging; the final package should be produced from a clean tree.
 
 ## Near-term direction
 

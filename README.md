@@ -1,12 +1,48 @@
 # wali
 
-wali is a small agentless automation tool written in Rust. Manifests and modules
-are written in embedded Lua. The current implementation focuses on local and SSH
-hosts, strict execution flow, host-aware checks, and small primitive
-filesystem/data modules.
+wali is a small agentless automation tool written in Rust. Manifests and
+modules are written in embedded Lua. The first public release focuses on local
+and SSH hosts, explicit execution flow, host-aware checks, and small primitive
+filesystem, command, transfer, template, and data helpers.
 
-The project is still in active development. Public contracts may change while
-the executor, module API, and builtin module set are being stabilized.
+## Status and compatibility
+
+The current release line is `0.1.x`. The documented manifest, module, and
+state-file contracts are intended to be usable, but they are not yet a 1.0
+stability promise. Changes before 1.0 should be made deliberately, documented in
+`CHANGELOG.md`, and reflected in `docs/module-developers.md`,
+`docs/builtin-modules.md`, and `docs/module_contract.lua` when they affect module
+authors.
+
+## Build and install
+
+Requirements:
+
+- Rust 1.94.0 or newer;
+- a C toolchain for native dependencies;
+- `pkg-config` and OpenSSL development headers on platforms where the native
+  SSH dependency does not find them automatically;
+- system `git` when manifests use Git module sources or when running the Git
+  module-source tests.
+
+Build from the repository root:
+
+```sh
+cargo build --release
+```
+
+Install locally from a checkout:
+
+```sh
+cargo install --path .
+```
+
+For development, the repository includes a Nix shell with the Rust toolchain,
+Clippy, rustfmt, Git, pkg-config, and OpenSSL development inputs:
+
+```sh
+nix develop
+```
 
 ## Basic model
 
@@ -358,6 +394,18 @@ context, including mutation APIs. See
 [`docs/module_contract.lua`](docs/module_contract.lua) for the compact API
 reference and [`docs/module-developers.md`](docs/module-developers.md) for
 authoring guidance.
+
+## Documentation map
+
+- [`docs/philosophy.md`](docs/philosophy.md) records project goals, boundaries,
+  and design principles.
+- [`docs/module-developers.md`](docs/module-developers.md) is the custom module
+  authoring guide.
+- [`docs/module_contract.lua`](docs/module_contract.lua) is a compact Lua-facing
+  contract reference.
+- [`docs/builtin-modules.md`](docs/builtin-modules.md) documents builtin module
+  arguments and behavior.
+- [`CHANGELOG.md`](CHANGELOG.md) records release-visible changes.
 
 ## Development checks
 

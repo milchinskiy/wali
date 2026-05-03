@@ -1,5 +1,5 @@
 {
-  description = "A basic rust project";
+  description = "wali development environment";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
@@ -27,6 +27,7 @@
           clippy
         ];
         buildInputs = with pkgs; [
+          git
           perl
           pkg-config
           openssl.dev

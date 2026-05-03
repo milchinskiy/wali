@@ -4,9 +4,10 @@ mod commands;
 mod context;
 
 pub fn setup_commands() {
+    let package_authors = env!("CARGO_PKG_AUTHORS");
     let env = ap::Env {
         version: Some(env!("CARGO_PKG_VERSION")),
-        author: Some(env!("CARGO_PKG_AUTHORS")),
+        author: (!package_authors.is_empty()).then_some(package_authors),
         ..Default::default()
     };
 

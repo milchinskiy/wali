@@ -9,8 +9,8 @@ arguments, behavior, and safety notes. The shared Lua phase and custom module
 contracts are described in `module-developers.md`; the design rationale is in
 `philosophy.md`.
 
-General builtin expectations are stable across this file: keep scope tight,
-be idempotent where the primitive reconciles filesystem content, validate unsafe
+General builtin expectations are stable across this file: keep scope tight, be
+idempotent where the primitive reconciles filesystem content, validate unsafe
 input before mutation, and return structured `ExecutionResult` changes.
 
 Builtin fields that name target-host filesystem objects must be absolute paths
@@ -362,7 +362,8 @@ Ensures mode and/or owner metadata on an existing file or directory.
 }
 ```
 
-`path` must be an absolute target-host path. `expect` may be `"any"`, `"file"`, or `"dir"`.
+`path` must be an absolute target-host path. `expect` may be `"any"`, `"file"`,
+or `"dir"`.
 
 By default, `follow = true`, so a symlink to a file or directory is resolved and
 `chmod` / `chown` affect the target, matching normal POSIX command behavior. Set
@@ -486,17 +487,17 @@ Shell form:
 ```
 
 `cwd`, `creates`, and `removes` must be absolute target-host paths when
-provided. `timeout` is a human-readable string such as `"10s"` or `"2m"`. When omitted,
-the host-level `command_timeout` default is used if configured. `env` is a
-string map, for example `{ FOO = "bar" }`. `changed = "never"` can be used for
-read-only commands.
+provided. `timeout` is a human-readable string such as `"10s"` or `"2m"`. When
+omitted, the host-level `command_timeout` default is used if configured. `env`
+is a string map, for example `{ FOO = "bar" }`. `changed = "never"` can be used
+for read-only commands.
 
 ## Tree traversal primitive
 
 `wali.builtin.copy_tree` and `wali.builtin.link_tree` are built on
 `ctx.host.fs.walk(...)`, the host filesystem traversal primitive exposed to
 custom modules. Wali does not provide a separate `wali.builtin.walk` task
-module; tree inspection is a module-authoring concern rather than a builtin mutation primitive
-by itself.
+module; tree inspection is a module-authoring concern rather than a builtin
+mutation primitive by itself.
 
 For the full `ctx.host.fs.walk(...)` API contract, see `module-developers.md`.

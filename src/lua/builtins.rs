@@ -109,4 +109,18 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn task_builtin_modules_are_documented() {
+        let builtin_docs = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/builtin-modules.md"));
+        let module_contract = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/module_contract.lua"));
+        let readme = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"));
+
+        for module in MODULES.iter().filter(|module| module.task_module) {
+            let section = format!("## `{}`", module.name);
+            assert!(builtin_docs.contains(&section), "missing builtin docs section for {}", module.name);
+            assert!(module_contract.contains(module.name), "missing module_contract entry for {}", module.name);
+            assert!(readme.contains(module.name), "missing README entry for {}", module.name);
+        }
+    }
 }

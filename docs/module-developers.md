@@ -547,11 +547,10 @@ should treat `ctx.vars` as read-only configuration data.
 raw lexical path operations, mirroring `ctx.host.path` semantics for module
 authors.
 
-`ctx.controller.fs` exposes read-only controller filesystem helpers:
-`metadata`, `stat`, `lstat`, `exists`, `read`, `read_text`, `list_dir`,
-`walk`, and `read_link`. `walk` returns the same entry shape as
-`ctx.host.fs.walk`, does not follow symlinks, and defaults to deterministic
-pre-order.
+`ctx.controller.fs` exposes read-only controller filesystem helpers: `metadata`,
+`stat`, `lstat`, `exists`, `read`, `read_text`, `list_dir`, `walk`, and
+`read_link`. `walk` returns the same entry shape as `ctx.host.fs.walk`, does not
+follow symlinks, and defaults to deterministic pre-order.
 
 Keep validation deterministic. It should answer whether the task is well-formed
 and safe to attempt, not perform the task early.
@@ -609,8 +608,8 @@ Current subjects include:
 
 Apply-result contract rules:
 
-- changed `fs_entry` records (`created`, `updated`, or `removed`) must include
-  a non-empty absolute target-host `path`;
+- changed `fs_entry` records (`created`, `updated`, or `removed`) must include a
+  non-empty absolute target-host `path`;
 - unchanged `fs_entry` records may omit `path` when the module only wants to
   explain that no mutation happened;
 - `command` records are described by `detail`; `path` has no meaning for command
@@ -748,9 +747,9 @@ SHA-256. It accepts Lua strings as raw bytes and returns a lowercase hex digest.
 ctx.hash.sha256(bytes)
 ```
 
-SHA-256 is not an encoding and has no decode operation. For file hashing, compose
-it with the controller or host read primitives instead of adding file-specific
-shortcuts:
+SHA-256 is not an encoding and has no decode operation. For file hashing,
+compose it with the controller or host read primitives instead of adding
+file-specific shortcuts:
 
 ```lua
 local digest = ctx.hash.sha256(ctx.controller.fs.read("payload.bin"))
