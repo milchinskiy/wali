@@ -53,7 +53,8 @@ pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Manifest> {
     let runtime = crate::lua::LuaRuntime::with_manifest_flow()?;
     runtime.add_include_path(parent_path)?;
 
-    let manifest_value: mlua::Value = runtime.eval(path.file_name().unwrap_or_default().to_string_lossy(), &content)?;
+    let manifest_name = path.file_name().unwrap_or_default().to_string_lossy();
+    let manifest_value: mlua::Value = runtime.eval(manifest_name.as_ref(), &content)?;
     let mut manifest: Manifest = runtime.from_lua_value(manifest_value)?;
 
     canonicalize_manifest(parent_path, &mut manifest)?;
@@ -95,7 +96,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
 
     let mut host_id_set = std::collections::HashSet::with_capacity(manifest.hosts.len());
     for host in &manifest.hosts {
-        validate_manifest_label("Host id", &host.id)?;
+        validate_manifest_name("Host id", &host.id)?;
         if !host_id_set.insert(host.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Host id '{}' is not unique", host.id)));
         }
@@ -115,7 +116,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
 
     let mut task_id_set = std::collections::HashSet::with_capacity(manifest.tasks.len());
     for task in &manifest.tasks {
-        validate_manifest_label("Task id", &task.id)?;
+        validate_manifest_name("Task id", &task.id)?;
         if !task_id_set.insert(task.id.clone()) {
             return Err(crate::Error::InvalidManifest(format!("Task id '{}' is not unique", task.id)));
         }
@@ -155,7 +156,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
         }
 
         if let Some(run_as) = &task.run_as {
-            validate_manifest_label(&format!("Task '{}' run_as", task.id), run_as)?;
+            validate_manifest_name(&format!("Task '{}' run_as", task.id), run_as)?;
             for host in manifest
                 .hosts
                 .iter()
@@ -174,7 +175,7 @@ fn check_validity(manifest: &Manifest) -> crate::Result {
     Ok(())
 }
 
-fn validate_manifest_label(scope: &str, value: &str) -> crate::Result {
+fn validate_manifest_name(scope: &str, value: &str) -> crate::Result {
     if value.is_empty() {
         return Err(crate::Error::InvalidManifest(format!("{scope} must not be empty")));
     }
@@ -190,7 +191,7 @@ fn validate_manifest_label(scope: &str, value: &str) -> crate::Result {
 
 fn validate_tags(scope: &str, tags: &std::collections::BTreeSet<String>) -> crate::Result {
     for tag in tags {
-        validate_manifest_label(&format!("{scope} tag"), tag)?;
+        validate_manifest_name(&format!("{scope} tag"), tag)?;
     }
 
     Ok(())
@@ -199,8 +200,8 @@ fn validate_tags(scope: &str, tags: &std::collections::BTreeSet<String>) -> crat
 fn validate_run_as_entries(host: &host::Host) -> crate::Result {
     let mut ids = std::collections::HashSet::with_capacity(host.run_as.len());
     for entry in &host.run_as {
-        validate_manifest_label(&format!("Host '{}' run_as id", host.id), &entry.id)?;
-        validate_manifest_label(&format!("Host '{}' run_as user", host.id), &entry.user)?;
+        validate_manifest_name(&format!("Host '{}' run_as id", host.id), &entry.id)?;
+        validate_manifest_name(&format!("Host '{}' run_as user", host.id), &entry.user)?;
         if !ids.insert(entry.id.as_str()) {
             return Err(crate::Error::InvalidManifest(format!(
                 "Host '{}' run_as id '{}' is not unique",
@@ -214,8 +215,8 @@ fn validate_run_as_entries(host: &host::Host) -> crate::Result {
 
 fn validate_host_selector(task_id: &str, path: &str, selector: &host::HostSelector) -> crate::Result {
     match selector {
-        host::HostSelector::Id(id) => validate_manifest_label(&format!("Task '{task_id}' {path}.id"), id),
-        host::HostSelector::Tag(tag) => validate_manifest_label(&format!("Task '{task_id}' {path}.tag"), tag),
+        host::HostSelector::Id(id) => validate_manifest_name(&format!("Task '{task_id}' {path}.id"), id),
+        host::HostSelector::Tag(tag) => validate_manifest_name(&format!("Task '{task_id}' {path}.tag"), tag),
         host::HostSelector::Not(inner) => validate_host_selector(task_id, &format!("{path}.not"), inner),
         host::HostSelector::All(items) => validate_host_selector_items(task_id, path, "all", items),
         host::HostSelector::Any(items) => validate_host_selector_items(task_id, path, "any", items),

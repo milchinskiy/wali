@@ -1,21 +1,19 @@
 # Module developer guide
 
-This is the canonical guide for custom Lua modules and custom module sources.
-The short README examples intentionally omit most edge cases; this document
-keeps the detailed authoring and source-loading contract in one place.
+This guide covers custom Lua modules and custom module sources. The README keeps
+the quick examples; this file keeps the details module authors usually need.
 
 ## Manifest author helper
 
-Manifest files are plain Lua chunks. Wali preloads a small helper module named
-`manifest` during manifest evaluation:
+A manifest is Lua that returns a table. While wali loads that file, it provides
+a small helper module named `manifest`:
 
 ```lua
 local m = require("manifest")
 ```
 
-The helper is available only while the manifest itself is evaluated. It is a
-convenience layer over the normal manifest table shape, not a separate DSL, and
-it can be mixed freely with raw manifest tables.
+The helper is available only during manifest loading. It returns the same tables
+you could write by hand, so helper calls and raw tables can be mixed freely.
 
 Host helpers:
 
@@ -41,12 +39,11 @@ hosts = {
 ```
 
 `m.host.localhost(id, opts)` emits `{ id = id, transport = "local", ... }`.
-`m.host.ssh(id, opts)` emits the required nested SSH transport shape,
-`{ id = id, transport = { ssh = { ... } }, ... }`. Common host options are
-`tags`, `vars`, `run_as`, and `command_timeout`. SSH-specific options are
-`user`, `host`, `port`, `host_key_policy`, `auth`, `connect_timeout`, and
-`keepalive_interval`. `m.host.ssh` requires `user` and `host`; the remaining SSH
-fields keep the same defaults as the raw manifest contract.
+`m.host.ssh(id, opts)` emits an SSH host. Common host options are `tags`,
+`vars`, `run_as`, and `command_timeout`. SSH-specific options are `user`,
+`host`, `port`, `host_key_policy`, `auth`, `connect_timeout`, and
+`keepalive_interval`. `user` and `host` are required; the remaining SSH fields
+use the same defaults as a raw manifest table.
 
 Task helper:
 
@@ -66,18 +63,16 @@ tasks = {
 `m.task(id)(module, args, opts)` uses an empty table when `args` is omitted;
 otherwise it leaves `args` unchanged and copies optional task fields from
 `opts`: `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`, and `vars`.
-Unknown helper option names and non-table option values are rejected instead of
-being silently ignored. Helper ids and task module names must be strings and
-must not be empty, contain leading/trailing whitespace, or contain control
-characters. Task `host` selectors use the normal manifest shape, for example
+Unknown helper options and non-table option values fail early. Helper ids and
+task module names must be strings without leading/trailing whitespace or control
+characters. Task `host` selectors use the manifest selector form:
 `{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`, `{ any = { ... } }`,
-or `{ ["not"] = ... }`. Use raw task tables whenever that is clearer for a
-specific case.
+or `{ ["not"] = ... }`. Use a raw task table whenever it reads better.
 
-The manifest loader applies the same label discipline to raw tables: host ids,
-task ids, tags, and `run_as` ids/users must not be empty, must not have leading
-or trailing whitespace, and must not contain control characters. Task ids may
-contain ordinary internal spaces.
+The loader applies the same naming rules to raw tables: host ids, task ids,
+tags, and `run_as` ids/users must not be empty, have leading/trailing
+whitespace, or contain control characters. Task ids may contain ordinary
+internal spaces.
 
 ## Module source contract
 
@@ -135,8 +130,8 @@ rejected.
 
 ## Namespaces and task module names
 
-A namespace is a public selector chosen by the manifest author. It is not a Git
-cache key and it is not part of the module author's internal import paths.
+A namespace is chosen by the manifest author. It is not a Git cache key and it
+is not part of the module author's internal import paths.
 
 Given this source:
 
@@ -159,9 +154,9 @@ this task:
 resolves to source `repo_1` and loads the source-local Lua module
 `example_file`.
 
-Every task gets a fresh one-shot Lua runtime. Wali adds only the effective
-source root to that runtime's `package.path`, then loads the source-local module
-name. Internal imports therefore stay ordinary and source-local:
+Every task gets a fresh Lua runtime. Wali adds only the selected source root to
+that runtime's `package.path`, then loads the source-local module name. Internal
+imports stay source-local:
 
 ```lua
 local tool = require("internal.utils.tool")
@@ -194,11 +189,10 @@ That package prefix is reserved for wali's own APIs and builtins.
 Local paths are resolved relative to the manifest file unless they are absolute.
 They must resolve to existing directories during manifest loading.
 
-Because wali intentionally uses native Lua `package.path` for the selected
-source, local source paths must be representable as Lua package-path templates.
-Paths containing `;` or `?` are rejected. The same package-path safety rule is
-applied to the manifest directory that is temporarily added while evaluating the
-manifest chunk.
+Wali uses Lua `package.path` for the selected source. Local source paths must be
+usable inside that template syntax, so paths containing `;` or `?` are rejected.
+The same rule applies to the manifest directory that is added while evaluating
+the manifest chunk.
 
 ## Git source rules
 
@@ -233,15 +227,14 @@ inside the checkout; `depth` only changes how the requested ref is fetched;
 execution finishes. This prevents another wali process from resetting or
 cleaning the same checkout while task runtimes are loading module files.
 
-Every system `git` process is run with `GIT_TERMINAL_PROMPT=0`, null stdin, and
-a bounded timeout. Git stdout and stderr are captured through temporary files,
-not pipe-reader threads, so inherited output handles from helpers or grandchild
-processes cannot block timeout return. A timeout kills the Git child process,
-waits for it, and fails source preparation with a `Module source error` that
-names the timed-out Git command.
+Every system `git` process runs with `GIT_TERMINAL_PROMPT=0`, null stdin, and a
+bounded timeout. Git stdout and stderr are captured through temporary files, not
+pipe-reader threads, so inherited output handles from helpers or grandchild
+processes cannot block timeout return. On timeout, wali kills the Git process,
+waits for it, and reports the timed-out command.
 
-Pin a commit for reproducible module code. Branch names are intentionally
-mutable because they are resolved by Git at fetch time.
+Pin a commit for reproducible module code. Branch names remain mutable because
+Git resolves them at fetch time.
 
 ## Minimal module example
 
@@ -305,9 +298,9 @@ helper surface used by the builtin modules:
 local lib = require("wali.builtin.lib")
 ```
 
-The helper library is intentionally plain Lua. It does not hide host operations;
-it provides reusable validation, schema fragments, result builders, and common
-filesystem policies. The most useful public helpers are:
+The helper library is plain Lua. It provides reusable validation, schema
+fragments, result builders, and common filesystem policies. The most useful
+public helpers are:
 
 - `lib.result.apply()` and `lib.result.validation()` builders, plus
   `lib.validation_ok()` and `lib.validation_error(message)`;

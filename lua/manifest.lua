@@ -1,5 +1,13 @@
 local COMMON_HOST_KEYS = { "tags", "vars", "run_as", "command_timeout" }
-local SSH_KEYS = { "user", "host", "port", "host_key_policy", "auth", "connect_timeout", "keepalive_interval" }
+local SSH_KEYS = {
+	"user",
+	"host",
+	"port",
+	"host_key_policy",
+	"auth",
+	"connect_timeout",
+	"keepalive_interval",
+}
 local TASK_KEYS = { "tags", "depends_on", "on_change", "when", "host", "run_as", "vars" }
 
 local function join_keys(left, right)
@@ -32,7 +40,7 @@ local LOCAL_HOST_OPTIONS = option_set(LOCAL_HOST_KEYS)
 local SSH_HOST_OPTIONS = option_set(SSH_HOST_KEYS)
 local TASK_OPTIONS = option_set(TASK_KEYS)
 
-local function require_clean_string(kind, field, value)
+local function checked_string(kind, field, value)
 	if type(value) ~= "string" then
 		error(kind .. " " .. field .. " must be a string", 3)
 	end
@@ -49,7 +57,7 @@ local function require_clean_string(kind, field, value)
 	return value
 end
 
-local function options_or_empty(kind, opts)
+local function options_table(kind, opts)
 	if opts == nil then
 		return {}
 	end
@@ -60,7 +68,7 @@ local function options_or_empty(kind, opts)
 	return opts
 end
 
-local function require_option(kind, opts, key)
+local function required_option(kind, opts, key)
 	if opts[key] == nil then
 		error(kind .. " option '" .. key .. "' is required", 3)
 	end
@@ -68,7 +76,7 @@ local function require_option(kind, opts, key)
 	return opts[key]
 end
 
-local function check_options(kind, opts, allowed)
+local function reject_unknown_options(kind, opts, allowed)
 	for key, _ in pairs(opts) do
 		if not allowed[key] then
 			error(kind .. " option '" .. tostring(key) .. "' is not supported", 3)
@@ -76,7 +84,7 @@ local function check_options(kind, opts, allowed)
 	end
 end
 
-local function copy_fields(out, opts, keys)
+local function copy_keys(out, opts, keys)
 	for _, key in ipairs(keys) do
 		local value = opts[key]
 		if value ~= nil then
@@ -90,41 +98,41 @@ end
 local host = {}
 
 function host.localhost(id, opts)
-	opts = options_or_empty("host.localhost", opts)
-	check_options("host.localhost", opts, LOCAL_HOST_OPTIONS)
+	opts = options_table("host.localhost", opts)
+	reject_unknown_options("host.localhost", opts, LOCAL_HOST_OPTIONS)
 
-	return copy_fields({
-		id = require_clean_string("host.localhost", "id", id),
+	return copy_keys({
+		id = checked_string("host.localhost", "id", id),
 		transport = "local",
 	}, opts, LOCAL_HOST_KEYS)
 end
 
 function host.ssh(id, opts)
-	opts = options_or_empty("host.ssh", opts)
-	check_options("host.ssh", opts, SSH_HOST_OPTIONS)
-	require_clean_string("host.ssh", "option 'user'", require_option("host.ssh", opts, "user"))
-	require_clean_string("host.ssh", "option 'host'", require_option("host.ssh", opts, "host"))
+	opts = options_table("host.ssh", opts)
+	reject_unknown_options("host.ssh", opts, SSH_HOST_OPTIONS)
+	checked_string("host.ssh", "option 'user'", required_option("host.ssh", opts, "user"))
+	checked_string("host.ssh", "option 'host'", required_option("host.ssh", opts, "host"))
 
-	return copy_fields({
-		id = require_clean_string("host.ssh", "id", id),
-		transport = { ssh = copy_fields({}, opts, SSH_KEYS) },
+	return copy_keys({
+		id = checked_string("host.ssh", "id", id),
+		transport = { ssh = copy_keys({}, opts, SSH_KEYS) },
 	}, opts, COMMON_HOST_KEYS)
 end
 
 local function task(id)
-	require_clean_string("task", "id", id)
+	checked_string("task", "id", id)
 
 	return function(module, args, opts)
-		opts = options_or_empty("task", opts)
-		check_options("task", opts, TASK_OPTIONS)
+		opts = options_table("task", opts)
+		reject_unknown_options("task", opts, TASK_OPTIONS)
 
 		if args == nil then
 			args = {}
 		end
 
-		return copy_fields({
+		return copy_keys({
 			id = id,
-			module = require_clean_string("task", "module", module),
+			module = checked_string("task", "module", module),
 			args = args,
 		}, opts, TASK_KEYS)
 	end

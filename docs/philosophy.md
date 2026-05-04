@@ -1,276 +1,208 @@
 # Project philosophy
 
-This document records wali's design direction. It is not a frozen specification;
-it exists to prevent drift as the implementation grows. Operational
-module-authoring details belong in `docs/module-developers.md`. Builtin-specific
-behavior belongs in `docs/builtin-modules.md`.
+This file captures the shape of wali: what belongs in the project, what does
+not, and where we draw the line when a feature could grow in several directions.
+It is not a second specification. User-facing details live in the README,
+`docs/module-developers.md`, and `docs/builtin-modules.md`.
 
 ## Goal
 
-wali is a small agentless automation tool written in Rust with Lua manifests and
-Lua modules.
+wali is a small agentless automation tool for local and SSH hosts. Manifests and
+modules are Lua; the engine is Rust.
 
-It should make host-local automation easy without installing an agent on target
-hosts. It should stay understandable for one developer reading the source tree,
-prefer explicit contracts over framework magic, and avoid broad subsystems until
-the current execution model actually needs them.
+The project is built around a simple loop:
 
-The intended scope is:
+1. read a manifest;
+2. expand tasks per host;
+3. validate against real hosts when asked;
+4. apply changes when asked;
+5. clean up only resources that a previous apply recorded as created.
 
-- local and SSH hosts;
-- host-local task execution;
-- mostly imperative task order;
-- small primitive modules for common filesystem, command, transfer, template,
-  and data operations;
-- custom Lua modules for user-specific work;
-- predictable plan, check, and apply phases.
+The source tree should remain readable by one maintainer. Prefer a plain helper,
+a small data type, or a direct check over a framework-shaped abstraction. Add a
+subsystem only when the current model cannot carry the behavior cleanly.
 
-The project should not grow into a distributed scheduler, full configuration
-management platform, or async orchestration framework without a concrete need
-that cannot be solved by the simpler model.
+wali is not trying to be a distributed scheduler, a full configuration
+management platform, or a general orchestration framework.
 
-## Core execution model
+## CLI phases
 
-The CLI currently has three execution layers plus explicit cleanup:
+The main commands have separate responsibilities:
 
-1. `plan` compiles and prints the per-host task plan without host access.
-2. `check` performs host-aware, non-mutating validation.
-3. `apply` runs the same validation and then mutates host state.
-4. `cleanup` uses a previous successful apply state file to remove filesystem
-   entries that were reported as created within the current selected manifest
-   scope.
+- `plan` compiles the manifest and prints the selected per-host task plan. It
+  does not connect to hosts, fetch Git repositories, or validate module input.
+- `check` prepares module sources, connects to hosts, evaluates predicates and
+  requirements, normalizes arguments, and runs module validation in a read-only
+  context.
+- `apply` runs the same checks, then calls module `apply` functions with the
+  full context.
+- `cleanup` reads a successful apply state file and removes only filesystem
+  resources recorded as created within the current selected manifest scope.
 
-This split is central. A user should be able to inspect task expansion before
-connecting to anything, then validate against real hosts before applying
-changes.
+Host concurrency is a CLI concern. `--jobs N` caps how many hosts run at the
+same time; tasks on one host stay sequential. This keeps the per-host execution
+model easy to reason about while still allowing useful parallelism.
 
-Hosts may run in parallel. `check --jobs N`, `apply --jobs N`, and
-`cleanup --jobs N` cap the number of hosts executing at once; `--jobs 1` runs
-hosts serially in manifest order. Tasks within one host run sequentially. This
-keeps the per-host mental model imperative while still allowing useful
-concurrency.
-
-CLI host and task selectors are plan-level narrowing primitives. They mutate the
-compiled plan before rendering, secret collection, module source preparation, or
-worker launch. Host ids and host tags form an inclusive host selector. Task ids
-and task tags form an inclusive task selector. Host and task dimensions are
-intersected. Task selection is dependency-inclusive: selected task instances
-bring their transitive same-host dependencies, but not their downstream
-dependents. This keeps `plan`, `check`, `apply`, and cleanup scope aligned
-around one concrete working set.
+Selectors narrow the plan before secrets are collected, module sources are
+prepared, or workers start. Host selectors are inclusive. Task selectors are
+inclusive and bring same-host upstream dependencies, but not downstream tasks.
+The selected plan is the same working set for `plan`, `check`, `apply`, and
+`cleanup`.
 
 ## Boundaries
 
-Manifest-side data answers what the user wrote. Plan-side data answers what will
-run on which host. Runtime-side data owns live connections, effective backends,
-reporting events, and execution results.
+Keep these layers separate:
 
-The plan is immutable runtime input. Workers consume a plan; they do not rewrite
-it.
+- manifest data: what the user wrote;
+- plan data: what will run on each host;
+- runtime data: live connections, effective backends, events, and results.
 
-A task becomes meaningful only after host expansion. Dependency resolution is
-host-local: a task instance may depend only on task instances on the same host.
-Cross-host dependency ordering is intentionally outside the current design.
+A plan is immutable runtime input. Workers consume it; they do not rewrite it.
 
-## Module source model
+Dependencies are host-local. Cross-host ordering is outside the current design.
+It can be added later only with a concrete use case and clear failure semantics.
 
-Module source selection should be deterministic and simple.
+## Module sources
 
-A manifest may mount local or Git module sources, optionally under a namespace.
-The namespace is only a manifest-level selector for task module names. It is not
-Git cache identity and not a prefix module authors must know for internal
-imports.
+A manifest may mount local or Git module sources, with an optional namespace.
+The namespace selects a source from the manifest. It is not part of the Git
+cache key and module authors do not use it for internal imports.
 
-Each task has exactly one effective module source and runs in a fresh Lua
-runtime. Wali adds only that source root to the task runtime's `package.path`,
-then loads the source-local module name. This preserves normal Lua imports such
-as `require("internal.utils.tool")` while avoiding cross-source collisions.
+Each task resolves to one source and runs in a fresh Lua runtime. Wali adds only
+that source root to `package.path`, then loads the source-local module name.
+Internal imports stay normal Lua:
 
-Git module preparation should use the system `git` executable. The local Git
-cache is an implementation detail, not a host state backend and not part of
-convergence. Git cache locks must protect checkouts for the full `check` or
-`apply` execution, because module files may be loaded after the initial fetch.
-Every Git child process must be bounded by timeout, must not read from
-interactive stdin, and must not prompt through Git's terminal credential flow.
-Output capture must not depend on pipe-reader threads that can be held open by
-Git helpers or grandchild processes after the direct Git child is killed.
+```lua
+local tool = require("internal.utils.tool")
+```
 
-`plan` remains compile-only: no Git fetches, no host access, no network access.
+Git sources use the system `git`. The cache is an implementation detail, not a
+host-state backend. `check` and `apply` hold a cache lock until execution
+finishes because Lua files may be loaded after the fetch. Git commands run with
+null stdin, terminal prompting disabled, captured output, and a timeout.
 
-## Lua phase model
+`plan` stays offline: no Git fetches, no host access, no network access.
 
-Lua module execution has three contracts:
+## Lua phases
 
-1. `requires` checks host capabilities.
-2. `validate` performs read/probe-only validation.
-3. `apply` performs mutation.
+A Lua module may define three active phases:
 
-`requires` is module-owned and host-focused. It should check capabilities such
-as commands, paths, environment variables, OS, architecture, hostname, user, and
-group.
+1. `requires` checks host capabilities;
+2. `validate` checks input and host state without mutation;
+3. `apply` mutates host state.
 
-`validate` must not mutate host state through the normal context API. If
-validation could write files or run arbitrary commands, `check` would become a
-weaker form of apply and would not be safe enough to trust.
-
-`apply` receives the full context and may perform mutations.
+`validate` must remain read-only. If validation can write files or run arbitrary
+commands, `check` becomes a weak apply, which defeats the point of the phase.
 
 ## Effective backend
 
-Host access is mediated through an effective backend. Task-level `run_as`
-binding must affect filesystem operations and command execution consistently.
+All host work goes through an effective backend. Task-level `run_as` must affect
+filesystem operations and command execution in the same way. That is why host
+filesystem APIs are executor-backed instead of direct SFTP or controller-side
+file edits.
 
-That is why host filesystem operations are executor-backed operations rather
-than direct SFTP or controller-side filesystem calls. If a task is bound to a
-user through `run_as`, operations such as `write`, `create_dir`, `chmod`, and
-`copy_file` must be executed through that same effective backend.
+## Builtins
 
-## Builtin module philosophy
+Builtins should stay primitive. Good builtins wrap low-level work that is hard
+to implement portably or safely in Lua: target-host filesystem operations,
+command execution, controller file reads, transfers, JSON, Base64, SHA-256,
+template rendering, and bounded tree walks.
 
-Rust-core and builtin functionality should stay primitive-oriented. Wali should
-provide reliable low-level operations that are difficult to implement portably
-or safely in Lua, while domain policy belongs in custom Lua modules.
+Domain policy belongs in custom Lua modules. Service managers, package managers,
+databases, containers, and similar high-level resources should live outside the
+core unless a clear primitive is missing.
 
-Good core primitives include:
+A builtin should be narrow, idempotent where reconciliation is expected,
+conservative around destructive actions, strict about invalid input, and tested
+through the CLI before other modules build on top of it.
 
-- target-host filesystem and command execution operations;
-- controller-side path and read-only filesystem inspection;
-- file transfer between controller and host;
-- pure data helpers such as JSON, Base64, SHA-256 hashing, and template
-  rendering;
-- carefully bounded filesystem builtins that compose those primitives.
+`wali.*` is reserved. User modules must not use that namespace.
 
-Core builtins should not grow into service-manager, package-manager, database,
-container, or other domain-specific resource abstractions unless there is a
-concrete primitive that cannot be expressed cleanly in Lua. External Lua modules
-can own those policies using the public `ctx.*` APIs.
+## Filesystem rules
 
-A builtin module should normally be:
+Symlink behavior must be explicit:
 
-- tight in scope;
-- idempotent when it represents filesystem reconciliation;
-- strict about invalid input;
-- explicit about destructive behavior;
-- conservative around special filesystem entries;
-- deterministic about target-host path interpretation, normally by requiring
-  absolute managed host paths;
-- structured in its execution result;
-- covered by integration tests before more modules are added on top of it.
+- `stat` follows symlinks;
+- `lstat` does not;
+- `walk` returns lstat-style metadata.
 
-The reserved namespace is `wali.*`. User modules should not use it. Shared
-builtin Lua helpers belong in `wali.builtin.lib`.
+Modules choose their own policy. Remove and link reconciliation normally operate
+on the path itself, so they use no-follow behavior. Permission changes may
+follow symlinks by default because that is often what users expect, but any
+no-follow expansion must be portable first.
 
-## Filesystem semantics
-
-Filesystem metadata must be explicit about symlink behavior.
-
-- `stat` follows symlinks.
-- `lstat` does not follow symlinks.
-- `walk` returns lstat-style metadata for entries.
-
-Modules should choose symlink behavior deliberately. For example, remove and
-link reconciliation normally use `lstat` because they operate on the path
-itself. Permissions may follow symlinks by default because users often intend to
-update the target, but no-follow behavior must be explicit and portable before
-it is expanded.
-
-Tree modules are especially sensitive. A tree module should define traversal
+Tree modules need more care than single-path modules. They must define traversal
 order, nesting rules, symlink policy, overwrite policy, special-entry policy,
-pruning behavior, partial-failure behavior, and structured changes before it is
-implemented.
+partial failure behavior, and result records before implementation.
 
-Current tree modules avoid pruning. `apply --state-file FILE` records the
-selected effective plan, explicit resource records, and the final successful
-apply report state. `cleanup --state-file FILE` uses the explicit resource
-records conservatively: it removes filesystem entries recorded as created
-resources in the current selected manifest scope. It does not revert updates,
-remove unchanged paths, or perform sync-style pruning. Cleanup does not rewrite
-the apply state file; a new successful apply records the next baseline.
+Current tree modules do not prune. Cleanup is also conservative: it removes
+resources recorded as created by a successful apply state file. It does not
+revert updates, remove unchanged paths, or perform sync-style pruning.
 
-## Result contract
+## Results and reporting
 
-Execution results are structured. A successful task returns change records, an
-optional human message, and optional machine-readable data.
+A task result is structured: changed/unchanged status, optional message,
+optional data, and change records. Change records should say what happened:
+created, updated, removed, or unchanged; subject; and path or detail when that
+helps.
 
-A change record should say what happened, not only that something happened:
-created, updated, removed, or unchanged; subject; path or detail when useful.
-Successful apply state converts those task results into explicit resource
-records. Cleanup consumes those resource records, not renderer JSON internals.
+Apply state is derived from result records, not renderer output. Changed
+filesystem resources must report non-empty absolute host paths so cleanup can
+reason about them safely.
 
-The result boundary is strict where state correctness depends on it. Changed
-filesystem entries must report non-empty absolute target-host paths, because
-apply state and cleanup cannot safely reason about anonymous or relative
-resources. Cosmetic fields such as empty messages are normalized away instead of
-turning a successful operation into a failure.
+Workers send events. Reporters render state derived from those events. Execution
+logic should not know how human, text, or JSON output is printed.
 
-## Reporting model
-
-Workers send events. Renderers consume state derived from events.
-
-The reporting path should stay separate from execution decisions. A worker
-should not know how human, text, or JSON output is rendered. A renderer should
-not own task execution logic.
-
-## Safety principles
+## Safety rules
 
 Prefer refusing unclear operations over guessing.
 
-Examples:
+Current examples:
 
-- refuse `/`, `.`, `..`, and parent-escaping paths as directory removal targets;
+- refuse `/`, `.`, `..`, and parent-escaping directory-removal targets;
 - refuse existing directory destinations in exact-path rename primitives;
-- refuse `/` as a tree destination path;
+- refuse `/` as a tree destination;
 - refuse source/destination nesting in tree operations;
-- refuse source symlinks in `copy_file` instead of silently following them;
-- refuse special filesystem entries unless an explicit module option says
-  otherwise;
+- refuse source symlinks in `copy_file` rather than following them silently;
+- refuse special filesystem entries unless a module option explicitly allows
+  them;
 - preflight predictable tree conflicts before mutating;
 - keep `check` non-mutating by construction.
 
-These refusals may feel strict, but they keep wali from becoming a collection of
-thin wrappers around dangerous shell commands.
+These checks are not ceremony. They keep wali from becoming a thin wrapper around
+unsafe shell snippets.
 
-## Testing direction
+## Tests
 
-The most valuable tests are local black-box integration tests that run the real
-CLI binary against isolated temporary directories.
-
-Important properties to test:
+The most useful tests run the real CLI against isolated temporary directories.
+They should cover:
 
 - first apply changes state;
 - second apply is unchanged;
-- check does not mutate;
-- plan does not access hosts or Git remotes;
+- `plan` and `check` do not mutate;
+- `plan` does not touch hosts or Git remotes;
 - unsafe paths are rejected;
-- tree conflict preflight happens before mutation;
-- when-skip and requires-failure are reported correctly;
-- task ordering and dependency errors are deterministic;
-- runtime dependency semantics are deterministic: failed or skipped tasks block
-  only declared dependents, while independent tasks continue on the same host.
+- tree conflicts are detected before mutation;
+- skip/failure reporting is clear;
+- dependency ordering is deterministic;
+- failed or skipped tasks block only their declared dependents.
 
-Doc-tests are useful for critical Rust contracts such as schema normalization,
-run_as defaults, and execution result serialization. They should be small and
-executable. Avoid `rust,ignore` examples unless the code cannot reasonably be
-compiled as a doc-test.
+Doc-tests are useful for small Rust contracts such as schema normalization,
+`run_as` defaults, and result serialization. Avoid `rust,ignore` examples unless
+the code truly cannot compile as a doc-test.
 
-## Dependency discipline
+## Dependencies
 
-wali should keep dependencies modest. A new dependency should have a clear role
-that cannot be handled cleanly by the standard library or existing crates.
+Keep dependencies modest. Add one only when it has a clear job that the standard
+library or current crates cannot handle cleanly.
 
-The implementation may use shell commands where needed for portability across
-local and SSH backends, but those shell snippets should be narrow, quoted
-carefully, and shared where possible. Internal executor probes should not use
-login shells.
+Shell commands are acceptable when they are the portable route across local and
+SSH backends, but keep them narrow, quoted, and shared. Internal executor probes
+should not use login shells.
 
-## Release discipline
+## Release checklist
 
-Release-facing changes must keep metadata, docs, and tests in sync. A release
-should have a clear changelog entry, an accurate README, an explicit license
-file matching `Cargo.toml`, and tests that protect public contract lists where
-reasonable.
-
-Before tagging a release, run at least:
+Before tagging:
 
 ```sh
 cargo fmt --check
@@ -279,16 +211,19 @@ cargo test
 cargo package --allow-dirty
 ```
 
-`cargo package --allow-dirty` is for local release-candidate verification before
-tagging; the final package should be produced from a clean tree.
+Use `cargo package --allow-dirty` only for a local release-candidate check. The
+final package should come from a clean tree.
+
+For release-facing changes, keep `CHANGELOG.md`, README, docs, and contract
+checks in sync.
 
 ## Near-term direction
 
-The current priority order is:
+Current priorities:
 
-1. keep the worker/report/module contracts tight;
+1. keep worker, reporter, and module boundaries small;
 2. keep integration tests ahead of new builtins;
-3. document module authoring and current builtin behavior;
-4. add new modules only when their safety semantics are clear;
-5. keep cleanup conservative; destructive sync-style pruning or revert features
-   need stronger ownership semantics first.
+3. keep builtin docs complete;
+4. add modules only when their safety rules are clear;
+5. keep cleanup conservative until ownership semantics justify stronger pruning
+   or revert behavior.

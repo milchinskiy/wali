@@ -1,18 +1,16 @@
 # wali
 
-wali is a small agentless automation tool written in Rust. Manifests and modules
-are written in embedded Lua. The first public release focuses on local and SSH
-hosts, explicit execution flow, host-aware checks, and small primitive
-filesystem, command, transfer, template, and data helpers.
+wali is a small agentless automation tool for local and SSH hosts. The engine
+is Rust; manifests and modules are Lua. It is built around a simple workflow:
+inspect the plan, check against real hosts, apply changes, and clean up only
+what a previous successful apply recorded as created.
 
 ## Status and compatibility
 
-The current release line is `0.1.x`. The documented manifest, module, and
-state-file contracts are intended to be usable, but they are not yet a 1.0
-stability promise. Changes before 1.0 should be made deliberately, documented in
-`CHANGELOG.md`, and reflected in `docs/module-developers.md`,
-`docs/builtin-modules.md`, and `docs/module_contract.lua` when they affect
-module authors.
+The current release line is `0.1.x`. The manifest, module, and state-file
+formats are ready to use, but they are not a 1.0 compatibility promise yet. When
+one of those formats changes, update `CHANGELOG.md` and the matching docs in the
+same patch.
 
 ## Build and install
 
@@ -46,12 +44,11 @@ nix develop -c $SHELL
 
 ## Basic model
 
-A manifest describes hosts and tasks. Each task selects a module and passes
-module arguments. Wali compiles a per-host task plan, connects to each host for
-host-aware commands, evaluates task predicates and module requirements,
-validates module input, and applies changes when requested.
+A manifest describes hosts and tasks. A task selects a module and passes module
+arguments. Wali expands those tasks per host, evaluates host predicates and
+module requirements, validates input, and applies changes when requested.
 
-The CLI has three execution layers plus explicit cleanup:
+The CLI has four main commands:
 
 ```sh
 wali plan manifest.lua
@@ -60,20 +57,21 @@ wali apply manifest.lua
 wali cleanup --state-file apply-state.json manifest.lua
 ```
 
-`plan` is compile-only: no host access, no Git fetches, no module validation.
+`plan` compiles the manifest only. It does not connect to hosts, fetch Git
+sources, or validate module input.
 
-`check` prepares module sources, resolves task module names, connects to hosts,
-evaluates host-aware requirements, normalizes task arguments, and runs module
-validation with a read/probe-only Lua context.
+`check` prepares module sources, resolves modules, connects to hosts, evaluates
+host-aware requirements, normalizes arguments, and runs module validation in a
+read/probe-only Lua context.
 
-`apply` runs the same checks and then executes module `apply` functions with the
-full task context.
+`apply` runs the same checks, then calls module `apply` functions with the full
+task context.
 
 `cleanup` reads a previous successful apply state file and removes filesystem
-entries recorded as `created` resources within the current selected manifest
-scope. Cleanup uses the current manifest for host connection data and does not
-remove paths that were merely updated or unchanged. Cleanup does not rewrite the
-apply state file; run apply again with `--state-file` to record a new baseline.
+entries recorded as `created` resources inside the current selected manifest
+scope. It uses the current manifest for host connection data. It does not remove
+paths that were merely updated or unchanged, and it does not rewrite the apply
+state file. Run `apply --state-file FILE` again to record a new baseline.
 
 JSON output is available for all commands:
 
@@ -99,10 +97,9 @@ wali cleanup --jobs 1 --state-file apply-state.json manifest.lua
 run sequentially.
 
 `apply --state-file FILE` writes an atomic JSON snapshot after a successful
-apply. The snapshot contains the selected effective plan, explicit resource
-records, and the final apply report state. Failed applies do not overwrite the
-state file. This explicit resource snapshot is the durable state contract used
-by cleanup.
+apply. The snapshot contains the selected effective plan, resource records, and
+the final apply report state. Failed applies do not overwrite the state file.
+Cleanup reads this snapshot.
 
 Use `--host ID`, `--host-tag TAG`, `--task ID`, and `--task-tag TAG` on `plan`,
 `check`, `apply`, or `cleanup` to select a smaller working set without changing
@@ -129,17 +126,15 @@ task dependency closure.
 
 ## Manifest helper module
 
-Manifest files are ordinary Lua chunks. During manifest loading, wali preloads a
-small `manifest` helper module:
+A manifest file is just Lua that returns a table. While that Lua chunk is being
+loaded, wali provides a small helper module:
 
 ```lua
 local m = require("manifest")
 ```
 
-The helper is available only while the manifest itself is evaluated. It is
-optional and intentionally thin: it returns ordinary manifest tables and does
-not hide the underlying contract. Raw tables remain valid and may be mixed with
-helper-generated tables.
+The helper is optional. It returns the same tables you could write by hand, so
+raw tables and helper-generated tables can be mixed freely.
 
 ```lua
 hosts = {
@@ -164,22 +159,22 @@ hosts = {
 `m.host.localhost(id, opts)` emits a local host. Common host options are `tags`,
 `vars`, `run_as`, and `command_timeout`.
 
-`m.host.ssh(id, opts)` emits the nested SSH transport shape expected by the
-manifest contract. SSH connection options are `user`, `host`, `port`,
-`host_key_policy`, `auth`, `connect_timeout`, and `keepalive_interval`; common
-host options use the same names as `m.host.localhost`.
+`m.host.ssh(id, opts)` emits an SSH host. SSH options are `user`, `host`,
+`port`, `host_key_policy`, `auth`, `connect_timeout`, and `keepalive_interval`.
+Common host options use the same names as `m.host.localhost`.
 
-`m.task(id)(module, args, opts)` emits a task. The helper uses an empty table
-when `args` is omitted; otherwise it leaves `args` exactly as provided. Optional
-task options are `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`,
-and `vars`. Unknown helper option names and non-table option values are rejected
-instead of being silently ignored. Helper ids and task module names must be
-strings and must not be empty, contain leading/trailing whitespace, or contain
-control characters. `m.host.ssh` requires at least `user` and `host` options;
-deeper SSH option validation is still performed by the normal manifest loader.
-Task `host` selectors use the normal manifest shape, for example
-`{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`, `{ any = { ... } }`,
-or `{ ["not"] = ... }`.
+`m.task(id)(module, args, opts)` emits a task. If `args` is omitted, it uses an
+empty table. Optional task fields are `tags`, `depends_on`, `on_change`, `when`,
+`host`, `run_as`, and `vars`.
+
+The helper rejects unknown option names and non-table option values. Helper ids
+and task module names must be strings without leading/trailing whitespace or
+control characters. `m.host.ssh` requires `user` and `host`; the manifest loader
+validates the rest of the SSH configuration.
+
+Task `host` selectors use the manifest selector form: `{ id = "web-1" }`,
+`{ tag = "web" }`, `{ all = { ... } }`, `{ any = { ... } }`, or
+`{ ["not"] = ... }`.
 
 ## Minimal manifest
 
@@ -214,20 +209,19 @@ return {
 }
 ```
 
-Task dependencies are execution dependencies, not only ordering hints. A task
-with `depends_on` runs only when every declared dependency completed
-successfully on the same host. `on_change` is also an execution dependency, but
-in `apply` it runs the gated task only when at least one referenced source task
-reported a real change. If all `on_change` sources succeeded unchanged, the
-gated task is skipped with a clear reason. In `check`, `on_change` still orders
-and validates the gated task because no apply-time change result exists yet.
-Dependencies must be scheduled for the same host; duplicate dependency ids and
-duplicate references between `depends_on` and `on_change` are rejected. If a
-dependency fails or is skipped, its dependents are skipped with a
-dependency-specific reason, while unrelated later tasks continue to run. Host
-ids, task ids, tags, and `run_as` ids/users must not be empty, must not contain
-leading or trailing whitespace, and must not contain control characters. Task
-ids may still contain ordinary internal spaces, as shown in the examples above.
+Task dependencies affect execution, not just ordering. A task with `depends_on`
+runs only after every listed dependency has completed successfully on the same
+host. `on_change` is also a dependency: in `apply`, the gated task runs only when
+at least one source task reports a change. In `check`, `on_change` still orders
+and validates the gated task because no apply-time result exists yet.
+
+Dependencies must land on the same host. Duplicate dependency ids and duplicate
+references between `depends_on` and `on_change` are rejected. If a dependency
+fails or is skipped, its dependents are skipped; unrelated later tasks still run.
+
+Host ids, task ids, tags, and `run_as` ids/users must not be empty, have
+leading/trailing whitespace, or contain control characters. Task ids may contain
+ordinary internal spaces, as shown above.
 
 ## Variables
 
@@ -238,12 +232,11 @@ task context after a shallow, deterministic merge:
 manifest vars < host vars < task vars
 ```
 
-Later levels replace earlier values with the same top-level key. Values preserve
+Later levels replace earlier values with the same top-level key. Values keep
 their Lua/JSON shape: strings, numbers, booleans, lists, objects, and explicit
 `null` are passed to modules through `ctx.vars`. Variable keys must not be empty
-and must not have leading or trailing whitespace. Plan output exposes only
-variable keys, not values, so variables are useful for ordinary configuration
-but are not a secret-management mechanism.
+or have leading/trailing whitespace. Plan output shows variable keys, not
+values, so variables are useful for configuration but not for secrets.
 
 ```lua
 return {
@@ -350,11 +343,10 @@ tasks = {
 }
 ```
 
-The namespace is a public selector for the manifest, not something module
-authors need to know. After a task resolves to one effective module source, wali
-creates a fresh Lua runtime for that task, adds only that source root to
-`package.path`, and loads the source-local module name. Internal imports remain
-ordinary Lua imports:
+The namespace is chosen by the manifest author. Module authors do not need it
+for internal imports. After a task resolves to one source, wali creates a fresh
+Lua runtime, adds only that source root to `package.path`, and loads the
+source-local module name. Internal imports remain plain Lua:
 
 ```lua
 local tool = require("internal.utils.tool")
@@ -392,13 +384,12 @@ Critical source rules:
 Custom Lua modules receive `ctx.controller` for controller-side path helpers and
 read-only filesystem access, including deterministic tree walking. Controller
 filesystem paths may be absolute or relative to manifest `base_path`; there is
-no project-root sandbox. Domain modules should use this primitive API rather
-than relying on duplicated file helpers in `ctx.template` or `ctx.transfer`.
-Target-host filesystem reads expose both raw bytes through `ctx.host.fs.read`
-and strict UTF-8 text through `ctx.host.fs.read_text`. Modules also receive
-`ctx.json` for compact JSON decoding and encoding, `ctx.codec` for byte-oriented
-codecs such as Base64, and `ctx.hash` for one-way digests such as SHA-256,
-without vendoring Lua parsers or shelling out to external tools.
+no project-root sandbox. Domain modules should use this primitive API instead
+of duplicating file helpers in `ctx.template` or `ctx.transfer`. Target-host
+reads expose raw bytes through `ctx.host.fs.read` and strict UTF-8 text through
+`ctx.host.fs.read_text`.
+Modules also receive `ctx.json`, `ctx.codec` for Base64, and `ctx.hash` for
+SHA-256 without vendoring Lua parsers or shelling out.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).

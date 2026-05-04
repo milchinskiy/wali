@@ -54,9 +54,8 @@
 -- validate ctx.template exposes pure rendering helpers:
 --   render(source, vars)
 --
--- validate ctx.transfer is present but intentionally exposes no duplicated
--- controller source-check helpers. Use ctx.controller.fs for controller-side
--- inspection and reads.
+-- validate ctx.transfer is present, but controller-side inspection belongs in
+-- ctx.controller.fs. Transfer mutation helpers are apply-only.
 --
 -- validate ctx.host.fs exposes only read/probe helpers:
 --   metadata, stat, lstat, exists, read, read_text, list_dir, walk, read_link
@@ -178,7 +177,7 @@ return {
 		-- error("error message")
 	end,
 
-	-- Apply-result contract notes:
+	-- Apply-result rules:
 	--   changed fs_entry records (created/updated/removed) require a non-empty
 	--   absolute target-host path;
 	--   unchanged fs_entry records may omit path when no concrete resource changed;
@@ -220,6 +219,6 @@ return {
 --   lib.command_error(output, detail?), lib.assert_command_ok(output, detail?)
 --   lib.is_file(metadata), lib.is_dir(metadata), lib.is_symlink(metadata)
 --
--- Helpers are not magic: they only compose the public ctx.host.* primitives.
--- Prefer them for ordinary modules so manifests use readable mode strings and
--- validation/apply error messages remain consistent with wali builtins.
+-- Helpers only compose public ctx.host.* primitives.
+-- Use them when you want manifest mode strings and validation/apply errors to
+-- match wali's builtins.

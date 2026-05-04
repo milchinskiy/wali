@@ -1,39 +1,35 @@
 # Builtin modules
 
-Builtin modules live under the reserved `wali.builtin.*` namespace. User modules
-should not use this namespace. Unknown `wali.*` task modules are rejected during
-manifest/preflight validation.
+Builtin modules use the reserved `wali.builtin.*` namespace. User modules should
+not use it. Unknown `wali.*` task modules fail during manifest/preflight
+validation.
 
-This document is the module-specific reference for current builtins: accepted
-arguments, behavior, and safety notes. The shared Lua phase and custom module
-contracts are described in `module-developers.md`; the design rationale is in
-`philosophy.md`.
+This is the reference for builtin arguments and behavior. Shared Lua phase rules
+and custom module authoring are covered in `module-developers.md`; design notes
+are in `philosophy.md`.
 
-General builtin expectations are stable across this file: keep scope tight, be
-idempotent where the primitive reconciles filesystem content, validate unsafe
-input before mutation, and return structured `ExecutionResult` changes.
+Across builtins, the rules are simple: keep the operation narrow, make
+reconciliation idempotent, reject unsafe input before mutation, and return
+structured changes.
 
 Builtin fields that name target-host filesystem objects must be absolute paths
-unless a module explicitly says otherwise. This keeps behavior independent of
-the local process cwd, the SSH login directory, and `run_as` command context.
-Controller-side paths are different: transfer and template source/destination
-fields that operate on the controller may be absolute or relative to manifest
-`base_path`.
+unless that module says otherwise. This avoids surprises from the local process
+cwd, SSH login directory, or `run_as` command context. Controller-side transfer
+and template paths may be absolute or relative to manifest `base_path`.
 
 ## Naming note: `link` versus `copy_file`
 
-`wali.builtin.link` manages one symbolic-link path. It is intentionally named
-`link`, not `link_file`, because a symlink target may be a file, directory,
-missing path, or any other path string; the module owns the link path itself,
-not the target kind.
+`wali.builtin.link` manages one symbolic-link path. The name is `link`, not
+`link_file`, because the symlink target may be a file, a directory, a missing
+path, or any other path string. The module manages the link path itself.
 
 `wali.builtin.link_tree` applies the same idea to a tree: destination
 directories are created, while non-directory source entries are represented as
 symlinks.
 
-`wali.builtin.copy_file` is explicitly file-scoped because the source must be an
-existing regular file. `wali.builtin.copy_tree` composes that file primitive
-with deterministic tree walking.
+`wali.builtin.copy_file` is file-scoped because the source must be an existing
+regular file. `wali.builtin.copy_tree` applies that file behavior across a
+walked tree.
 
 ## `wali.builtin.dir`
 
@@ -461,10 +457,10 @@ and therefore usually requires suitable privileges.
 
 ## `wali.builtin.command`
 
-Runs an explicitly imperative command or shell script. Use `creates` or
-`removes` guards when the command can be made idempotent. If a command creates
-or removes its guard path during a successful run, that filesystem transition is
-reported explicitly so state-based cleanup can reason about it.
+Runs a command or shell script. Use `creates` or `removes` guards when the
+command can be made idempotent. If a successful command creates or removes its
+guard path, wali reports that filesystem transition so state-based cleanup can
+reason about it.
 
 ```lua
 {
@@ -502,8 +498,8 @@ defaults to `"auto"`. `changed = "never"` can be used for read-only commands.
 
 `wali.builtin.copy_tree` and `wali.builtin.link_tree` are built on
 `ctx.host.fs.walk(...)`, the host filesystem traversal primitive exposed to
-custom modules. Wali does not provide a separate `wali.builtin.walk` task
-module; tree inspection is a module-authoring concern rather than a builtin
-mutation primitive by itself.
+custom modules. Wali does not provide a separate `wali.builtin.walk` task module. Tree
+inspection belongs in custom modules unless a builtin is actually mutating or
+reconciling something.
 
 For the full `ctx.host.fs.walk(...)` API contract, see `module-developers.md`.
