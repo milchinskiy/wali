@@ -1,4 +1,5 @@
 #!/bin/sh
+
 set -eu
 
 repo="${WALI_REPO:-milchinskiy/wali}"
@@ -33,7 +34,7 @@ case "$(uname -m)" in
     ;;
 esac
 
-if [ -n "$package" ]; then
+if [ "$package" != "" ]; then
   if [ ! -f "$package" ]; then
     echo "local package does not exist: $package" >&2
     exit 1
@@ -103,10 +104,10 @@ checksums="$tmp_dir/sha256sums.txt"
 extract_dir="$tmp_dir/extract"
 mkdir -p "$extract_dir"
 
-if [ -n "$package" ]; then
+if [ "$package" != "" ]; then
   cp "$package" "$archive"
 
-  if [ -n "$checksum_file" ]; then
+  if [ "$checksum_file" != "" ]; then
     if [ ! -f "$checksum_file" ]; then
       echo "checksum file does not exist: $checksum_file" >&2
       exit 1
@@ -122,7 +123,7 @@ fi
 
 if [ -f "$checksums" ]; then
   expected="$(awk -v file="$asset" '$2 == file { print $1 }' "$checksums")"
-  if [ -z "$expected" ]; then
+  if [ "$expected" = "" ]; then
     echo "checksum file does not contain $asset" >&2
     exit 1
   fi
