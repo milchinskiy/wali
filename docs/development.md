@@ -25,17 +25,18 @@ pkg-config, and OpenSSL development inputs.
 
 ## Checks before submitting a patch
 
-Run these from the repository root:
+Run these from the repository root. This is the same check set used by CI:
 
 ```sh
 cargo fmt --check
-cargo clippy --all-targets --all-features
-cargo test
-cargo package --allow-dirty --no-verify
+cargo clippy --all-targets -- -D warnings
+cargo metadata --locked --features release-binary --format-version 1 >/dev/null
+cargo test --locked
+cargo package --locked --allow-dirty --no-verify
 ```
 
-Use `--no-default-features` or feature-specific checks when changing optional
-release build dependencies.
+Use `--no-default-features` or additional feature-specific checks when changing
+optional build dependencies.
 
 ## Test style
 

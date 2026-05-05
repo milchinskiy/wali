@@ -234,11 +234,17 @@ jobs:
   package:
     name: Prepare downloadable packages
     needs:
+      - check-release
       - build
       - macos-universal
     runs-on: ubuntu-24.04
 
     steps:
+      - name: Checkout installer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-release.outputs.commit }}
+
       - name: Download packages
         uses: actions/download-artifact@v4
         with:
@@ -255,6 +261,14 @@ jobs:
           test -f wali-macos-universal.tar.gz
           sha256sum *.tar.gz > sha256sums.txt
           cat sha256sums.txt
+
+      - name: Smoke test local Linux package install
+        run: |
+          install_dir="$RUNNER_TEMP/wali-bin"
+          WALI_PACKAGE="$PWD/dist/wali-linux-x86_64.tar.gz" \
+            WALI_INSTALL_DIR="$install_dir" \
+            sh scripts/install.sh
+          "$install_dir/wali" --version
 
       - name: Upload release package set
         uses: actions/upload-artifact@v4
