@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.check-release.outputs.commit }}
 
@@ -179,7 +179,7 @@ jobs:
           tar -czf "dist/${{ matrix.asset }}" -C "$package_dir" .
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.label }}
           path: dist/${{ matrix.asset }}
@@ -194,12 +194,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.check-release.outputs.commit }}
 
       - name: Download macOS packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: release-macos-*
           path: dist
@@ -225,7 +225,7 @@ jobs:
           tar -czf dist/wali-macos-universal.tar.gz -C "target/package/wali-$version-macos-universal" .
 
       - name: Upload universal package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-macos-universal
           path: dist/wali-macos-universal.tar.gz
@@ -241,12 +241,12 @@ jobs:
 
     steps:
       - name: Checkout installer
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.check-release.outputs.commit }}
 
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: dist
@@ -271,7 +271,7 @@ jobs:
           "$install_dir/wali" --version
 
       - name: Upload release package set
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wali-release-packages
           path: |
@@ -291,7 +291,7 @@ jobs:
 
     steps:
       - name: Download release package set
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wali-release-packages
           path: dist
