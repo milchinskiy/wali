@@ -174,7 +174,7 @@ jobs:
           mkdir -p "$package_dir" dist
           cp "target/${{ matrix.target }}/release/wali" "$package_dir/wali"
           chmod 0755 "$package_dir/wali"
-          cp LICENSE README.md CHANGELOG.md "$package_dir/"
+          cp LICENSE-APACHE LICENSE-MIT README.md CHANGELOG.md "$package_dir/"
           printf '%s\n' "$version" > "$package_dir/VERSION"
           tar -czf "dist/${{ matrix.asset }}" -C "$package_dir" .
 
@@ -220,7 +220,7 @@ jobs:
           chmod 0755 "target/package/wali-$version-macos-universal/wali"
           lipo -info "target/package/wali-$version-macos-universal/wali"
 
-          cp LICENSE README.md CHANGELOG.md "target/package/wali-$version-macos-universal/"
+          cp LICENSE-APACHE LICENSE-MIT README.md CHANGELOG.md "target/package/wali-$version-macos-universal/"
           printf '%s\n' "$version" > "target/package/wali-$version-macos-universal/VERSION"
           tar -czf dist/wali-macos-universal.tar.gz -C "target/package/wali-$version-macos-universal" .
 

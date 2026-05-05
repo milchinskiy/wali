@@ -8,13 +8,16 @@ categories = ["command-line-utilities"]
 keywords = ["automation-tool", "cli", "automation-framework", "task-runner"]
 readme = "README.md"
 repository = "https://github.com/milchinskiy/wali"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 include = [
   "Cargo.toml",
   "Cargo.lock",
   "README.md",
   "CHANGELOG.md",
-  "LICENSE",
+  "LICENSE-APACHE",
+  "LICENSE-MIT",
+  "SECURITY.md",
+  "CONTRIBUTING.md",
   "src/**",
   "lua/**",
   "docs/**",
