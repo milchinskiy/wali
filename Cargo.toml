@@ -19,12 +19,18 @@ include = [
   "lua/**",
   "docs/**",
   "examples/**",
+  "scripts/**",
   "tests/**",
 ]
 
 [features]
 default = []
-release-binary = ["ssh2/vendored-openssl"]
+release-binary = [
+  "dep:libz-sys",
+  "libssh2-sys/vendored-openssl",
+  "libz-sys/static",
+  "ssh2/vendored-openssl",
+]
 
 [dependencies]
 console = "0.16.3"
@@ -40,6 +46,9 @@ serde_json = "1.0.149"
 sha2 = { version = "0.11.0", default-features = false }
 ssh2 = "0.9.5"
 libssh2-sys = "0.3.1"
+libz-sys = { version = "1.1.28", default-features = false, features = [
+  "libc",
+], optional = true }
 portable-pty = "0.9.0"
 supports-unicode = "3.0.0"
 indicatif = "0.18.4"

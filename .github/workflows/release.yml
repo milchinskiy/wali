@@ -29,6 +29,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.version.outputs.commit }}
 
     steps:
       - name: Checkout
@@ -45,8 +46,9 @@ jobs:
 
           case "$GITHUB_EVENT_NAME" in
             push)
+              release_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
               git fetch --no-tags origin master:refs/remotes/origin/master
-              git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/master
+              git merge-base --is-ancestor "$release_commit" refs/remotes/origin/master
 
               case "$GITHUB_REF_NAME" in
                 v*) version="${GITHUB_REF_NAME#v}" ;;
@@ -57,6 +59,7 @@ jobs:
               esac
               ;;
             workflow_dispatch)
+              release_commit="$GITHUB_SHA"
               if [ "$GITHUB_REF_NAME" != "master" ]; then
                 echo "manual release package tests must run from master" >&2
                 exit 1
@@ -84,6 +87,7 @@ jobs:
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$release_commit" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.label }}
@@ -114,6 +118,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-release.outputs.commit }}
 
       - name: Install Linux release dependencies
         if: startsWith(matrix.target, 'x86_64-unknown-linux') || startsWith(matrix.target, 'aarch64-unknown-linux')
@@ -139,8 +145,8 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Resolve release-only dependencies
-        run: cargo fetch --target "${{ matrix.target }}"
+      - name: Fetch locked dependencies
+        run: cargo fetch --locked --target "${{ matrix.target }}"
 
       - name: Build binary
         run: |
@@ -189,6 +195,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-release.outputs.commit }}
 
       - name: Download macOS packages
         uses: actions/download-artifact@v4

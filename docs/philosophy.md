@@ -207,6 +207,7 @@ Before tagging:
 ```sh
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+cargo metadata --locked --features release-binary --format-version 1 >/dev/null
 cargo test --locked
 cargo package --locked --allow-dirty
 ```

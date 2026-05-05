@@ -28,6 +28,7 @@
         ];
         buildInputs = with pkgs; [
           git
+          gnumake
           perl
           pkg-config
           openssl.dev

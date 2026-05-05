@@ -4,4 +4,5 @@
 *.toml     text diff=toml
 Cargo.lock text
 
-flake.*     linguist-generated=true
+flake.*         linguist-generated=true
+scripts/*.sh    linguist-generated=true

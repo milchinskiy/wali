@@ -48,6 +48,9 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Check release feature dependency lock
+        run: cargo metadata --locked --features release-binary --format-version 1 >/dev/null
+
       - name: Run tests
         run: cargo test --locked
 

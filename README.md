@@ -51,11 +51,12 @@ WALI_REPO=your-user/wali sh scripts/install.sh
 
 Release assets are published for Linux `x86_64`, Linux `aarch64`, and macOS
 universal. The Linux packages are built with the musl target and checked as
-static binaries. The macOS package contains one universal binary built from
+static binaries. The release build enables vendored OpenSSL and static zlib for
+Linux portability. The macOS package contains one universal binary built from
 native Intel and Apple Silicon runners.
 
 For development, the repository includes a Nix shell with the Rust toolchain,
-Clippy, rustfmt, Git, pkg-config, and OpenSSL development inputs:
+Clippy, rustfmt, Git, Perl, make, pkg-config, and OpenSSL development inputs:
 
 ```sh
 nix develop -c $SHELL
