@@ -4,18 +4,25 @@ Builtin modules use the reserved `wali.builtin.*` namespace. User modules should
 not use it. Unknown `wali.*` task modules fail during manifest/preflight
 validation.
 
-This is the reference for builtin arguments and behavior. Shared Lua phase rules
-and custom module authoring are covered in `module-developers.md`; design notes
-are in `philosophy.md`.
+This is the reference for builtin arguments, behavior, corner cases, and result
+semantics. Command behavior is documented in [`cli.md`](cli.md), manifest syntax
+in [`manifest.md`](manifest.md), custom module authoring in
+[`module-developers.md`](module-developers.md), and project boundaries in
+[`philosophy.md`](philosophy.md).
 
 Across builtins, the rules are simple: keep the operation narrow, make
 reconciliation idempotent, reject unsafe input before mutation, and return
-structured changes.
+structured changes that can be reported and, when appropriate, captured in an
+apply state file.
 
 Builtin fields that name target-host filesystem objects must be absolute paths
 unless that module says otherwise. This avoids surprises from the local process
 cwd, SSH login directory, or `run_as` command context. Controller-side transfer
 and template paths may be absolute or relative to manifest `base_path`.
+
+Each module section follows the same practical shape: purpose, example,
+arguments implied by the schema, behavior, and edge cases. Default values are
+shown in examples or called out in behavior notes.
 
 ## Naming note: `link` versus `copy_file`
 
@@ -498,8 +505,8 @@ defaults to `"auto"`. `changed = "never"` can be used for read-only commands.
 
 `wali.builtin.copy_tree` and `wali.builtin.link_tree` are built on
 `ctx.host.fs.walk(...)`, the host filesystem traversal primitive exposed to
-custom modules. Wali does not provide a separate `wali.builtin.walk` task module. Tree
-inspection belongs in custom modules unless a builtin is actually mutating or
-reconciling something.
+custom modules. Wali does not provide a separate `wali.builtin.walk` task
+module. Tree inspection belongs in custom modules unless a builtin is actually
+mutating or reconciling something.
 
 For the full `ctx.host.fs.walk(...)` API contract, see `module-developers.md`.

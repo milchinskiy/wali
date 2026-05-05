@@ -1,123 +1,18 @@
 # Module developer guide
 
-This guide covers custom Lua modules and custom module sources. The README keeps
-the quick examples; this file keeps the details module authors usually need.
+This guide is for authors of custom Lua task modules. It assumes the manifest
+already points at the module source. Manifest syntax, namespaces, local paths,
+and Git source configuration are covered in [`manifest.md`](manifest.md).
 
-## Manifest author helper
+A custom module should be small, idempotent, and explicit about its input
+contract. Use Rust-provided host, controller, command, template, transfer,
+codec, hash, and JSON APIs through `ctx` instead of shelling out or vendoring
+Lua parsers for common operations.
 
-A manifest is Lua that returns a table. While wali loads that file, it provides
-a small helper module named `manifest`:
+## Source layout
 
-```lua
-local m = require("manifest")
-```
-
-The helper is available only during manifest loading. It returns the same tables
-you could write by hand, so helper calls and raw tables can be mixed freely.
-
-Host helpers:
-
-```lua
-hosts = {
-    m.host.localhost("localhost", {
-        tags = { "local" },
-        vars = { role = "controller" },
-        command_timeout = "30s",
-    }),
-
-    m.host.ssh("web-1", {
-        user = "deploy",
-        host = "web-1.example.invalid",
-        port = 22,
-        auth = "agent",
-        host_key_policy = { strict = {} },
-        connect_timeout = "10s",
-        keepalive_interval = "30s",
-        tags = { "web" },
-    }),
-}
-```
-
-`m.host.localhost(id, opts)` emits `{ id = id, transport = "local", ... }`.
-`m.host.ssh(id, opts)` emits an SSH host. Common host options are `tags`,
-`vars`, `run_as`, and `command_timeout`. SSH-specific options are `user`,
-`host`, `port`, `host_key_policy`, `auth`, `connect_timeout`, and
-`keepalive_interval`. `user` and `host` are required; the remaining SSH fields
-use the same defaults as a raw manifest table.
-
-Task helper:
-
-```lua
-tasks = {
-    m.task("write config")("wali.builtin.template", {
-        src = "templates/app.conf.j2",
-        dest = "/etc/demo/app.conf",
-    }, {
-        depends_on = { "prepare" },
-        tags = { "deploy" },
-        when = { os = "linux" },
-    }),
-}
-```
-
-`m.task(id)(module, args, opts)` uses an empty table when `args` is omitted;
-otherwise it leaves `args` unchanged and copies optional task fields from
-`opts`: `tags`, `depends_on`, `on_change`, `when`, `host`, `run_as`, and `vars`.
-Unknown helper options and non-table option values fail early. Helper ids and
-task module names must be strings without leading/trailing whitespace or control
-characters. Task `host` selectors use the manifest selector form:
-`{ id = "web-1" }`, `{ tag = "web" }`, `{ all = { ... } }`, `{ any = { ... } }`,
-or `{ ["not"] = ... }`. Use a raw task table whenever it reads better.
-
-The loader applies the same naming rules to raw tables: host ids, task ids,
-tags, and `run_as` ids/users must not be empty, have leading/trailing
-whitespace, or contain control characters. Task ids may contain ordinary
-internal spaces.
-
-## Module source contract
-
-A manifest may add one or more module sources. A source is either a local path
-or a Git repository; it may also have an optional manifest-local namespace.
-
-Local source:
-
-```lua
-modules = {
-    { path = "./modules" },
-}
-```
-
-Namespaced local source:
-
-```lua
-modules = {
-    { namespace = "local_ops", path = "./modules" },
-}
-```
-
-Git source:
-
-```lua
-modules = {
-    {
-        namespace = "ops",
-        git = {
-            url = "https://example.invalid/ops/wali-modules.git",
-            ref = "main",
-            path = "modules",
-            depth = 1,
-            submodules = false,
-            timeout = "5m",
-        },
-    },
-}
-```
-
-Each source exposes Lua files below its include root. For a local source the
-include root is the resolved `path`. For a Git source the include root is the
-checkout root plus optional `git.path`.
-
-Module filenames map to dotted Lua module names:
+A module source is a directory mounted by a manifest. Files map to dotted Lua
+module names:
 
 ```text
 file.lua                 -> file
@@ -126,115 +21,30 @@ internal/utils/tool.lua  -> internal.utils.tool
 ```
 
 `file.lua` and `file/init.lua` in the same source are ambiguous and are
-rejected.
-
-## Namespaces and task module names
-
-A namespace is chosen by the manifest author. It is not a Git cache key and it
-is not part of the module author's internal import paths.
-
-Given this source:
-
-```lua
-modules = {
-    { namespace = "repo_1", path = "./modules" },
-}
-```
-
-this task:
-
-```lua
-{
-    id = "run custom module",
-    module = "repo_1.example_file",
-    args = {},
-}
-```
-
-resolves to source `repo_1` and loads the source-local Lua module
-`example_file`.
-
-Every task gets a fresh Lua runtime. Wali adds only the selected source root to
-that runtime's `package.path`, then loads the source-local module name. Internal
+rejected. Each task gets a fresh Lua runtime. Wali adds only the selected source
+root to `package.path`, then loads the source-local module name. Internal
 imports stay source-local:
 
 ```lua
 local tool = require("internal.utils.tool")
 ```
 
-Two repositories may contain the same internal tree, including the same
-`internal/utils/tool.lua`, as long as tasks select them through different
-namespaces.
+Namespaces are chosen by manifest authors. A task named `ops.deploy` may load
+local module `deploy` from a source mounted as `ops`; the module itself should
+still use local imports such as `require("internal.tool")`.
 
-Name rules:
+## Module lifecycle
 
-- task module names and namespaces are dotted Lua-style identifiers;
-- each segment must match `[A-Za-z_][A-Za-z0-9_]*`;
-- empty segments, surrounding whitespace, path separators, dashes, and
-  shell-like punctuation are invalid;
-- `wali` and `wali.*` are reserved for wali itself;
-- namespaces must be unique in one manifest;
-- namespace prefixes must not overlap, so `repo` and `repo.lib` cannot both be
-  mounted in one manifest;
-- namespaced sources are not exposed globally;
-- unnamespaced sources are allowed for simple local workflows, but if more than
-  one unnamespaced source provides the requested module name, wali fails instead
-  of choosing by `package.path` order.
+For each selected task, wali uses this order:
 
-Custom source roots must not contain a top-level `wali.lua` or `wali/` tree.
-That package prefix is reserved for wali's own APIs and builtins.
+```text
+when -> requires -> schema normalization -> validate -> apply
+```
 
-## Local source rules
-
-Local paths are resolved relative to the manifest file unless they are absolute.
-They must resolve to existing directories during manifest loading.
-
-Wali uses Lua `package.path` for the selected source. Local source paths must be
-usable inside that template syntax, so paths containing `;` or `?` are rejected.
-The same rule applies to the manifest directory that is added while evaluating
-the manifest chunk.
-
-## Git source rules
-
-Git sources are fetched with the system `git` executable before `wali check` and
-`wali apply`. `wali plan` does not fetch Git sources.
-
-Git fields:
-
-- `url` is required and must not be empty, start with `-`, contain control
-  characters, contain surrounding whitespace, or embed HTTP(S) credentials;
-- `ref` is required and must be a branch, tag, full ref, or commit accepted by
-  `git fetch origin <ref>`;
-- `path` is optional, relative to the checkout root, and must not contain parent
-  directory components;
-- `depth` is optional and must be greater than zero when set;
-- `timeout` is optional, uses the same human duration syntax as command
-  timeouts, must be greater than zero when set, and defaults to `5m`;
-- `submodules = true` materializes submodules with
-  `git submodule update --init --recursive --force` after checkout.
-
-Git module sources are cached under `$WALI_MODULES_CACHE` when set. Otherwise
-wali uses `$XDG_DATA_HOME/wali/modules`, falling back to
-`~/.local/share/wali/modules`.
-
-Checkout identity is based on the Git URL, ref, and submodule materialization
-mode. The manifest namespace, repository leaf name, `git.path`, `depth`, and
-`timeout` are not checkout identity. `git.path` only selects the include root
-inside the checkout; `depth` only changes how the requested ref is fetched;
-`timeout` only bounds the system `git` processes used during preparation.
-
-`check` and `apply` hold a process-level cache lock for every Git source until
-execution finishes. This prevents another wali process from resetting or
-cleaning the same checkout while task runtimes are loading module files.
-
-Every system `git` process runs with `GIT_TERMINAL_PROMPT=0`, null stdin, and a
-bounded timeout. Git stdout and stderr are captured through temporary files, not
-pipe-reader threads, so inherited output handles from helpers or grandchild
-processes cannot block timeout return. On timeout, wali kills the Git process,
-waits for it, and reports the timed-out command.
-
-Pin a commit for reproducible module code. Branch names remain mutable because
-Git resolves them at fetch time.
+`when` belongs to the manifest and decides whether a task is scheduled on a
+particular host. `requires`, `schema`, `validate`, and `apply` belong to the
+module. `validate` receives a read/probe-only context. `apply` receives the full
+context, including mutation APIs.
 
 ## Minimal module example
 
@@ -411,100 +221,6 @@ unknown task arguments. A typo should fail instead of being ignored.
 For POSIX modes, prefer strings such as `"0644"` in module arguments and convert
 them inside the module or a shared helper. Decimal mode values are hard to read
 in manifests.
-
-## Task dependencies and `on_change`
-
-`depends_on` and `on_change` are host-local task references. Both forms order
-the current task after the referenced source tasks, and selecting a task by id
-or tag includes both normal dependencies and change-gated source tasks.
-
-`depends_on` is the ordinary success gate: the current task runs only when every
-listed dependency succeeded. `on_change` is a success-and-change gate during
-`apply`: the current task runs only when every listed source succeeded and at
-least one listed source reported a changed execution result. If all `on_change`
-sources were unchanged, wali reports the gated task as skipped. During `check`,
-`on_change` still orders and validates the gated task because no apply-time
-change result exists yet.
-
-Do not list the same source in both `depends_on` and `on_change`. Duplicate
-references, self-references, unknown task ids, and references to tasks not
-scheduled for the same host are rejected.
-
-```lua
-{
-    id = "render nginx config",
-    module = "wali.builtin.template",
-    args = { src = "nginx.conf.j2", dest = "/etc/nginx/nginx.conf" },
-}
-
-{
-    id = "reload nginx",
-    on_change = { "render nginx config" },
-    module = "wali.builtin.command",
-    args = { program = "systemctl", args = { "reload", "nginx" } },
-}
-```
-
-## Task `when` predicates
-
-A task may declare `when` when the decision to run the task depends on host
-facts or cheap host probes. Wali evaluates `when` after connecting to the host
-and before module `requires`, schema normalization, `validate`, or `apply`.
-
-```lua
-{
-    id = "install optional config",
-    when = {
-        all = {
-            { os = "linux" },
-            { path_dir = "/etc" },
-            { command_exist = "systemctl" },
-            { ["not"] = { env_set = "WALI_SKIP_SYSTEMD_TASKS" } },
-        },
-    },
-    module = "wali.builtin.file",
-    args = { path = "/tmp/example.conf", content = "managed\n" },
-}
-```
-
-Supported predicates:
-
-```lua
-when = { os = "linux" }
-when = { arch = "x86_64" }
-when = { hostname = "web-1" }
-when = { user = "root" }
-when = { group = "root" }
-when = { env = { "NAME", "value" } }
-when = { env_set = "NAME" }
-when = { path_exist = "/path" }
-when = { path_file = "/path" }
-when = { path_dir = "/path" }
-when = { path_symlink = "/path" }
-when = { command_exist = "tar" }
-```
-
-Predicates can be composed with non-empty `all` and `any` lists and a unary
-`not` predicate. Because `not` is a Lua keyword, quote it as a table key:
-
-```lua
-when = {
-    any = {
-        { command_exist = "curl" },
-        { command_exist = "wget" },
-    },
-}
-
-when = { ["not"] = { env_set = "DISABLE_TASK" } }
-```
-
-`path_file` and `path_dir` follow symlinks, matching ordinary `stat` behavior.
-`path_symlink` inspects the path itself and therefore matches symlinks even when
-the link target is missing. Empty `all`/`any` lists and empty string predicate
-arguments are rejected during manifest validation.
-
-Use task `when` for deployment decisions. Use module `requires` for capabilities
-that the module itself needs regardless of who uses it.
 
 ## Requires
 
