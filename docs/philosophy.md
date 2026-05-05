@@ -206,16 +206,22 @@ Before tagging:
 
 ```sh
 cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
-cargo package --allow-dirty
+cargo clippy --all-targets -- -D warnings
+cargo test --locked
+cargo package --locked --allow-dirty
 ```
 
 Use `cargo package --allow-dirty` only for a local release-candidate check. The
 final package should come from a clean tree.
 
-For release-facing changes, keep `CHANGELOG.md`, README, docs, and contract
-checks in sync.
+CI runs the same basic gate on every push and pull request targeting `master`.
+Release tags use the form `vMAJOR.MINOR.PATCH`, must point at a commit reachable
+from `master`, and must match the package version in `Cargo.toml`. The release
+workflow builds Linux musl packages, a macOS universal package, and
+`sha256sums.txt`.
+
+For release-facing changes, keep `CHANGELOG.md`, README, docs, installer script,
+and contract checks in sync.
 
 ## Near-term direction
 

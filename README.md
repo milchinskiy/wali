@@ -1,7 +1,7 @@
 # wali
 
-wali is a small agentless automation tool for local and SSH hosts. The engine
-is Rust; manifests and modules are Lua. It is built around a simple workflow:
+wali is a small agentless automation tool for local and SSH hosts. The engine is
+Rust; manifests and modules are Lua. It is built around a simple workflow:
 inspect the plan, check against real hosts, apply changes, and clean up only
 what a previous successful apply recorded as created.
 
@@ -34,6 +34,25 @@ Install locally from a checkout:
 ```sh
 cargo install --path .
 ```
+
+Install the latest release binary on Linux or macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/install.sh | sh
+```
+
+Useful installer overrides:
+
+```sh
+WALI_VERSION=v0.1.0 sh scripts/install.sh
+WALI_INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
+WALI_REPO=your-user/wali sh scripts/install.sh
+```
+
+Release assets are published for Linux `x86_64`, Linux `aarch64`, and macOS
+universal. The Linux packages are built with the musl target and checked as
+static binaries. The macOS package contains one universal binary built from
+native Intel and Apple Silicon runners.
 
 For development, the repository includes a Nix shell with the Rust toolchain,
 Clippy, rustfmt, Git, pkg-config, and OpenSSL development inputs:
@@ -211,13 +230,14 @@ return {
 
 Task dependencies affect execution, not just ordering. A task with `depends_on`
 runs only after every listed dependency has completed successfully on the same
-host. `on_change` is also a dependency: in `apply`, the gated task runs only when
-at least one source task reports a change. In `check`, `on_change` still orders
-and validates the gated task because no apply-time result exists yet.
+host. `on_change` is also a dependency: in `apply`, the gated task runs only
+when at least one source task reports a change. In `check`, `on_change` still
+orders and validates the gated task because no apply-time result exists yet.
 
 Dependencies must land on the same host. Duplicate dependency ids and duplicate
 references between `depends_on` and `on_change` are rejected. If a dependency
-fails or is skipped, its dependents are skipped; unrelated later tasks still run.
+fails or is skipped, its dependents are skipped; unrelated later tasks still
+run.
 
 Host ids, task ids, tags, and `run_as` ids/users must not be empty, have
 leading/trailing whitespace, or contain control characters. Task ids may contain
@@ -384,12 +404,12 @@ Critical source rules:
 Custom Lua modules receive `ctx.controller` for controller-side path helpers and
 read-only filesystem access, including deterministic tree walking. Controller
 filesystem paths may be absolute or relative to manifest `base_path`; there is
-no project-root sandbox. Domain modules should use this primitive API instead
-of duplicating file helpers in `ctx.template` or `ctx.transfer`. Target-host
-reads expose raw bytes through `ctx.host.fs.read` and strict UTF-8 text through
-`ctx.host.fs.read_text`.
-Modules also receive `ctx.json`, `ctx.codec` for Base64, and `ctx.hash` for
-SHA-256 without vendoring Lua parsers or shelling out.
+no project-root sandbox. Domain modules should use this primitive API instead of
+duplicating file helpers in `ctx.template` or `ctx.transfer`. Target-host reads
+expose raw bytes through `ctx.host.fs.read` and strict UTF-8 text through
+`ctx.host.fs.read_text`. Modules also receive `ctx.json`, `ctx.codec` for
+Base64, and `ctx.hash` for SHA-256 without vendoring Lua parsers or shelling
+out.
 
 The detailed custom module and Git source contract lives in
 [`docs/module-developers.md`](docs/module-developers.md).

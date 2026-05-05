@@ -1,0 +1,286 @@
+name: Release
+
+"on":
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to package. Leave empty to use Cargo.toml.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: 1.94.0
+
+jobs:
+  check-release:
+    name: Check release metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check release metadata
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          cargo_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              git fetch --no-tags origin master:refs/remotes/origin/master
+              git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/master
+
+              case "$GITHUB_REF_NAME" in
+                v*) version="${GITHUB_REF_NAME#v}" ;;
+                *)
+                  echo "release tags must use vMAJOR.MINOR.PATCH" >&2
+                  exit 1
+                  ;;
+              esac
+              ;;
+            workflow_dispatch)
+              if [ "$GITHUB_REF_NAME" != "master" ]; then
+                echo "manual release package tests must run from master" >&2
+                exit 1
+              fi
+
+              if [ -n "$REQUESTED_VERSION" ]; then
+                case "$REQUESTED_VERSION" in
+                  v*) version="${REQUESTED_VERSION#v}" ;;
+                  *) version="$REQUESTED_VERSION" ;;
+                esac
+              else
+                version="$cargo_version"
+              fi
+              ;;
+            *)
+              echo "unsupported event: $GITHUB_EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "$version" != "$cargo_version" ]; then
+            echo "release version $version does not match Cargo.toml version $cargo_version" >&2
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: check-release
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            asset: wali-linux-x86_64.tar.gz
+          - label: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            asset: wali-linux-aarch64.tar.gz
+          - label: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: wali-macos-x86_64.tar.gz
+          - label: macos-aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            asset: wali-macos-aarch64.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux release dependencies
+        if: startsWith(matrix.target, 'x86_64-unknown-linux') || startsWith(matrix.target, 'aarch64-unknown-linux')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools perl make pkg-config
+
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-musl)
+              echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
+              ;;
+            aarch64-unknown-linux-musl)
+              echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc" >> "$GITHUB_ENV"
+              ;;
+          esac
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" \
+            --profile minimal \
+            --target "${{ matrix.target }}"
+          rustup default "$RUST_VERSION"
+          rustc --version
+          cargo --version
+
+      - name: Resolve release-only dependencies
+        run: cargo fetch --target "${{ matrix.target }}"
+
+      - name: Build binary
+        run: |
+          cargo build \
+            --release \
+            --locked \
+            --features release-binary \
+            --target "${{ matrix.target }}"
+
+      - name: Verify Linux binary is static
+        if: startsWith(matrix.target, 'x86_64-unknown-linux') || startsWith(matrix.target, 'aarch64-unknown-linux')
+        run: |
+          binary="target/${{ matrix.target }}/release/wali"
+          file "$binary"
+          if ldd "$binary" 2>&1 | grep -Eq 'not a dynamic executable|statically linked'; then
+            exit 0
+          fi
+          ldd "$binary"
+          exit 1
+
+      - name: Package
+        run: |
+          version="${{ needs.check-release.outputs.version }}"
+          package_dir="target/package/wali-$version-${{ matrix.label }}"
+          mkdir -p "$package_dir" dist
+          cp "target/${{ matrix.target }}/release/wali" "$package_dir/wali"
+          chmod 0755 "$package_dir/wali"
+          cp LICENSE README.md CHANGELOG.md "$package_dir/"
+          printf '%s\n' "$version" > "$package_dir/VERSION"
+          tar -czf "dist/${{ matrix.asset }}" -C "$package_dir" .
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.label }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  macos-universal:
+    name: Build macOS universal package
+    needs:
+      - check-release
+      - build
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download macOS packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-macos-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create universal binary
+        run: |
+          version="${{ needs.check-release.outputs.version }}"
+          mkdir -p work/x86_64 work/aarch64 "target/package/wali-$version-macos-universal" dist
+
+          tar -xzf dist/wali-macos-x86_64.tar.gz -C work/x86_64
+          tar -xzf dist/wali-macos-aarch64.tar.gz -C work/aarch64
+
+          lipo -create \
+            -output "target/package/wali-$version-macos-universal/wali" \
+            work/x86_64/wali \
+            work/aarch64/wali
+          chmod 0755 "target/package/wali-$version-macos-universal/wali"
+          lipo -info "target/package/wali-$version-macos-universal/wali"
+
+          cp LICENSE README.md CHANGELOG.md "target/package/wali-$version-macos-universal/"
+          printf '%s\n' "$version" > "target/package/wali-$version-macos-universal/VERSION"
+          tar -czf dist/wali-macos-universal.tar.gz -C "target/package/wali-$version-macos-universal" .
+
+      - name: Upload universal package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-universal
+          path: dist/wali-macos-universal.tar.gz
+          if-no-files-found: error
+
+  package:
+    name: Prepare downloadable packages
+    needs:
+      - build
+      - macos-universal
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Prepare release package set
+        run: |
+          rm -f dist/wali-macos-x86_64.tar.gz dist/wali-macos-aarch64.tar.gz
+          cd dist
+          test -f wali-linux-x86_64.tar.gz
+          test -f wali-linux-aarch64.tar.gz
+          test -f wali-macos-universal.tar.gz
+          sha256sum *.tar.gz > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Upload release package set
+        uses: actions/upload-artifact@v4
+        with:
+          name: wali-release-packages
+          path: |
+            dist/*.tar.gz
+            dist/sha256sums.txt
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs:
+      - check-release
+      - package
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release package set
+        uses: actions/download-artifact@v4
+        with:
+          name: wali-release-packages
+          path: dist
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check-release.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "$TAG" --generate-notes
+          fi

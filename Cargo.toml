@@ -22,6 +22,10 @@ include = [
   "tests/**",
 ]
 
+[features]
+default = []
+release-binary = ["ssh2/vendored-openssl"]
+
 [dependencies]
 console = "0.16.3"
 mlua = { version = "0.11.6", features = ["lua55", "vendored", "serde", "send"] }
