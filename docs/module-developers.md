@@ -654,8 +654,8 @@ Prefer `exec` with explicit `program` and `args` for user-controlled values. Use
 `shell` only when shell features are actually needed. Command request tables
 reject unknown fields. Environment variables are passed as a string map and
 names must match `[A-Za-z_][A-Za-z0-9_]*`. `stdin`, when provided, is passed to
-the child process as text bytes. Empty programs, empty shell scripts, and
-zero-duration timeouts are rejected.
+the child process as raw Lua string bytes. Empty programs, empty shell scripts,
+and zero-duration timeouts are rejected.
 
 If a command request omits `timeout`, Wali uses the host-level `command_timeout`
 default when it is configured. The same host default bounds the initial fact

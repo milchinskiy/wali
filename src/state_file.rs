@@ -328,7 +328,6 @@ fn cleanup_task(idx: usize, item: CleanupItem) -> TaskInstance {
         args: serde_json::json!({
             "path": item.path.as_str(),
             "recursive": false,
-            "allow_special": false,
         }),
     }
 }

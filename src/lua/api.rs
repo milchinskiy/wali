@@ -216,6 +216,7 @@ fn build_command_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
     table.set("exec", {
         let backend = backend.clone();
         lua.create_function(move |lua, req: Table| {
+            normalize_binary_stdin(lua, &req)?;
             let req: ExecCommandInput = lua.from_value(LuaValue::Table(req))?;
             let output = backend
                 .exec(&CommandRequest::from(req))
@@ -235,6 +236,7 @@ fn build_command_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
                     opts: Default::default(),
                 },
                 LuaValue::Table(table) => {
+                    normalize_binary_stdin(lua, &table)?;
                     CommandRequest::from(lua.from_value::<ShellCommandInput>(LuaValue::Table(table))?)
                 }
                 other => {
@@ -250,6 +252,16 @@ fn build_command_table(lua: &Lua, backend: Backend) -> mlua::Result<Table> {
     })?;
 
     Ok(table)
+}
+
+fn normalize_binary_stdin(lua: &Lua, table: &Table) -> mlua::Result<()> {
+    if let LuaValue::String(stdin) = table.get::<LuaValue>("stdin")? {
+        let bytes = stdin.as_bytes();
+        let sequence = lua.create_sequence_from(bytes.as_ref().iter().copied())?;
+        table.set("stdin", sequence)?;
+    }
+
+    Ok(())
 }
 
 fn build_fs_table(lua: &Lua, backend: Backend, phase: TaskCtxPhase) -> mlua::Result<Table> {
@@ -421,8 +433,9 @@ fn build_fs_table(lua: &Lua, backend: Backend, phase: TaskCtxPhase) -> mlua::Res
     table.set("chmod", {
         let backend = backend.clone();
         lua.create_function(move |lua, (path, mode): (String, u32)| {
+            let mode = FileMode::try_new(mode).map_err(mlua::Error::external)?;
             let result = backend
-                .chmod(&TargetPath::from(path), FileMode::new(mode))
+                .chmod(&TargetPath::from(path), mode)
                 .map_err(mlua::Error::external)?;
             lua.to_value(&result)
         })?

@@ -202,6 +202,14 @@ fn validate_run_as_entries(host: &host::Host) -> crate::Result {
     for entry in &host.run_as {
         validate_manifest_name(&format!("Host '{}' run_as id", host.id), &entry.id)?;
         validate_manifest_name(&format!("Host '{}' run_as user", host.id), &entry.user)?;
+        for (idx, prompt) in entry.l10n_prompts.iter().enumerate() {
+            if prompt.is_empty() {
+                return Err(crate::Error::InvalidManifest(format!(
+                    "Host '{}' run_as '{}' l10n_prompts[{}] must not be empty",
+                    host.id, entry.id, idx
+                )));
+            }
+        }
         if !ids.insert(entry.id.as_str()) {
             return Err(crate::Error::InvalidManifest(format!(
                 "Host '{}' run_as id '{}' is not unique",

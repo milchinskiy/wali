@@ -95,6 +95,10 @@ if [ -d "$path" ] && [ ! -L "$path" ]; then
     echo 'target path is a directory' >&2
     exit {invalid}
 fi
+if [ ! -f "$path" ] && [ ! -L "$path" ]; then
+    echo 'target path is a special filesystem entry' >&2
+    exit {invalid}
+fi
 rm -f -- "$path"
 emit_result removed"#,
         path = operand_shell(path),

@@ -166,6 +166,24 @@ return {
             "Host 'localhost' run_as id 'root' is not unique",
         ),
         (
+            "empty-runas-l10n-prompt",
+            r#"
+return {
+    hosts = {
+        {
+            id = "localhost",
+            transport = "local",
+            run_as = {
+                { id = "root", user = "root", l10n_prompts = { "" } },
+            },
+        },
+    },
+    tasks = {},
+}
+"#,
+            "Host 'localhost' run_as 'root' l10n_prompts[0] must not be empty",
+        ),
+        (
             "empty-host-selector-all",
             r#"
 return {

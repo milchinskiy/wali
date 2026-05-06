@@ -10,7 +10,6 @@ return {
 		props = {
 			path = { type = "string", required = true },
 			recursive = { type = "boolean", default = false },
-			allow_special = { type = "boolean", default = false },
 		},
 	},
 
@@ -32,10 +31,6 @@ return {
 			return ctx.host.fs.remove_file(args.path)
 		end
 
-		if not args.allow_special then
-			error("refusing to remove special filesystem entry without allow_special=true: " .. args.path)
-		end
-
-		return ctx.host.fs.remove_file(args.path)
+		error("refusing to remove special filesystem entry: " .. args.path)
 	end,
 }

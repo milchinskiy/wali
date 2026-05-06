@@ -77,6 +77,7 @@ pub(super) fn render_owner_spec(owner: &Option<Owner>) -> crate::Result<Option<S
     let Some(owner) = owner else {
         return Ok(None);
     };
+    owner.validate().map_err(crate::Error::CommandExec)?;
 
     let user = owner.user.as_ref().map(render_user_spec);
     let group = owner.group.as_ref().map(render_group_spec);

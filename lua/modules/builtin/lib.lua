@@ -126,12 +126,18 @@ local function validate_owner_part(value, field)
 		if value:find(":", 1, true) ~= nil then
 			error(field .. " must not contain ':'")
 		end
+		if value:find("%c") ~= nil then
+			error(field .. " must not contain control characters")
+		end
 		return value
 	end
 
 	if kind == "number" then
 		if value < 0 or value % 1 ~= 0 then
 			error(field .. " numeric id must be a non-negative integer")
+		end
+		if value > 4294967295 then
+			error(field .. " numeric id must fit into u32")
 		end
 		return value
 	end

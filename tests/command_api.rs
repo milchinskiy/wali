@@ -239,6 +239,63 @@ return {{
 }
 
 #[test]
+fn command_stdin_preserves_binary_lua_strings() {
+    let sandbox = Sandbox::new("command-stdin-binary");
+    let modules = sandbox.mkdir("modules");
+    let source = sandbox.path("stdin.bin");
+    std::fs::write(&source, [0_u8, 0xff, b'A', b'\n']).expect("failed to write binary stdin source");
+
+    std::fs::write(
+        modules.join("stdin_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        local bytes = ctx.controller.fs.read(args.source)
+        local exec_out = ctx.host.cmd.exec({
+            program = "cat",
+            stdin = bytes,
+        })
+        local shell_out = ctx.host.cmd.shell({
+            script = "cat",
+            stdin = bytes,
+        })
+        if exec_out.stdout ~= bytes then
+            error("exec stdin did not preserve binary bytes")
+        end
+        if shell_out.stdout ~= bytes then
+            error("shell stdin did not preserve binary bytes")
+        end
+        return api.result.apply():command("updated", "binary stdin preserved"):build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write stdin probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "stdin probe", module = "stdin_probe", args = {{ source = {} }} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+        lua_string(&source),
+    ));
+
+    run_apply(&manifest);
+}
+
+#[test]
 fn command_requests_reject_invalid_values() {
     let cases = [
         (

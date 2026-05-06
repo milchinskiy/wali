@@ -51,19 +51,45 @@ pub enum FsPathKind {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 #[serde(transparent)]
 pub struct FileMode(u32);
 
 impl FileMode {
+    pub const MAX_BITS: u32 = 0o7777;
+
     #[must_use]
     pub fn new(bits: u32) -> Self {
         Self(bits)
     }
 
+    pub fn try_new(bits: u32) -> crate::Result<Self> {
+        if bits <= Self::MAX_BITS {
+            Ok(Self(bits))
+        } else {
+            Err(crate::Error::CommandExec(format!("file mode must be between 0 and 07777, got 0o{bits:o}")))
+        }
+    }
+
     #[must_use]
     pub fn bits(self) -> u32 {
         self.0
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FileMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error as _;
+
+        let bits = <u32 as serde::Deserialize>::deserialize(deserializer)?;
+        if bits <= Self::MAX_BITS {
+            Ok(Self(bits))
+        } else {
+            Err(D::Error::custom(format!("file mode must be between 0 and 07777, got 0o{bits:o}")))
+        }
     }
 }
 

@@ -319,7 +319,7 @@ Safety rules:
 - `path` must be an absolute target-host path;
 - empty path, `/`, `.`, and `..` are rejected after host path normalization;
 - directories require `recursive = true` when they are non-empty;
-- special filesystem entries are rejected unless `allow_special = true`;
+- special filesystem entries are rejected;
 - symlinks are removed as links, not followed.
 
 ## `wali.builtin.touch`
@@ -498,8 +498,9 @@ Shell form:
 provided. `timeout` is a human-readable string such as `"10s"` or `"2m"`. When
 omitted, the host-level `command_timeout` default is used if configured. `env`
 is a string map, for example `{ FOO = "bar" }`. `stdin` is passed to the child
-process as text bytes. `pty` may be `"never"`, `"auto"`, or `"require"` and
-defaults to `"auto"`. `changed = "never"` can be used for read-only commands.
+process as raw Lua string bytes. `pty` may be `"never"`, `"auto"`, or
+`"require"` and defaults to `"auto"`. `changed = "never"` can be used for
+read-only commands.
 
 ## Tree traversal primitive
 
