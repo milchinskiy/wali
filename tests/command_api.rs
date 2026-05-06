@@ -187,6 +187,58 @@ return {{
 }
 
 #[test]
+fn command_stdin_strings_are_supported() {
+    let sandbox = Sandbox::new("command-stdin-string");
+    let modules = sandbox.mkdir("modules");
+    std::fs::write(
+        modules.join("stdin_probe.lua"),
+        r#"
+local api = require("wali.api")
+
+return {
+    apply = function(ctx, args)
+        local exec_out = ctx.host.cmd.exec({
+            program = "cat",
+            stdin = "exec-stdin",
+        })
+        local shell_out = ctx.host.cmd.shell({
+            script = "cat",
+            stdin = "shell-stdin",
+        })
+        return api.result.apply()
+            :command("updated", "stdin probe")
+            :data({ exec = exec_out.stdout, shell = shell_out.stdout })
+            :build()
+    end,
+}
+"#,
+    )
+    .expect("failed to write stdin probe module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    modules = {{
+        {{ path = {} }},
+    }},
+    tasks = {{
+        {{ id = "stdin probe", module = "stdin_probe", args = {{}} }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+    ));
+
+    let report = run_apply(&manifest);
+    let result = task_result(&report, "stdin probe");
+    assert_eq!(result.pointer("/data/exec").and_then(Value::as_str), Some("exec-stdin"));
+    assert_eq!(result.pointer("/data/shell").and_then(Value::as_str), Some("shell-stdin"));
+}
+
+#[test]
 fn command_requests_reject_invalid_values() {
     let cases = [
         (

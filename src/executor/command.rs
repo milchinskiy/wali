@@ -93,10 +93,29 @@ pub struct CommandOpts {
     pub cwd: Option<TargetPath>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_optional_stdin")]
     pub stdin: Option<Vec<u8>>,
     #[serde(default, with = "serde_ext_duration::opt::human")]
     pub timeout: Option<Duration>,
     pub pty: PtyMode,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(untagged)]
+enum StdinInput {
+    Text(String),
+    Bytes(Vec<u8>),
+}
+
+fn deserialize_optional_stdin<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let stdin = <Option<StdinInput> as serde::Deserialize>::deserialize(deserializer)?;
+    Ok(stdin.map(|value| match value {
+        StdinInput::Text(text) => text.into_bytes(),
+        StdinInput::Bytes(bytes) => bytes,
+    }))
 }
 
 impl CommandOpts {
@@ -147,7 +166,7 @@ pub struct ExecCommandInput {
     pub cwd: Option<TargetPath>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_stdin")]
     pub stdin: Option<Vec<u8>>,
     #[serde(default, with = "serde_ext_duration::opt::human")]
     pub timeout: Option<Duration>,
@@ -181,7 +200,7 @@ pub struct ShellCommandInput {
     pub cwd: Option<TargetPath>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_stdin")]
     pub stdin: Option<Vec<u8>>,
     #[serde(default, with = "serde_ext_duration::opt::human")]
     pub timeout: Option<Duration>,

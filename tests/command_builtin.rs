@@ -57,3 +57,36 @@ return {
         "Invalid module input data",
     );
 }
+
+#[test]
+fn builtin_command_accepts_stdin_string() {
+    let sandbox = Sandbox::new("builtin-command-stdin");
+    let target = sandbox.path("stdin-output.txt");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "stdin command",
+            module = "wali.builtin.command",
+            args = {{
+                program = "tee",
+                args = {{ {} }},
+                stdin = "hello stdin\n",
+                creates = {},
+            }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&target),
+        lua_string(&target),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "stdin command");
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "hello stdin\n");
+}
