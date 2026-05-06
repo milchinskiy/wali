@@ -148,6 +148,10 @@ jobs:
             --locked \
             --features release-binary \
             --target "${{ matrix.target }}"
+      - name: Smoke test built binary
+        run: |
+          sh scripts/release-smoke.sh \
+          "target/${{ matrix.target }}/release/wali"
       - name: Verify Linux binary is static
         if: startsWith(matrix.target, 'x86_64-unknown-linux')
           || startsWith(matrix.target, 'aarch64-unknown-linux')
@@ -204,6 +208,8 @@ jobs:
             work/aarch64/wali
           chmod 0755 "target/package/wali-$version-macos-universal/wali"
           lipo -info "target/package/wali-$version-macos-universal/wali"
+          sh scripts/release-smoke.sh \
+          "target/package/wali-$version-macos-universal/wali"
           cp LICENSE-APACHE LICENSE-MIT README.md CHANGELOG.md \
           "target/package/wali-$version-macos-universal/"
           printf '%s\n' "$version" > \

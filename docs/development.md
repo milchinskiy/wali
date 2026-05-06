@@ -83,7 +83,9 @@ For a release tag:
    `CHANGELOG.md` agree on the release version.
 3. Confirm `scripts/install.sh` still matches published asset names.
 4. Tag from `master` with a `vX.Y.Z` tag.
-5. Let the release workflow build and attach release artifacts.
+5. Let the release workflow build and attach release artifacts. The workflow
+   smoke-tests every built binary on its native runner before packaging and
+   smoke-tests the macOS universal binary after `lipo` creates it.
 6. Download the produced package, install it with `WALI_PACKAGE=...`, and run a
    small `plan`, `check`, and `apply` smoke test locally.
 

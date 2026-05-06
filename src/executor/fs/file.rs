@@ -70,9 +70,23 @@ if [ {create_parents} -eq 1 ]; then
     mkdir -p -- "$parent"
 fi
 tmp=$(mktemp "$parent/.wali-write.XXXXXX")
-cleanup() {{ rm -f -- "$tmp"; }}
+encoded=$(mktemp "$parent/.wali-write-base64.XXXXXX")
+cleanup() {{ rm -f -- "$tmp" "$encoded"; }}
 trap cleanup EXIT HUP INT TERM
-base64 -d > "$tmp"
+cat > "$encoded"
+case "$(uname -s)" in
+    Darwin)
+        base64 -D < "$encoded" > "$tmp"
+        ;;
+    *)
+        if base64 -d < "$encoded" > "$tmp" 2>/dev/null; then
+            :
+        else
+            base64 -D < "$encoded" > "$tmp"
+        fi
+        ;;
+esac
+rm -f -- "$encoded"
 if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     result=created
 elif [ -d "$path" ]; then
