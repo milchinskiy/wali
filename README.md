@@ -132,6 +132,8 @@ relative to manifest `base_path`.
 
 ## License
 
+SPDX license expression: `MIT OR Apache-2.0`.
+
 Licensed under either of:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))

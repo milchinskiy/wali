@@ -1,38 +1,47 @@
+---
 name: CI
-
 "on":
   push:
-    branches:
-      - master
+    branches: [master]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/**
+      - lua/**
+      - tests/**
+      - scripts/**
+      - .github/workflows/ci.yml
+      - .github/workflows/release.yml
   pull_request:
-    branches:
-      - master
-
+    branches: [master]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/**
+      - lua/**
+      - tests/**
+      - scripts/**
+      - .github/workflows/ci.yml
+      - .github/workflows/release.yml
 permissions:
   contents: read
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
 env:
   CARGO_TERM_COLOR: always
   RUST_VERSION: 1.94.0
-
 jobs:
   test:
     name: fmt, clippy, test
     runs-on: ubuntu-24.04
-
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git libssl-dev pkg-config
-
       - name: Install Rust
         run: |
           rustup toolchain install "$RUST_VERSION" \
@@ -41,18 +50,19 @@ jobs:
           rustup default "$RUST_VERSION"
           rustc --version
           cargo --version
-
       - name: Check formatting
         run: cargo fmt --check
-
       - name: Run Clippy
         run: cargo clippy --all-targets -- -D warnings
-
       - name: Check release feature dependency lock
-        run: cargo metadata --locked --features release-binary --format-version 1 >/dev/null
-
+        run: |
+          cargo metadata \
+            --locked \
+            --features \
+            release-binary \
+            --format-version 1 \
+          >/dev/null
       - name: Run tests
         run: cargo test --locked
-
       - name: Check package metadata
         run: cargo package --locked --allow-dirty --no-verify

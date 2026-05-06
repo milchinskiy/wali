@@ -62,6 +62,18 @@ same patch:
 
 README should stay small. It is a landing page, not the reference manual.
 
+## Continuous integration scope
+
+The CI workflow is intentionally limited to changes that can affect the Rust
+crate, bundled Lua modules, tests, install script, or workflow definitions.
+Documentation-only, example-only, changelog-only, license-only, and community
+health file changes do not start the full Rust CI job.
+
+The release workflow is different: release builds run only for explicit
+`vX.Y.Z` tag pushes or manual `workflow_dispatch` runs. GitHub does not apply
+path filters to tag pushes, and a release tag is an explicit publishing action,
+so release packaging should not be skipped by source-path filters.
+
 ## Release preparation
 
 For a release tag:
