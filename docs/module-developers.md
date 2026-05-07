@@ -499,8 +499,8 @@ semantics.
 `metadata(path, { follow = false })` when the module owns the path itself.
 `list_dir` returns entries sorted by name for deterministic module behavior.
 `walk` returns the same entry shape as `ctx.host.fs.walk`, uses lstat-style
-metadata, does not follow symlinks, and supports `include_root`, `max_depth`,
-and `order` options.
+metadata, does not follow symlinks, and supports `include_root`, non-negative
+`max_depth`, and `order` options.
 
 ## Codec API
 

@@ -208,6 +208,47 @@ return {{
 }
 
 #[test]
+fn tree_modules_reject_invalid_max_depth_during_check() {
+    let sandbox = Sandbox::new("tree-max-depth-contract");
+    let src = lua_string(&sandbox.path("src"));
+    let dest = lua_string(&sandbox.path("dest"));
+
+    for (module, task_prefix) in [
+        ("wali.builtin.copy_tree", "copy tree"),
+        ("wali.builtin.link_tree", "link tree"),
+    ] {
+        for (max_depth, needle) in [
+            ("-1", "max_depth must be zero or greater"),
+            ("4294967296", "max_depth must not be greater than 4294967295"),
+        ] {
+            let manifest = sandbox.write_manifest(&format!(
+                r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = {},
+            module = {},
+            args = {{ src = {}, dest = {}, max_depth = {} }},
+        }},
+    }},
+}}
+"#,
+                lua_quote(&format!("{task_prefix} invalid max_depth {max_depth}")),
+                lua_quote(module),
+                src,
+                dest,
+                max_depth,
+            ));
+
+            assert_check_failure_contains(&manifest, needle);
+        }
+    }
+}
+
+#[test]
 fn copy_tree_preflight_rejects_conflicts_before_mutation() {
     let sandbox = Sandbox::new("copy-preflight");
     let src = sandbox.path("src");

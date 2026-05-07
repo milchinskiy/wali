@@ -401,6 +401,25 @@ function lib.validate_safe_remove_path(ctx, path)
 	return nil
 end
 
+function lib.validate_max_depth(value)
+	if value == nil then
+		return nil
+	end
+	if type(value) ~= "number" then
+		return lib.validation_error("max_depth must be an integer")
+	end
+	if value % 1 ~= 0 then
+		return lib.validation_error("max_depth must be an integer")
+	end
+	if value < 0 then
+		return lib.validation_error("max_depth must be zero or greater")
+	end
+	if value > 4294967295 then
+		return lib.validation_error("max_depth must not be greater than 4294967295")
+	end
+	return nil
+end
+
 function lib.validate_tree_roots(ctx, src, dest)
 	local src_error = lib.validate_absolute_path(ctx, src, "src")
 	if src_error ~= nil then

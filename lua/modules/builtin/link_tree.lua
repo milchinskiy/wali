@@ -60,6 +60,11 @@ return {
 	},
 
 	validate = function(ctx, args)
+		local max_depth_error = lib.validate_max_depth(args.max_depth)
+		if max_depth_error ~= nil then
+			return max_depth_error
+		end
+
 		local root_error = lib.validate_tree_roots(ctx, args.src, args.dest)
 		if root_error ~= nil then
 			return root_error
