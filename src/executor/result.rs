@@ -237,17 +237,8 @@ fn trim_empty_string(value: &mut Option<String>) {
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct ValidationResult {
     pub ok: bool,
     pub message: Option<String>,
-}
-
-impl Default for ValidationResult {
-    fn default() -> Self {
-        Self {
-            ok: true,
-            message: None,
-        }
-    }
 }

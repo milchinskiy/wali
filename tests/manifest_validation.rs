@@ -381,6 +381,19 @@ fn lua_module_result_unknown_fields_are_rejected() {
 }"#,
             "invalid apply result",
         ),
+        (
+            "validation-result-missing-ok",
+            "check",
+            r#"return {
+    validate = function(ctx, args)
+        return { message = "missing ok" }
+    end,
+    apply = function(ctx, args)
+        return nil
+    end,
+}"#,
+            "invalid validation result",
+        ),
     ];
 
     for (name, command, module, needle) in cases {
