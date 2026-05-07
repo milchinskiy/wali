@@ -114,11 +114,11 @@ return {
 				count_entry(counts, "file")
 				result:merge(ctx.host.fs.copy_file(entry.path, path, lib.tree_copy_file_opts(args, entry.metadata)))
 			elseif entry.kind == "symlink" then
-				count_entry(counts, "symlink")
 				if args.symlinks == "preserve" then
 					if entry.link_target == nil then
 						error("source symlink has no target in walk output: " .. entry.path)
 					end
+					count_entry(counts, "symlink")
 					lib.ensure_symlink(ctx, result, path, entry.link_target, args.replace)
 				elseif args.symlinks == "skip" then
 					counts.skipped = counts.skipped + 1

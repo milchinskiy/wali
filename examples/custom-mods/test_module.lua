@@ -1,5 +1,4 @@
-local apply_result = require("wali.api").result.apply
-local validation_result = require("wali.api").result.validation
+local lib = require("wali.builtin.lib")
 
 return {
 	name = "test module",
@@ -22,13 +21,12 @@ return {
 	},
 
 	validate = function(ctx, args)
-		return validation_result():ok():build()
+		return lib.validate_absolute_path(ctx, args.target, "target")
 	end,
 
 	apply = function(ctx, args)
-		local result = apply_result()
-		result:created(args.target)
-		result:unchanged(args.source)
-		return result:build()
+		return ctx.host.fs.write(args.target, "source=" .. args.source .. "\n", {
+			create_parents = true,
+		})
 	end,
 }

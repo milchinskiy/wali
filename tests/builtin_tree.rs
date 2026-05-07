@@ -121,6 +121,68 @@ return {{
 }
 
 #[test]
+fn copy_tree_skip_symlinks_reports_skipped_without_copying_link() {
+    let sandbox = Sandbox::new("copy-tree-skip-symlinks");
+    let src = sandbox.path("src");
+    let dest = sandbox.path("dest");
+    std::fs::create_dir_all(&src).expect("failed to create source tree");
+    std::fs::write(src.join("root.txt"), "root\n").expect("failed to write source file");
+    std::os::unix::fs::symlink("root.txt", src.join("root.link")).expect("failed to create source symlink");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "copy tree",
+            module = "wali.builtin.copy_tree",
+            args = {{ src = {}, dest = {}, symlinks = "skip" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&src),
+        lua_string(&dest),
+    ));
+
+    let first = run_apply(&manifest);
+    assert_task_changed(&first, "copy tree");
+    assert_eq!(std::fs::read_to_string(dest.join("root.txt")).unwrap(), "root\n");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(dest.join("root.link")),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "skipped symlink must not be copied"
+    );
+
+    let result = task_result(&first, "copy tree");
+    assert_eq!(result.pointer("/data/counts/file").and_then(Value::as_u64), Some(1));
+    assert_eq!(result.pointer("/data/counts/symlink").and_then(Value::as_u64), Some(0));
+    assert_eq!(result.pointer("/data/counts/skipped").and_then(Value::as_u64), Some(1));
+    assert!(
+        result
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| message.contains("1 files, 0 symlinks")),
+        "copy_tree summary should not count skipped symlinks as copied: {result:#}"
+    );
+
+    let second = run_apply(&manifest);
+    assert_task_unchanged(&second, "copy tree");
+    assert!(
+        matches!(
+            std::fs::symlink_metadata(dest.join("root.link")),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "skipped symlink must remain absent after idempotent apply"
+    );
+}
+
+#[test]
 fn list_dir_returns_entries_in_deterministic_order() {
     let sandbox = Sandbox::new("list-dir-order");
     let modules = sandbox.mkdir("modules");

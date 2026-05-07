@@ -138,7 +138,7 @@ return {
 			arg5 = { type = "integer", default = -123 },
 			arg6 = { type = "boolean", default = true },
 			arg7 = { type = "list", items = { type = "number" }, default = { 1, 2, 3 } },
-			arg8 = { type = "tuple", items = { { type = "number" }, { type = "integer" } }, default = { 1, 1.23 } },
+			arg8 = { type = "tuple", items = { { type = "number" }, { type = "integer" } }, default = { 1.23, 2 } },
 			arg9 = { type = "enum", values = { "a", "b", "c", null }, default = null },
 			arg10 = { type = "object", props = { a = { type = "string" } }, default = { a = "test" } },
 			arg11 = { type = "map", value = { type = "string" }, default = { a = "test" } },
