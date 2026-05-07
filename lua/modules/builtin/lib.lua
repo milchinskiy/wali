@@ -81,7 +81,7 @@ function lib.mode_bits(value)
 	local text = value
 	if text:sub(1, 2) == "0o" or text:sub(1, 2) == "0O" then
 		text = text:sub(3)
-	elseif text:sub(1, 1) == "0" then
+	elseif text:sub(1, 1) == "0" and #text > 1 then
 		text = text:sub(2)
 	end
 

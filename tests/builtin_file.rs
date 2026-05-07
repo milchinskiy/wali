@@ -38,6 +38,34 @@ fn file_mode(path: &Path) -> u32 {
 }
 
 #[test]
+fn builtin_file_accepts_zero_mode_string() {
+    let sandbox = Sandbox::new("builtin-file-zero-mode");
+    let path = sandbox.path("locked.txt");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "write locked file",
+            module = "wali.builtin.file",
+            args = {{ path = {}, content = "locked\n", mode = "0" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&path),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "write locked file");
+    assert_eq!(file_mode(&path), 0);
+}
+
+#[test]
 fn local_file_path_modules_are_idempotent_and_cleanup_safe() {
     let sandbox = Sandbox::new("primitives");
     let root = sandbox.path("root");
