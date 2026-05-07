@@ -269,18 +269,30 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.check-release.outputs.commit }}
+
       - name: Download release package set
         uses: actions/download-artifact@v8
         with:
           name: wali-release-packages
           path: dist
+
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.check-release.outputs.tag }}
+          TARGET: ${{ needs.check-release.outputs.commit }}
         run: |-
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+          if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --repo "$GH_REPO" --clobber
           else
-            gh release create "$TAG" dist/* --title "$TAG" --generate-notes
+            gh release create "$TAG" dist/* \
+              --repo "$GH_REPO" \
+              --title "$TAG" \
+              --target "$TARGET" \
+              --generate-notes
           fi
