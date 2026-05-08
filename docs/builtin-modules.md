@@ -408,7 +408,8 @@ directory or symlink is created.
 - destination file/symlink conflicts are refused unless `replace = true`;
 - destination directory conflicts are never replaced by links;
 - source `other` entries are refused unless `allow_special = true`;
-- `max_depth` must be zero or greater and limits the source walk depth when provided;
+- `max_depth` must be zero or greater and limits the source walk depth when
+  provided;
 - `dir_mode` and `dir_owner` apply only to created or updated destination
   directories;
 - extra destination entries are not pruned.
@@ -454,7 +455,8 @@ directory or symlink is created.
 - destination symlinks that resolve to directories or special entries are
   refused during preflight where copied files are expected;
 - destination file/symlink paths may be replaced only when `replace = true`;
-- `max_depth` must be zero or greater and limits the source walk depth when provided;
+- `max_depth` must be zero or greater and limits the source walk depth when
+  provided;
 - extra destination entries are not pruned.
 
 `dir_mode` / `file_mode` override source modes. Without overrides,

@@ -251,10 +251,18 @@ jobs:
       - name: Smoke test local Linux package install
         run: |
           install_dir="$RUNNER_TEMP/wali-bin"
+          data_dir="$RUNNER_TEMP/wali-data"
           WALI_PACKAGE="$PWD/dist/wali-linux-x86_64.tar.gz" \
             WALI_INSTALL_DIR="$install_dir" \
+            WALI_DATA_DIR="$data_dir" \
             sh scripts/install.sh
           "$install_dir/wali" --version
+          test -f "$data_dir/types/wali.d.lua"
+          test -f "$data_dir/types/manifest.d.lua"
+          test -f "$data_dir/types/wali/api.d.lua"
+          test -f "$data_dir/types/wali/builtin/lib.d.lua"
+          test -f "$data_dir/types/wali/builtin-modules.d.lua"
+          test -f "$data_dir/.luarc.example.json"
       - name: Upload release package set
         uses: actions/upload-artifact@v7
         with:

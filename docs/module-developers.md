@@ -105,7 +105,11 @@ Wali ships LuaLS definition files under `types/`. They are editor stubs only;
 Wali does not load them at runtime. Add the directory to LuaLS
 `workspace.library` to get completion and diagnostics for `ctx`,
 `require("manifest")`, `require("wali.api")`, and `require("wali.builtin.lib")`.
-The repository also includes `.luarc.example.json`:
+Release packages include the same stubs, and `scripts/install.sh` installs them
+to `${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Use
+`WALI_TYPES_DIR` for a custom location, or `WALI_INSTALL_TYPES=0` to skip
+installing editor support files. The repository also includes
+`.luarc.example.json`:
 
 ```json
 {
@@ -116,9 +120,9 @@ The repository also includes `.luarc.example.json`:
 ```
 
 Copy it to `.luarc.json` or merge the relevant settings into your existing LuaLS
-configuration. LuaLS does not execute Wali schemas, so it cannot infer a module's
-`args` type from `schema`. Annotate module-specific argument tables explicitly
-when useful:
+configuration. LuaLS does not execute Wali schemas, so it cannot infer a
+module's `args` type from `schema`. Annotate module-specific argument tables
+explicitly when useful:
 
 ```lua
 ---@class ExampleFileArgs
