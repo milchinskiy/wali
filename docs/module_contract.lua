@@ -1,3 +1,10 @@
+-- Compact Lua-facing module contract reference.
+--
+-- For LuaLS/editor completion, use the definition files under ../types/. They
+-- contain the machine-readable contract for ctx, require("manifest"),
+-- require("wali.api"), require("wali.builtin.lib"), and builtin module
+-- argument tables. This file remains a readable overview and example.
+--
 -- Lua execution phases:
 --
 -- requires  -> checked by Rust against the effective backend before module Lua
@@ -146,9 +153,9 @@ return {
 	},
 
 	---Validate input arguments (optional). Return nil/{ ok = true } when valid.
-	---@param ctx table
+	---@param ctx WaliValidateCtx
 	---@param args any
-	---@return nil|{ ok: boolean, message: string? }
+	---@return nil|WaliValidationResult
 	validate = function(ctx, args)
 		-- nil means ok
 		return nil
@@ -159,9 +166,9 @@ return {
 	end,
 
 	---Apply the task. Return an ExecutionResult-compatible table.
-	---@param ctx table
+	---@param ctx WaliApplyCtx
 	---@param args any
-	---@return { changes: table[], message: string?, data: any? }
+	---@return WaliExecutionResult
 	apply = function(ctx, args)
 		-- do something
 		return {

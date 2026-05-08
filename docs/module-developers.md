@@ -99,6 +99,72 @@ return {
 `apply` is required for a module used by `wali apply`. `requires`, `schema`, and
 `validate` are optional, but serious modules should normally use all three.
 
+## Editor support
+
+Wali ships LuaLS definition files under `types/`. They are editor stubs only;
+Wali does not load them at runtime. Add the directory to LuaLS
+`workspace.library` to get completion and diagnostics for raw manifests
+(`WaliManifestDefinition`), `ctx`, `require("manifest")`, `require("wali.api")`,
+and `require("wali.builtin.lib")`. Release packages include the same stubs, and
+`scripts/install.sh` installs them to
+`${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Use
+`WALI_TYPES_DIR` for a custom location, or `WALI_INSTALL_TYPES=0` to skip
+installing editor support files. The repository also includes
+`.luarc.example.json`:
+
+```json
+{
+  "runtime.version": "Lua 5.4",
+  "workspace.library": ["./types"],
+  "diagnostics.globals": ["null"]
+}
+```
+
+Copy it to `.luarc.json` or merge the relevant settings into your existing LuaLS
+configuration. LuaLS does not execute Wali schemas, so it cannot infer a
+module's `args` type from `schema`. The stubs expose `WaliModule<TArgs>`, so
+annotate module-specific argument tables explicitly when useful:
+
+```lua
+---@class ExampleFileArgs
+---@field path string
+---@field content string
+---@field mode? string
+
+---@type WaliModule<ExampleFileArgs>
+return {
+    name = "example file",
+    description = "writes one file",
+
+    ---@param ctx WaliValidateCtx
+    ---@param args ExampleFileArgs
+    validate = function(ctx, args)
+        if not ctx.host.path.is_absolute(args.path) then
+            return { ok = false, message = "path must be absolute" }
+        end
+        return nil
+    end,
+
+    ---@param ctx WaliApplyCtx
+    ---@param args ExampleFileArgs
+    apply = function(ctx, args)
+        return ctx.host.fs.write(args.path, args.content, {
+            create_parents = true,
+        })
+    end,
+}
+```
+
+The split between `WaliValidateCtx` and `WaliApplyCtx` is intentional. It lets
+LuaLS flag accidental use of apply-only APIs such as `ctx.host.cmd.*`,
+`ctx.host.fs.write`, `ctx.transfer.push_file`, `ctx.rand.*`, or `ctx.sleep_ms`
+inside validation code.
+
+Builtin module argument table types are available as `WaliBuiltinFileArgs`,
+`WaliBuiltinCommandArgs`, `WaliBuiltinTemplateArgs`, and similar classes in
+`types/wali/builtin-modules.d.lua`. External module repositories should ship
+their own `types/*.d.lua` files for their public task modules.
+
 ## Shared helper library
 
 Custom modules may import `wali.builtin.lib` when they want the same small

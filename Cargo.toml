@@ -1,6 +1,6 @@
 [package]
 name = "wali"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.94.0"
 description = "A small agentless automation tool for local and SSH hosts with Lua manifests and modules"
@@ -14,12 +14,14 @@ include = [
   "Cargo.lock",
   "README.md",
   "CHANGELOG.md",
+  ".luarc.example.json",
   "LICENSE-APACHE",
   "LICENSE-MIT",
   "SECURITY.md",
   "CONTRIBUTING.md",
   "src/**",
   "lua/**",
+  "types/**",
   "docs/**",
   "examples/**",
   "scripts/**",

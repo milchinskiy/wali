@@ -6,6 +6,31 @@ This project uses pre-1.0 semantic versioning. Patch releases should remain
 compatible within the documented 0.1 contract where practical, but manifest,
 module, and state-file contracts may still evolve before 1.0.
 
+## 0.1.1
+
+### Added
+
+- LuaLS definition files under `types/` for manifest authoring, custom module
+  development, builtin module argument tables, `wali.api`, and
+  `wali.builtin.lib`.
+- LuaLS module stubs for builtin task modules, so direct imports such as
+  `require("wali.builtin.file")` have a typed `WaliModule<...>` shape in
+  editors.
+- Builtin-aware `manifest.task(...)` typing so editor completion can suggest
+  builtin module argument shapes.
+- `.luarc.example.json` with a minimal LuaLS configuration for the repository
+  stubs and Wali's global `null` sentinel.
+
+### Changed
+
+- Release archives and Cargo packages now include the LuaLS stubs and example
+  LuaLS configuration.
+- `scripts/install.sh` installs LuaLS stubs to
+  `${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Use
+  `WALI_TYPES_DIR` to choose a different destination or `WALI_INSTALL_TYPES=0`
+  to install only the binary.
+- CI and release packaging checks now cover the shipped LuaLS contract files.
+
 ## 0.1.0
 
 Initial public release.

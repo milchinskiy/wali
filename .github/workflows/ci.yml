@@ -8,6 +8,8 @@ name: CI
       - Cargo.lock
       - src/**
       - lua/**
+      - types/**
+      - .luarc.example.json
       - tests/**
       - scripts/**
       - .github/workflows/ci.yml
@@ -19,6 +21,8 @@ name: CI
       - Cargo.lock
       - src/**
       - lua/**
+      - types/**
+      - .luarc.example.json
       - tests/**
       - scripts/**
       - .github/workflows/ci.yml

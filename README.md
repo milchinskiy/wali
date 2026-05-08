@@ -29,9 +29,12 @@ curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/ins
 Useful installer overrides:
 
 ```sh
-WALI_VERSION=v0.1.0 sh scripts/install.sh
+WALI_VERSION=v0.1.1 sh scripts/install.sh
 WALI_INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
 WALI_PACKAGE=./wali-linux-x86_64.tar.gz sh scripts/install.sh
+WALI_DATA_DIR="$HOME/.local/share/wali" sh scripts/install.sh
+WALI_TYPES_DIR="$HOME/.local/share/wali/types" sh scripts/install.sh
+WALI_INSTALL_TYPES=0 sh scripts/install.sh
 ```
 
 Requirements for building from source are Rust 1.94.0 or newer, a C toolchain,
@@ -177,6 +180,17 @@ Pin `ref` to a release tag for reproducible manifests. During development,
 
 See the `wali-ops` README for the full external module reference.
 
+## Lua editor support
+
+Wali ships LuaLS definition files under [`types/`](types/). Add that directory
+to LuaLS `workspace.library` for completion and diagnostics for raw manifest
+tables, the `require("manifest")` helper, custom modules, `ctx`, `wali.api`, and
+`wali.builtin.lib`. The release installer copies these stubs to
+`${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Set
+`WALI_TYPES_DIR` to install them elsewhere, or set `WALI_INSTALL_TYPES=0` to
+skip editor stub installation. The repository includes
+[`.luarc.example.json`](.luarc.example.json) as a starting point.
+
 ## Documentation
 
 - [`docs/philosophy.md`](docs/philosophy.md) describes the project goals,
@@ -189,7 +203,9 @@ See the `wali-ops` README for the full external module reference.
 - [`docs/builtin-modules.md`](docs/builtin-modules.md) is the detailed builtin
   module reference.
 - [`docs/module-developers.md`](docs/module-developers.md) explains how to write
-  custom Lua modules.
+  custom Lua modules, including LuaLS editor setup.
+- [`types/`](types/) contains LuaLS definition files for manifests, module
+  contexts, helper libraries, and builtin module argument tables.
 - [`docs/module_contract.lua`](docs/module_contract.lua) is a compact Lua-facing
   contract reference.
 - [`docs/development.md`](docs/development.md) covers maintainer checks and the
