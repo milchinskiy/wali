@@ -112,6 +112,71 @@ Target-host filesystem paths are absolute unless a module documents otherwise.
 Controller-side paths used by transfer and template modules may be absolute or
 relative to manifest `base_path`.
 
+## External modules
+
+Wali can load task modules from local directories or Git repositories. The core
+repository ships only the `wali.builtin.*` modules. Higher-level operational
+modules are kept outside the core so the engine stays small and the module set
+can evolve independently.
+
+The official companion module repository is
+[`wali-ops`](https://github.com/milchinskiy/wali-ops). It provides small,
+command-shaped modules for common host operations such as package managers,
+services, users, groups, downloads, and text-file edits.
+
+To use `wali-ops`, add it as a Git module source in your manifest:
+
+```lua
+local m = require("manifest")
+
+return {
+    modules = {
+        {
+            namespace = "ops",
+            git = {
+                url = "https://github.com/milchinskiy/wali-ops.git",
+                ref = "v0.1.0",
+                path = "modules",
+                depth = 1,
+            },
+        },
+    },
+
+    hosts = {
+        m.host.localhost("localhost"),
+    },
+
+    tasks = {
+        m.task("apt update")("ops.pkg.apt.update"),
+
+        m.task("install curl")("ops.pkg.apt.install", {
+            packages = { "curl" },
+        }, {
+            depends_on = { "apt update" },
+        }),
+
+        m.task("ensure deploy group")("ops.group.create", {
+            name = "deploy",
+            system = true,
+        }),
+
+        m.task("ensure deploy user")("ops.user.create", {
+            name = "deploy",
+            group = "deploy",
+            system = true,
+            create_home = false,
+        }, {
+            depends_on = { "ensure deploy group" },
+        }),
+    },
+}
+```
+
+Pin `ref` to a release tag for reproducible manifests. During development,
+`master` may be useful, but released examples should prefer tags.
+
+See the `wali-ops` README for the full external module reference.
+
 ## Documentation
 
 - [`docs/philosophy.md`](docs/philosophy.md) describes the project goals,
@@ -129,6 +194,9 @@ relative to manifest `base_path`.
   contract reference.
 - [`docs/development.md`](docs/development.md) covers maintainer checks and the
   release workflow.
+- [`wali-ops`](https://github.com/milchinskiy/wali-ops) provides the companion
+  external module set for package managers, services, users, groups, downloads,
+  and text-file edits.
 
 ## License
 
