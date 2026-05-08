@@ -115,12 +115,54 @@ mod tests {
         let builtin_docs = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/builtin-modules.md"));
         let module_contract = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/module_contract.lua"));
         let readme = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"));
+        let builtin_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali/builtin-modules.d.lua"));
 
         for module in MODULES.iter().filter(|module| module.task_module) {
             let section = format!("## `{}`", module.name);
             assert!(builtin_docs.contains(&section), "missing builtin docs section for {}", module.name);
             assert!(module_contract.contains(module.name), "missing module_contract entry for {}", module.name);
             assert!(readme.contains(module.name), "missing README entry for {}", module.name);
+            assert!(builtin_types.contains(module.name), "missing LuaLS type entry for {}", module.name);
+        }
+    }
+
+    #[test]
+    fn lua_lsp_contract_mentions_core_runtime_surface() {
+        let core_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali.d.lua"));
+        let manifest_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/manifest.d.lua"));
+        let api_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali/api.d.lua"));
+        let lib_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali/builtin/lib.d.lua"));
+
+        for item in [
+            "WaliValidateCtx",
+            "WaliApplyCtx",
+            "WaliHostFsReadApi",
+            "WaliHostFsApplyApi",
+            "WaliCommandApi",
+            "WaliControllerCtx",
+            "WaliApplyTransferApi",
+            "WaliModule",
+            "WaliSchema",
+        ] {
+            assert!(core_types.contains(item), "missing core LuaLS type: {item}");
+        }
+
+        for item in ["host.localhost", "host.ssh", "manifest.task"] {
+            assert!(manifest_types.contains(item), "missing manifest LuaLS type: {item}");
+        }
+
+        for item in ["api.result.apply", "api.result.validation", "WaliApplyResultBuilder"] {
+            assert!(api_types.contains(item), "missing wali.api LuaLS type: {item}");
+        }
+
+        for item in [
+            "lib.schema.mode",
+            "lib.validation_error",
+            "lib.mode_bits",
+            "lib.validate_absolute_path",
+            "lib.apply_mode_owner",
+        ] {
+            assert!(lib_types.contains(item), "missing wali.builtin.lib LuaLS type: {item}");
         }
     }
 }

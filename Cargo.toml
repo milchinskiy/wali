@@ -20,6 +20,7 @@ include = [
   "CONTRIBUTING.md",
   "src/**",
   "lua/**",
+  "types/**",
   "docs/**",
   "examples/**",
   "scripts/**",

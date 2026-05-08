@@ -8,6 +8,7 @@ name: CI
       - Cargo.lock
       - src/**
       - lua/**
+      - types/**
       - tests/**
       - scripts/**
       - .github/workflows/ci.yml
@@ -19,6 +20,7 @@ name: CI
       - Cargo.lock
       - src/**
       - lua/**
+      - types/**
       - tests/**
       - scripts/**
       - .github/workflows/ci.yml

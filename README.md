@@ -177,6 +177,13 @@ Pin `ref` to a release tag for reproducible manifests. During development,
 
 See the `wali-ops` README for the full external module reference.
 
+## Lua editor support
+
+Wali ships LuaLS definition files under [`types/`](types/). Add that directory
+to LuaLS `workspace.library` for completion and diagnostics for manifests,
+custom modules, `ctx`, `wali.api`, and `wali.builtin.lib`. The repository
+includes [`.luarc.example.json`](.luarc.example.json) as a starting point.
+
 ## Documentation
 
 - [`docs/philosophy.md`](docs/philosophy.md) describes the project goals,
@@ -189,7 +196,9 @@ See the `wali-ops` README for the full external module reference.
 - [`docs/builtin-modules.md`](docs/builtin-modules.md) is the detailed builtin
   module reference.
 - [`docs/module-developers.md`](docs/module-developers.md) explains how to write
-  custom Lua modules.
+  custom Lua modules, including LuaLS editor setup.
+- [`types/`](types/) contains LuaLS definition files for manifests, module
+  contexts, helper libraries, and builtin module argument tables.
 - [`docs/module_contract.lua`](docs/module_contract.lua) is a compact Lua-facing
   contract reference.
 - [`docs/development.md`](docs/development.md) covers maintainer checks and the

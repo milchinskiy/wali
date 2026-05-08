@@ -172,6 +172,8 @@ jobs:
           cp "target/${{ matrix.target }}/release/wali" "$package_dir/wali"
           chmod 0755 "$package_dir/wali"
           cp LICENSE-APACHE LICENSE-MIT README.md CHANGELOG.md "$package_dir/"
+          cp .luarc.example.json "$package_dir/"
+          cp -R types "$package_dir/"
           printf '%s\n' "$version" > "$package_dir/VERSION"
           tar -czf "dist/${{ matrix.asset }}" -C "$package_dir" .
       - name: Upload package artifact

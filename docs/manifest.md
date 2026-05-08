@@ -50,6 +50,10 @@ The helper rejects unknown option names and non-table option values. Helper ids
 and task module names must be strings without leading/trailing whitespace or
 control characters.
 
+LuaLS users can add `types/` to `workspace.library` to get completion for
+`require("manifest")`, host helpers, task helper options, and Wali's `null`
+sentinel. `.luarc.example.json` contains a minimal setup.
+
 ## Top-level fields
 
 ### `name`
