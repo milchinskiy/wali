@@ -4,6 +4,7 @@ A manifest is a Lua file that returns a table. The table describes hosts,
 optional custom module sources, variables, and tasks.
 
 ```lua
+---@type WaliManifestDefinition
 return {
     name = "demo",
     base_path = ".",
@@ -51,8 +52,9 @@ and task module names must be strings without leading/trailing whitespace or
 control characters.
 
 LuaLS users can add `types/` to `workspace.library` to get completion for
-`require("manifest")`, host helpers, task helper options, and Wali's `null`
-sentinel. `.luarc.example.json` contains a minimal setup.
+raw manifest tables (`WaliManifestDefinition`), `require("manifest")`, host
+helpers, task helper options, module sources, host selectors, `when` predicates,
+and Wali's `null` sentinel. `.luarc.example.json` contains a minimal setup.
 
 ## Top-level fields
 

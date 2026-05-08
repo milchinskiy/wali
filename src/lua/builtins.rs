@@ -123,6 +123,12 @@ mod tests {
             assert!(module_contract.contains(module.name), "missing module_contract entry for {}", module.name);
             assert!(readme.contains(module.name), "missing README entry for {}", module.name);
             assert!(builtin_types.contains(module.name), "missing LuaLS type entry for {}", module.name);
+
+            let stub_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("types")
+                .join(module.name.replace('.', "/"))
+                .with_extension("d.lua");
+            assert!(stub_path.is_file(), "missing LuaLS module stub for {}", module.name);
         }
     }
 
@@ -142,12 +148,23 @@ mod tests {
             "WaliControllerCtx",
             "WaliApplyTransferApi",
             "WaliModule",
-            "WaliSchema",
+            "WaliRequirement",
+            "WaliObjectSchema",
+            "WaliMapSchema",
         ] {
             assert!(core_types.contains(item), "missing core LuaLS type: {item}");
         }
 
-        for item in ["host.localhost", "host.ssh", "manifest.task"] {
+        for item in [
+            "WaliManifestDefinition",
+            "WaliManifestModuleSource",
+            "WaliManifestGitSource",
+            "WaliManifestHostSelector",
+            "WaliManifestWhen",
+            "host.localhost",
+            "host.ssh",
+            "manifest.task",
+        ] {
             assert!(manifest_types.contains(item), "missing manifest LuaLS type: {item}");
         }
 

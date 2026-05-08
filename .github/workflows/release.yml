@@ -214,6 +214,8 @@ jobs:
           "target/package/wali-$version-macos-universal/wali"
           cp LICENSE-APACHE LICENSE-MIT README.md CHANGELOG.md \
           "target/package/wali-$version-macos-universal/"
+          cp .luarc.example.json "target/package/wali-$version-macos-universal/"
+          cp -R types "target/package/wali-$version-macos-universal/"
           printf '%s\n' "$version" > \
           "target/package/wali-$version-macos-universal/VERSION"
           tar -czf dist/wali-macos-universal.tar.gz \
@@ -246,6 +248,14 @@ jobs:
           test -f wali-linux-x86_64.tar.gz
           test -f wali-linux-aarch64.tar.gz
           test -f wali-macos-universal.tar.gz
+          for package in *.tar.gz; do
+            tar -tzf "$package" | grep -qx './types/wali.d.lua'
+            tar -tzf "$package" | grep -qx './types/manifest.d.lua'
+            tar -tzf "$package" | grep -qx './types/wali/api.d.lua'
+            tar -tzf "$package" | grep -qx './types/wali/builtin/lib.d.lua'
+            tar -tzf "$package" | grep -qx './types/wali/builtin-modules.d.lua'
+            tar -tzf "$package" | grep -qx './.luarc.example.json'
+          done
           sha256sum *.tar.gz > sha256sums.txt
           cat sha256sums.txt
       - name: Smoke test local Linux package install

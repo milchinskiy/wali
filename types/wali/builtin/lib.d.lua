@@ -57,8 +57,8 @@ function lib.owner(value) end
 function lib.validate_owner(value, field) end
 
 ---@class WaliModeOwnerSpec
----@field mode? string
----@field owner? string
+---@field mode? string Argument field name containing an octal mode string. Defaults to 'mode'.
+---@field owner? string Argument field name containing a WaliOwner object. Defaults to 'owner'.
 
 ---@param args table
 ---@param spec? WaliModeOwnerSpec
@@ -141,6 +141,8 @@ function lib.command_error(output, detail) end
 ---@return WaliCommandOutput
 function lib.assert_command_ok(output, detail) end
 
+---@overload fun(kind: 'shell', value: string): string
+---@overload fun(kind: 'exec', value: WaliExecCommandRequest): string
 ---@param kind 'exec'|'shell'
 ---@param value string|WaliExecCommandRequest
 ---@return string

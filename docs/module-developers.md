@@ -103,10 +103,11 @@ return {
 
 Wali ships LuaLS definition files under `types/`. They are editor stubs only;
 Wali does not load them at runtime. Add the directory to LuaLS
-`workspace.library` to get completion and diagnostics for `ctx`,
-`require("manifest")`, `require("wali.api")`, and `require("wali.builtin.lib")`.
-Release packages include the same stubs, and `scripts/install.sh` installs them
-to `${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Use
+`workspace.library` to get completion and diagnostics for raw manifests
+(`WaliManifestDefinition`), `ctx`, `require("manifest")`, `require("wali.api")`,
+and `require("wali.builtin.lib")`. Release packages include the same stubs, and
+`scripts/install.sh` installs them to
+`${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Use
 `WALI_TYPES_DIR` for a custom location, or `WALI_INSTALL_TYPES=0` to skip
 installing editor support files. The repository also includes
 `.luarc.example.json`:
@@ -121,8 +122,8 @@ installing editor support files. The repository also includes
 
 Copy it to `.luarc.json` or merge the relevant settings into your existing LuaLS
 configuration. LuaLS does not execute Wali schemas, so it cannot infer a
-module's `args` type from `schema`. Annotate module-specific argument tables
-explicitly when useful:
+module's `args` type from `schema`. The stubs expose `WaliModule<TArgs>`, so
+annotate module-specific argument tables explicitly when useful:
 
 ```lua
 ---@class ExampleFileArgs
@@ -130,7 +131,7 @@ explicitly when useful:
 ---@field content string
 ---@field mode? string
 
----@type WaliModule
+---@type WaliModule<ExampleFileArgs>
 return {
     name = "example file",
     description = "writes one file",

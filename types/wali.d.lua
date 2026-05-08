@@ -5,7 +5,7 @@
 -- These definitions describe the public Lua surface available to manifests and
 -- custom modules. They are editor stubs only; Wali does not load them at runtime.
 
----@class WaliJsonNull
+---@class WaliJsonNull: userdata
 
 ---@type WaliJsonNull
 null = nil
@@ -106,11 +106,16 @@ null = nil
 ---@field depends_on string[]
 ---@field on_change string[]
 
+---@alias WaliRunAsEnvPolicy 'preserve'|'clear'|WaliRunAsKeepEnv
+
+---@class WaliRunAsKeepEnv
+---@field keep string[] Environment variables to preserve.
+
 ---@class WaliRunAs
 ---@field id string
 ---@field user string
 ---@field via WaliRunAsVia
----@field env_policy 'preserve'|'clear'|table<string, boolean>|string[]
+---@field env_policy WaliRunAsEnvPolicy
 ---@field extra_flags string[]
 ---@field l10n_prompts string[]
 ---@field pty WaliPtyMode
@@ -250,8 +255,8 @@ null = nil
 ---@class WaliCommandOutput
 ---@field ok boolean
 ---@field status WaliCommandStatus
----@field stdout? string Split stdout bytes as a Lua string.
----@field stderr? string Split stderr bytes as a Lua string.
+---@field stdout? string Standard output bytes as a Lua string.
+---@field stderr? string Standard error bytes as a Lua string.
 ---@field output? string Combined PTY output bytes as a Lua string.
 
 ---@class WaliCommandStatus
@@ -281,16 +286,16 @@ null = nil
 ---@field pull_file fun(src: string, dest: string, opts?: WaliPullFileOpts): WaliExecutionResult
 
 ---@class WaliRandApi
----@field irange fun(min: integer, max: integer): integer
+---@field irange fun(min: integer, max: integer): integer Non-negative inclusive integer range.
 ---@field frange fun(min: number, max: number): number
----@field ratio fun(numerator: integer, denominator: integer): boolean
+---@field ratio fun(numerator: integer, denominator: integer): boolean True with probability numerator/denominator; denominator must be greater than zero.
 
 ---@class WaliValidationResult
 ---@field ok boolean
 ---@field message? string
 
 ---@class WaliExecutionResult
----@field changes WaliExecutionChange[]
+---@field changes? WaliExecutionChange[] Defaults to an empty list when omitted by a custom module.
 ---@field message? string
 ---@field data? WaliJsonValue
 
@@ -300,42 +305,114 @@ null = nil
 ---@field path? string Required for changed fs_entry records.
 ---@field detail? string
 
----@class WaliModule
+---@generic TArgs
+---@class WaliModule<TArgs>
 ---@field name string Human-readable module name.
 ---@field description string Human-readable module description.
 ---@field requires? WaliRequirement
 ---@field schema? WaliSchema
----@field validate? fun(ctx: WaliValidateCtx, args: any): WaliValidationResult?
----@field apply fun(ctx: WaliApplyCtx, args: any): WaliExecutionResult?
+---@field validate? fun(ctx: WaliValidateCtx, args: TArgs): WaliValidationResult?
+---@field apply fun(ctx: WaliApplyCtx, args: TArgs): WaliExecutionResult?
 
----@alias WaliRequirement WaliSimpleRequirement|WaliNotRequirement|WaliAllRequirement|WaliAnyRequirement
+---@alias WaliRequirement
+---| WaliRequirementCommand
+---| WaliRequirementPath
+---| WaliRequirementEnv
+---| WaliRequirementOs
+---| WaliRequirementArch
+---| WaliRequirementHostname
+---| WaliRequirementUser
+---| WaliRequirementGroup
+---| WaliRequirementNot
+---| WaliRequirementAll
+---| WaliRequirementAny
 
----@class WaliSimpleRequirement
----@field command? string
----@field path? string
----@field env? string
----@field os? string
----@field arch? string
----@field hostname? string
----@field user? string
----@field group? string
+---@class WaliRequirementCommand
+---@field command string
 
----@class WaliNotRequirement
+---@class WaliRequirementPath
+---@field path string
+
+---@class WaliRequirementEnv
+---@field env string
+
+---@class WaliRequirementOs
+---@field os string
+
+---@class WaliRequirementArch
+---@field arch string
+
+---@class WaliRequirementHostname
+---@field hostname string
+
+---@class WaliRequirementUser
+---@field user string
+
+---@class WaliRequirementGroup
+---@field group string
+
+---@class WaliRequirementNot
 ---@field not WaliRequirement
 
----@class WaliAllRequirement
+---@class WaliRequirementAll
 ---@field all WaliRequirement[]
 
----@class WaliAnyRequirement
+---@class WaliRequirementAny
 ---@field any WaliRequirement[]
+
+---@alias WaliSchema
+---| WaliAnySchema
+---| WaliNullSchema
+---| WaliStringSchema
+---| WaliNumberSchema
+---| WaliIntegerSchema
+---| WaliBooleanSchema
+---| WaliListSchema
+---| WaliTupleSchema
+---| WaliEnumSchema
+---| WaliObjectSchema
+---| WaliMapSchema
 
 ---@alias WaliSchemaKind 'any'|'null'|'string'|'number'|'integer'|'boolean'|'list'|'tuple'|'enum'|'object'|'map'
 
----@class WaliSchema
----@field type WaliSchemaKind
----@field required? boolean
----@field default? any
----@field items? WaliSchema|WaliSchema[]
----@field values? any[]
----@field props? table<string, WaliSchema>
----@field value? WaliSchema
+---@class WaliSchemaBase
+---@field required? boolean Reject missing input when true.
+---@field default? WaliJsonValue Default value applied before validation.
+
+---@class WaliAnySchema: WaliSchemaBase
+---@field type 'any'
+
+---@class WaliNullSchema: WaliSchemaBase
+---@field type 'null'
+
+---@class WaliStringSchema: WaliSchemaBase
+---@field type 'string'
+
+---@class WaliNumberSchema: WaliSchemaBase
+---@field type 'number'
+
+---@class WaliIntegerSchema: WaliSchemaBase
+---@field type 'integer'
+
+---@class WaliBooleanSchema: WaliSchemaBase
+---@field type 'boolean'
+
+---@class WaliListSchema: WaliSchemaBase
+---@field type 'list'
+---@field items? WaliSchema Item schema. Omitted means arbitrary JSON-like items.
+
+---@class WaliTupleSchema: WaliSchemaBase
+---@field type 'tuple'
+---@field items WaliSchema[] Positional item schemas. Tuple length must match exactly.
+
+---@class WaliEnumSchema: WaliSchemaBase
+---@field type 'enum'
+---@field values WaliJsonValue[] Allowed values. May include the global `null` sentinel.
+
+---@class WaliObjectSchema: WaliSchemaBase
+---@field type 'object'
+---@field props table<string, WaliSchema> Fixed object fields. Unknown input fields are rejected.
+
+---@class WaliMapSchema: WaliSchemaBase
+---@field type 'map'
+---@field value WaliSchema Shared schema for all string-keyed map values.

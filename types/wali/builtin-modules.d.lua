@@ -114,6 +114,22 @@
 ---@field mode? string Octal mode string.
 ---@field owner? WaliOwner
 
+
+---@alias WaliBuiltinModuleArgs
+---| WaliBuiltinDirArgs
+---| WaliBuiltinFileArgs
+---| WaliBuiltinCopyFileArgs
+---| WaliBuiltinPushFileArgs
+---| WaliBuiltinPullFileArgs
+---| WaliBuiltinLinkArgs
+---| WaliBuiltinRemoveArgs
+---| WaliBuiltinTouchArgs
+---| WaliBuiltinLinkTreeArgs
+---| WaliBuiltinCopyTreeArgs
+---| WaliBuiltinPermissionsArgs
+---| WaliBuiltinCommandArgs
+---| WaliBuiltinTemplateArgs
+
 ---@alias WaliBuiltinModuleName
 ---| 'wali.builtin.dir'
 ---| 'wali.builtin.file'

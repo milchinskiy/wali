@@ -9,6 +9,7 @@ name: CI
       - src/**
       - lua/**
       - types/**
+      - .luarc.example.json
       - tests/**
       - scripts/**
       - .github/workflows/ci.yml
@@ -21,6 +22,7 @@ name: CI
       - src/**
       - lua/**
       - types/**
+      - .luarc.example.json
       - tests/**
       - scripts/**
       - .github/workflows/ci.yml
