@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/ins
 Useful installer overrides:
 
 ```sh
-WALI_VERSION=v0.1.1 sh scripts/install.sh
+WALI_VERSION=v0.1.2 sh scripts/install.sh
 WALI_INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
 WALI_PACKAGE=./wali-linux-x86_64.tar.gz sh scripts/install.sh
 WALI_DATA_DIR="$HOME/.local/share/wali" sh scripts/install.sh
@@ -105,7 +105,9 @@ wali.builtin.link
 wali.builtin.link_tree
 wali.builtin.permissions
 wali.builtin.pull_file
+wali.builtin.pull_tree
 wali.builtin.push_file
+wali.builtin.push_tree
 wali.builtin.remove
 wali.builtin.template
 wali.builtin.touch
@@ -113,7 +115,9 @@ wali.builtin.touch
 
 Target-host filesystem paths are absolute unless a module documents otherwise.
 Controller-side paths used by transfer and template modules may be absolute or
-relative to manifest `base_path`.
+relative to manifest `base_path`. Tree transfer is split by namespace:
+`push_tree` reads a controller-side tree and writes a target-host tree, while
+`pull_tree` reads a target-host tree and writes a controller-side tree.
 
 ## External modules
 
