@@ -59,6 +59,10 @@ local apply = function()
 		return self:change(kind, "fs_entry", { path = path, detail = detail })
 	end
 
+	function obj:controller_fs(kind, path, detail)
+		return self:change(kind, "controller_fs_entry", { path = path, detail = detail })
+	end
+
 	function obj:command(kind, detail)
 		return self:change(kind, "command", { detail = detail })
 	end

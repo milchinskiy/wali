@@ -55,6 +55,12 @@ function apply_builder:change(kind, subject, data) end
 function apply_builder:fs(kind, path, detail) end
 
 ---@param kind WaliChangeKind
+---@param path? string
+---@param detail? string
+---@return WaliApplyResultBuilder
+function apply_builder:controller_fs(kind, path, detail) end
+
+---@param kind WaliChangeKind
 ---@param detail? string
 ---@return WaliApplyResultBuilder
 function apply_builder:command(kind, detail) end

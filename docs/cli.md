@@ -85,9 +85,11 @@ Failed applies do not overwrite an existing state file.
 wali cleanup --state-file FILE [--jobs N] [selectors] MANIFEST
 ```
 
-`cleanup` reads a previous successful apply state file and removes filesystem
-entries recorded as `created` resources inside the current selected manifest
-scope. It uses the current manifest for host connection data.
+`cleanup` reads a previous successful apply state file and removes target-host
+filesystem entries recorded as `created` resources inside the current selected
+manifest scope. It uses the current manifest for host connection data.
+Controller-side artifacts reported by pull operations are not removed by host
+cleanup.
 
 Cleanup intentionally does less than apply:
 

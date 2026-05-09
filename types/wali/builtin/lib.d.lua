@@ -99,6 +99,14 @@ function lib.copy_file_opts(args) end
 ---@return WaliPullFileOpts
 function lib.pull_file_opts(args) end
 
+---@param args table
+---@return WaliPushTreeOpts
+function lib.push_tree_opts(args) end
+
+---@param args table
+---@return WaliPullTreeOpts
+function lib.pull_tree_opts(args) end
+
 ---@param metadata? WaliMetadata
 ---@return WaliOwner?
 function lib.owner_from_metadata(metadata) end

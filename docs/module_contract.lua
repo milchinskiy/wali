@@ -69,8 +69,13 @@
 --   list_dir output is sorted deterministically by entry name.
 --
 -- apply ctx.transfer additionally exposes mutation helpers:
---   push_file(src, dest, opts), pull_file(src, dest, opts)
---   relative controller paths are resolved against manifest base_path.
+--   push_file(src, dest, opts), push_tree(src, dest, opts),
+--   pull_file(src, dest, opts), pull_tree(src, dest, opts)
+--   controller-side paths are resolved against manifest base_path.
+--
+-- require("manifest") additionally exposes here(...), which returns an
+-- absolute controller path relative to the manifest directory. It is intended
+-- for manifest authoring, not module apply-time path resolution.
 --
 -- apply ctx.host.fs additionally exposes mutation helpers:
 --   write, copy_file, create_dir, remove_file, remove_dir, mktemp, chmod,
@@ -187,8 +192,10 @@ return {
 
 	-- Apply-result rules:
 	--   changed fs_entry records (created/updated/removed) require a non-empty
-	--   absolute target-host path;
-	--   unchanged fs_entry records may omit path when no concrete resource changed;
+	--   absolute target-host path and are eligible for cleanup;
+	--   changed controller_fs_entry records require a non-empty absolute
+	--   controller-side path and are not removed by target-host cleanup;
+	--   unchanged filesystem records may omit path when no concrete resource changed;
 	--   command records use detail; path is ignored for command changes;
 	--   whitespace-only message/detail fields are treated as absent.
 }
@@ -198,7 +205,9 @@ return {
 --   wali.builtin.file
 --   wali.builtin.copy_file
 --   wali.builtin.push_file
+--   wali.builtin.push_tree
 --   wali.builtin.pull_file
+--   wali.builtin.pull_tree
 --   wali.builtin.link
 --   wali.builtin.remove
 --   wali.builtin.touch

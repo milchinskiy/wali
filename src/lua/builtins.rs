@@ -41,8 +41,18 @@ pub(crate) const MODULES: &[BuiltinModule] = &[
         task_module: true,
     },
     BuiltinModule {
+        name: "wali.builtin.push_tree",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/push_tree.lua")),
+        task_module: true,
+    },
+    BuiltinModule {
         name: "wali.builtin.pull_file",
         content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_file.lua")),
+        task_module: true,
+    },
+    BuiltinModule {
+        name: "wali.builtin.pull_tree",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_tree.lua")),
         task_module: true,
     },
     BuiltinModule {
@@ -168,7 +178,12 @@ mod tests {
             assert!(manifest_types.contains(item), "missing manifest LuaLS type: {item}");
         }
 
-        for item in ["api.result.apply", "api.result.validation", "WaliApplyResultBuilder"] {
+        for item in [
+            "api.result.apply",
+            "api.result.validation",
+            "WaliApplyResultBuilder",
+            "controller_fs",
+        ] {
             assert!(api_types.contains(item), "missing wali.api LuaLS type: {item}");
         }
 

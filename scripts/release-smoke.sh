@@ -57,7 +57,11 @@ manifest="$root/manifest.lua"
 created_state_file="$root/apply-created-state.json"
 idempotent_state_file="$root/apply-idempotent-state.json"
 smoke_root="$root/host"
+controller_tree="$root/controller-tree"
 smoke_root_lua="$(lua_quote "$smoke_root")"
+
+mkdir -p "$controller_tree/sub"
+printf '%s\n' 'controller tree item' > "$controller_tree/sub/item.txt"
 
 cat > "$manifest" <<EOF_MANIFEST
 local m = require("manifest")
@@ -147,6 +151,22 @@ return {
         }, {
             depends_on = { "write tree file" },
         }),
+        m.task("push controller tree")("wali.builtin.push_tree", {
+            src = "controller-tree",
+            dest = p("pushed-tree"),
+            replace = true,
+            preserve_mode = true,
+        }, {
+            depends_on = { "create workspace" },
+        }),
+        m.task("pull pushed tree")("wali.builtin.pull_tree", {
+            src = p("pushed-tree"),
+            dest = "pulled-tree",
+            replace = true,
+            preserve_mode = true,
+        }, {
+            depends_on = { "push controller tree" },
+        }),
         m.task("run command")("wali.builtin.command", {
             program = "tee",
             args = { p("command.txt") },
@@ -175,6 +195,8 @@ assert_file "$smoke_root/copy.txt"
 assert_symlink "$smoke_root/source.link"
 assert_file "$smoke_root/tree-copy/sub/item.txt"
 assert_symlink "$smoke_root/tree-link/sub/item.txt"
+assert_file "$smoke_root/pushed-tree/sub/item.txt"
+assert_file "$root/pulled-tree/sub/item.txt"
 assert_file "$smoke_root/command.txt"
 assert_absent "$smoke_root/stale.txt"
 

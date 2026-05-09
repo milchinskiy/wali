@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/ins
 Useful installer overrides:
 
 ```sh
-WALI_VERSION=v0.1.1 sh scripts/install.sh
+WALI_VERSION=v0.1.2 sh scripts/install.sh
 WALI_INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
 WALI_PACKAGE=./wali-linux-x86_64.tar.gz sh scripts/install.sh
 WALI_DATA_DIR="$HOME/.local/share/wali" sh scripts/install.sh
@@ -88,8 +88,9 @@ wali cleanup --state-file apply-state.json manifest.lua
 `plan` compiles the manifest without connecting to hosts. `check` connects,
 prepares modules, evaluates host predicates, normalizes arguments, and validates
 module input without mutating hosts. `apply` performs the checked changes.
-`cleanup` removes only filesystem entries recorded as `created` in a previous
-successful apply state file.
+`cleanup` removes only target-host filesystem entries recorded as `created` in
+a previous successful apply state file. Controller-side artifacts reported by
+pull operations are not removed by host cleanup.
 
 ## Builtin modules
 
@@ -105,7 +106,9 @@ wali.builtin.link
 wali.builtin.link_tree
 wali.builtin.permissions
 wali.builtin.pull_file
+wali.builtin.pull_tree
 wali.builtin.push_file
+wali.builtin.push_tree
 wali.builtin.remove
 wali.builtin.template
 wali.builtin.touch
@@ -113,7 +116,15 @@ wali.builtin.touch
 
 Target-host filesystem paths are absolute unless a module documents otherwise.
 Controller-side paths used by transfer and template modules may be absolute or
-relative to manifest `base_path`.
+relative to manifest `base_path`. Tree transfer is split by namespace:
+`push_tree` reads a controller-side tree and writes a target-host tree, while
+`pull_tree` reads a target-host tree and writes a controller-side tree.
+
+For localhost manifests that intentionally need an absolute path next to the
+manifest file, use `require("manifest").here(...)`. For example, dotfile
+manifests can pass `src = m.here("home")` to `link_tree`; the resulting path is
+absolute on the controller and is valid for `link_tree` only when the target
+host sees the same filesystem, normally `localhost`.
 
 ## External modules
 

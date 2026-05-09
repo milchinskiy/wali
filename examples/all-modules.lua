@@ -123,6 +123,22 @@ return {
 			mode = "0644",
 		}, after("push controller file")),
 
+		m.task("push controller tree")("wali.builtin.push_tree", {
+			src = "custom-mods",
+			dest = p("work", "pushed-custom-mods"),
+			replace = true,
+			preserve_mode = true,
+			symlinks = "preserve",
+		}, after("create work directory")),
+
+		m.task("pull pushed tree")("wali.builtin.pull_tree", {
+			src = p("work", "pushed-custom-mods"),
+			dest = controller_path("pulled-custom-mods"),
+			replace = true,
+			preserve_mode = true,
+			symlinks = "preserve",
+		}, after("push controller tree")),
+
 		m.task("copy tree preserving symlinks")("wali.builtin.copy_tree", {
 			src = p("source"),
 			dest = p("tree-copy-preserve"),

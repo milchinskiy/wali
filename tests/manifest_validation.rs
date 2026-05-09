@@ -636,6 +636,38 @@ return {
 }
 
 #[test]
+fn manifest_here_rejects_invalid_path_parts() {
+    let cases = [
+        ("manifest-here-empty-part", r#"m.here("")"#, "manifest here path part must not be empty"),
+        ("manifest-here-absolute-part", r#"m.here("/tmp")"#, "manifest here path part must be relative"),
+        (
+            "manifest-here-control-character",
+            "m.here(\"bad\\npath\")",
+            "manifest here path part must not contain control characters",
+        ),
+    ];
+
+    for (name, expr, needle) in cases {
+        let sandbox = Sandbox::new(name);
+        let manifest = sandbox.write_manifest(&format!(
+            r#"
+local m = require("manifest")
+local _ = {expr}
+
+return {{
+    hosts = {{
+        m.host.localhost("localhost"),
+    }},
+    tasks = {{}},
+}}
+"#
+        ));
+
+        assert_plan_failure_contains(&manifest, needle);
+    }
+}
+
+#[test]
 fn ssh_connection_options_are_validated() {
     let cases = [
         ("ssh-empty-user", r#"user = "", host = "example.invalid""#, "ssh user must not be empty"),

@@ -6,6 +6,36 @@ This project uses pre-1.0 semantic versioning. Patch releases should remain
 compatible within the documented 0.1 contract where practical, but manifest,
 module, and state-file contracts may still evolve before 1.0.
 
+## 0.1.2
+
+### Added
+
+- `wali.builtin.push_tree` for transferring a controller-side directory tree to
+  a target-host directory. Relative controller `src` paths resolve against
+  manifest `base_path`; `dest` remains an absolute target-host path.
+- `wali.builtin.pull_tree` for transferring a target-host directory tree to a
+  controller-side directory. `src` remains an absolute target-host path; relative
+  controller `dest` paths resolve against manifest `base_path`.
+- Apply-phase `ctx.transfer.push_tree(...)` and `ctx.transfer.pull_tree(...)`
+  helpers for custom modules.
+- LuaLS stubs for the new tree transfer modules and transfer helper option
+  tables.
+- `manifest.here(...)` helper for building absolute controller paths relative
+  to the manifest directory, useful for localhost-only manifests that need an
+  absolute target-host path such as `link_tree.src`.
+
+### Changed
+
+- Builtin documentation now explicitly separates controller-side transfer paths
+  from target-host filesystem paths for tree operations.
+- `wali.builtin.pull_tree` validation now matches `pull_file`: `check` validates
+  path shape and controller destination conflicts, while target source existence
+  and kind are verified during apply so a preceding task can create the source
+  tree.
+- Controller-side writes from pull transfers are reported as
+  `controller_fs_entry` changes instead of target-host `fs_entry` changes, so
+  state cleanup cannot accidentally remove same-named paths on remote hosts.
+
 ## 0.1.1
 
 ### Added

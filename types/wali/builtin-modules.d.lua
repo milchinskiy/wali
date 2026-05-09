@@ -38,12 +38,36 @@
 ---@field mode? string Octal mode string.
 ---@field owner? WaliOwner
 
+---@class WaliBuiltinPushTreeArgs
+---@field src string Controller-side source directory.
+---@field dest string Target-host destination directory.
+---@field replace? boolean
+---@field preserve_mode? boolean
+---@field symlinks? WaliTreeSymlinkPolicy
+---@field skip_special? boolean
+---@field max_depth? integer
+---@field dir_mode? string Octal mode string for directories.
+---@field file_mode? string Octal mode string for files.
+---@field dir_owner? WaliOwner
+---@field file_owner? WaliOwner
+
 ---@class WaliBuiltinPullFileArgs
 ---@field src string Target-host source path.
 ---@field dest string Controller-side destination path.
 ---@field create_parents? boolean
 ---@field replace? boolean
 ---@field mode? string Octal mode string for the controller-side destination where supported.
+
+---@class WaliBuiltinPullTreeArgs
+---@field src string Target-host source directory.
+---@field dest string Controller-side destination directory.
+---@field replace? boolean
+---@field preserve_mode? boolean
+---@field symlinks? WaliTreeSymlinkPolicy
+---@field skip_special? boolean
+---@field max_depth? integer
+---@field dir_mode? string Octal mode string for directories.
+---@field file_mode? string Octal mode string for files.
 
 ---@class WaliBuiltinLinkArgs
 ---@field path string Symlink path on the target host.
@@ -120,7 +144,9 @@
 ---| WaliBuiltinFileArgs
 ---| WaliBuiltinCopyFileArgs
 ---| WaliBuiltinPushFileArgs
+---| WaliBuiltinPushTreeArgs
 ---| WaliBuiltinPullFileArgs
+---| WaliBuiltinPullTreeArgs
 ---| WaliBuiltinLinkArgs
 ---| WaliBuiltinRemoveArgs
 ---| WaliBuiltinTouchArgs
@@ -135,7 +161,9 @@
 ---| 'wali.builtin.file'
 ---| 'wali.builtin.copy_file'
 ---| 'wali.builtin.push_file'
+---| 'wali.builtin.push_tree'
 ---| 'wali.builtin.pull_file'
+---| 'wali.builtin.pull_tree'
 ---| 'wali.builtin.link'
 ---| 'wali.builtin.remove'
 ---| 'wali.builtin.touch'

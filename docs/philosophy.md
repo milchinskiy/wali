@@ -86,7 +86,11 @@ outside the core.
 
 Target-host filesystem modules require absolute host paths unless a module
 explicitly documents otherwise. Controller-side transfer and template paths may
-be absolute or relative to manifest `base_path`.
+be absolute or relative to manifest `base_path`. Tree transfer modules keep
+these namespaces explicit: `push_tree` is controller-to-host, and `pull_tree` is
+host-to-controller. `manifest.here(...)` exists only to let a manifest name an
+absolute controller path next to itself; it does not change a target-host module
+into a controller-side module.
 
 Destructive operations should reject ambiguous or dangerous inputs before
 mutation. Tree operations should reject source/destination nesting that would
@@ -98,9 +102,10 @@ Modules return structured results. Results must clearly distinguish unchanged,
 changed, failed, and skipped work. Resource records are not cosmetic: cleanup
 uses them to decide what may be removed later.
 
-Cleanup is deliberately conservative. It removes resources recorded as `created`
-by a previous successful apply and inside the currently selected manifest scope.
-It does not remove entries that were updated, unchanged, or not recorded.
+Cleanup is deliberately conservative. It removes target-host resources recorded
+as `created` by a previous successful apply and inside the currently selected
+manifest scope. It does not remove entries that were updated, unchanged, not
+recorded, or reported as controller-side artifacts by pull operations.
 
 ## Compatibility
 

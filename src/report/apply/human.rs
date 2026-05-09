@@ -277,11 +277,17 @@ fn change_label(change: &ExecutionChange) -> String {
             .path
             .as_ref()
             .map_or_else(|| "<unknown path>".to_owned(), |path| path.to_string()),
+        ChangeSubject::ControllerFsEntry => change
+            .path
+            .as_ref()
+            .map_or_else(|| "controller:<unknown path>".to_owned(), |path| format!("controller:{path}")),
         ChangeSubject::Command => change.detail.clone().unwrap_or_else(|| "<command>".to_owned()),
     };
 
     match (&change.subject, &change.detail) {
-        (ChangeSubject::FsEntry, Some(detail)) if !detail.is_empty() => format!("{subject} ({detail})"),
+        (ChangeSubject::FsEntry | ChangeSubject::ControllerFsEntry, Some(detail)) if !detail.is_empty() => {
+            format!("{subject} ({detail})")
+        }
         _ => subject,
     }
 }

@@ -4,6 +4,7 @@
 ---@class WaliManifestModule
 ---@field host WaliManifestHostHelperApi
 ---@field task fun(id: string): WaliManifestTaskFactory
+---@field here fun(...: string): string Absolute controller path relative to the manifest directory.
 local manifest = {}
 
 ---@class WaliManifestHostHelperApi
@@ -221,7 +222,9 @@ function manifest.host.ssh(id, opts) end
 ---| fun(module: 'wali.builtin.file', args?: WaliBuiltinFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.copy_file', args?: WaliBuiltinCopyFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.push_file', args?: WaliBuiltinPushFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.push_tree', args?: WaliBuiltinPushTreeArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.pull_file', args?: WaliBuiltinPullFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.pull_tree', args?: WaliBuiltinPullTreeArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.link', args?: WaliBuiltinLinkArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.remove', args?: WaliBuiltinRemoveArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.touch', args?: WaliBuiltinTouchArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
@@ -235,5 +238,11 @@ function manifest.host.ssh(id, opts) end
 ---@param id string
 ---@return WaliManifestTaskFactory
 function manifest.task(id) end
+
+---Return an absolute controller path relative to the manifest directory.
+---This helper does not inspect the filesystem and does not use `base_path`.
+---@param ... string Relative path parts. Absolute, empty, and control-character parts are rejected.
+---@return string
+function manifest.here(...) end
 
 return manifest
