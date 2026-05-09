@@ -557,9 +557,9 @@ imposed. wali assumes the manifest author controls which controller files may be
 read.
 
 The controller filesystem API is intentionally read-only. Controller-side writes
-currently happen only through `wali.builtin.pull_file` /
-`ctx.transfer.pull_file`, where the transfer operation itself owns the write
-semantics.
+currently happen only through `wali.builtin.pull_file`,
+`wali.builtin.pull_tree`, `ctx.transfer.pull_file`, or `ctx.transfer.pull_tree`,
+where the transfer operation itself owns the write semantics.
 
 `metadata` follows symlinks by default, matching `stat`. Use `lstat` or
 `metadata(path, { follow = false })` when the module owns the path itself.
@@ -654,17 +654,23 @@ loaders, macros, and debug features are not part of the wali contract.
 present but exposes no duplicated controller-file validation helpers. During
 apply it moves bytes between the wali controller process and the effective
 target host backend. Use it when a module needs controller-to-host or
-host-to-controller file transfer; use `ctx.host.fs.copy_file(...)` for same-host
-copies.
+host-to-controller file or tree transfer; use `ctx.host.fs.copy_file(...)` for
+same-host copies.
 
 ```lua
 ctx.transfer.push_file(src, dest, opts)  -- apply phase only
+ctx.transfer.push_tree(src, dest, opts)  -- apply phase only
 ctx.transfer.pull_file(src, dest, opts)  -- apply phase only
+ctx.transfer.pull_tree(src, dest, opts)  -- apply phase only
 ```
 
-`push_file` reads `src` from the controller and writes `dest` on the target
-host. `pull_file` reads `src` from the target host and writes `dest` on the
-controller.
+`push_file` reads one regular file from the controller and writes `dest` on the
+target host. `push_tree` reads a controller-side directory tree and writes it to
+a target-host directory. `pull_file` reads one regular file from the target host
+and writes `dest` on the controller. `pull_tree` reads a target-host directory
+tree and writes it to a controller-side directory. Modules that validate
+host-to-controller transfers should not require the target source to exist
+during `check`, because an earlier task in the same run may create it.
 
 Controller-side paths may be absolute or relative. Relative controller paths are
 resolved against manifest `base_path`. A relative `base_path` is resolved from
@@ -684,6 +690,23 @@ may be read or written.
 }
 ```
 
+`push_tree` accepts tree transfer options. Source paths are controller-side;
+destination paths are target-host paths. Source symlinks are not followed.
+
+```lua
+{
+    replace = true,
+    preserve_mode = true,
+    symlinks = "preserve", -- "preserve", "skip", or "error"
+    skip_special = false,
+    max_depth = 3,
+    dir_mode = 493,  -- 0755
+    file_mode = 420, -- 0644
+    dir_owner = { user = "root", group = "root" },
+    file_owner = { user = "root", group = "root" },
+}
+```
+
 `pull_file` accepts local write options only:
 
 ```lua
@@ -694,11 +717,28 @@ may be read or written.
 }
 ```
 
+`pull_tree` accepts the same tree traversal options as `push_tree`, except owner
+fields are intentionally not supported for controller-side writes:
+
+```lua
+{
+    replace = true,
+    preserve_mode = true,
+    symlinks = "preserve",
+    skip_special = false,
+    max_depth = 3,
+    dir_mode = 493,
+    file_mode = 420,
+}
+```
+
 `owner` is not supported for controller-side writes. `pull_file` treats the
 controller-side destination path itself as the managed object: with
 `replace = true`, an existing local symlink is replaced by a regular file; with
 `replace = false`, an existing local symlink is preserved unchanged. Symlinks to
-directories are refused.
+directories are refused. `pull_tree` uses the same local replacement rules for
+files and preserved symlinks, preflighting predictable destination conflicts
+before mutation.
 
 ## Command execution
 

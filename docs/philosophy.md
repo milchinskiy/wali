@@ -86,7 +86,9 @@ outside the core.
 
 Target-host filesystem modules require absolute host paths unless a module
 explicitly documents otherwise. Controller-side transfer and template paths may
-be absolute or relative to manifest `base_path`.
+be absolute or relative to manifest `base_path`. Tree transfer modules keep
+these namespaces explicit: `push_tree` is controller-to-host, and `pull_tree` is
+host-to-controller.
 
 Destructive operations should reject ambiguous or dangerous inputs before
 mutation. Tree operations should reject source/destination nesting that would

@@ -36,7 +36,11 @@ symlinks.
 
 `wali.builtin.copy_file` is file-scoped because the source must be an existing
 regular file. `wali.builtin.copy_tree` applies that file behavior across a
-walked tree.
+walked target-host tree.
+
+`wali.builtin.push_tree` and `wali.builtin.pull_tree` are explicit
+controller/host transfer modules. They are not aliases for `copy_tree`: their
+`src` and `dest` fields live in different filesystem namespaces.
 
 ## `wali.builtin.dir`
 
@@ -179,6 +183,60 @@ Behavior:
 - `create_parents`, `replace`, `mode`, and `owner` match `wali.builtin.file`
   write semantics.
 
+## `wali.builtin.push_tree`
+
+Transfers a directory tree from the wali controller to the target host.
+
+```lua
+{
+    id = "push app assets",
+    module = "wali.builtin.push_tree",
+    args = {
+        src = "./files/app",
+        dest = "/opt/app/files",
+        replace = true,
+        preserve_mode = true,
+        symlinks = "preserve",
+        dir_mode = "0755",
+        file_mode = "0644",
+        file_owner = { user = "root", group = "root" },
+    },
+}
+```
+
+Behavior:
+
+- `src` is a controller-side directory path;
+- absolute controller paths are used as-is;
+- relative controller paths are resolved against manifest `base_path`; a
+  relative `base_path` is resolved from the manifest directory, and an omitted
+  `base_path` defaults to the manifest directory; `base_path` must resolve to an
+  existing directory;
+- `wali check` validates that `src` exists on the controller and is a directory;
+- `dest` is an absolute target-host directory path and is written through the
+  effective host backend, including `run_as` when configured;
+- `/` is refused as a destination;
+- on local hosts, source and destination must not be nested inside each other;
+- source symlinks are not followed;
+- `symlinks = "preserve"` recreates the same link text at the destination;
+- `symlinks = "skip"` leaves destination symlink paths untouched;
+- `symlinks = "error"` refuses controller-side source symlinks;
+- controller-side special entries are refused unless `skip_special = true`;
+- destination directories are created or verified;
+- destination directories are never replaced by files or links;
+- destination special entries are refused for transferred files;
+- destination file/symlink paths may be replaced only when `replace = true`;
+- `max_depth` must be zero or greater and limits the controller source walk
+  depth when provided;
+- extra destination entries are not pruned.
+
+`dir_mode` / `file_mode` override source modes. Without overrides,
+`preserve_mode = true` preserves mode bits from the controller-side source
+entries where the controller platform reports POSIX-like mode bits. `dir_owner`
+and `file_owner` are explicit target-host ownership settings; preserving
+controller uid/gid is intentionally not supported because those ids are not
+portable across hosts.
+
 ## `wali.builtin.pull_file`
 
 Transfers one regular file from the target host to the wali controller.
@@ -216,6 +274,59 @@ Behavior:
 - local destination directories, including symlinks to directories, and special
   entries are refused;
 - `owner` is intentionally not supported for local controller writes.
+
+## `wali.builtin.pull_tree`
+
+Transfers a directory tree from the target host to the wali controller.
+
+```lua
+{
+    id = "pull diagnostics",
+    module = "wali.builtin.pull_tree",
+    args = {
+        src = "/var/log/example",
+        dest = "./artifacts/example-logs",
+        replace = true,
+        preserve_mode = true,
+        symlinks = "preserve",
+        max_depth = 3,
+    },
+}
+```
+
+Behavior:
+
+- `src` is an absolute target-host directory path and is read through the
+  effective host backend;
+- `/` is refused as a source;
+- `wali check` validates source path shape only. Source existence and source
+  kind are checked during apply, because an earlier task may create the target
+  host tree in the same run;
+- `dest` is a controller-side directory path;
+- absolute controller paths are used as-is;
+- relative controller paths are resolved against manifest `base_path`; a
+  relative `base_path` is resolved from the manifest directory, and an omitted
+  `base_path` defaults to the manifest directory; `base_path` must resolve to an
+  existing directory;
+- on local hosts, source and destination must not be nested inside each other;
+- target-host source symlinks are not followed;
+- `symlinks = "preserve"` recreates the same link text on the controller;
+- `symlinks = "skip"` leaves destination symlink paths untouched;
+- `symlinks = "error"` refuses target-host source symlinks;
+- target-host special entries are refused unless `skip_special = true`;
+- destination directories are created or verified;
+- destination directories are never replaced by files or links;
+- destination special entries are refused for transferred files;
+- destination file/symlink paths may be replaced only when `replace = true`;
+- `max_depth` must be zero or greater and limits the target-host source walk
+  depth when provided;
+- extra controller-side destination entries are not pruned;
+- `owner` is intentionally not supported for local controller writes.
+
+`dir_mode` / `file_mode` override source modes. Without overrides,
+`preserve_mode = true` preserves mode bits from target-host source entries on
+the controller destination where the controller platform supports POSIX-like
+mode changes.
 
 ## `wali.builtin.link`
 
@@ -506,10 +617,11 @@ read-only commands.
 
 ## Tree traversal primitive
 
-`wali.builtin.copy_tree` and `wali.builtin.link_tree` are built on
-`ctx.host.fs.walk(...)`, the host filesystem traversal primitive exposed to
-custom modules. Wali does not provide a separate `wali.builtin.walk` task
-module. Tree inspection belongs in custom modules unless a builtin is actually
-mutating or reconciling something.
+`wali.builtin.copy_tree`, `wali.builtin.link_tree`, and `wali.builtin.pull_tree`
+are built on `ctx.host.fs.walk(...)`, the host filesystem traversal primitive
+exposed to custom modules. `wali.builtin.push_tree` uses the matching
+controller-side `ctx.controller.fs.walk(...)` primitive. Wali does not provide a
+separate `wali.builtin.walk` task module. Tree inspection belongs in custom
+modules unless a builtin is actually mutating or reconciling something.
 
 For the full `ctx.host.fs.walk(...)` API contract, see `module-developers.md`.

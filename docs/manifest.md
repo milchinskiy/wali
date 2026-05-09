@@ -51,10 +51,10 @@ The helper rejects unknown option names and non-table option values. Helper ids
 and task module names must be strings without leading/trailing whitespace or
 control characters.
 
-LuaLS users can add `types/` to `workspace.library` to get completion for
-raw manifest tables (`WaliManifestDefinition`), `require("manifest")`, host
-helpers, task helper options, module sources, host selectors, `when` predicates,
-and Wali's `null` sentinel. `.luarc.example.json` contains a minimal setup.
+LuaLS users can add `types/` to `workspace.library` to get completion for raw
+manifest tables (`WaliManifestDefinition`), `require("manifest")`, host helpers,
+task helper options, module sources, host selectors, `when` predicates, and
+Wali's `null` sentinel. `.luarc.example.json` contains a minimal setup.
 
 ## Top-level fields
 
@@ -67,7 +67,8 @@ manifest name in compiled plans and state files.
 
 Optional controller-side directory used by modules that read or write
 controller-side files, such as `wali.builtin.push_file`,
-`wali.builtin.pull_file`, `wali.builtin.template`, and `ctx.controller` helpers.
+`wali.builtin.push_tree`, `wali.builtin.pull_file`, `wali.builtin.pull_tree`,
+`wali.builtin.template`, and `ctx.controller` helpers.
 
 Rules:
 

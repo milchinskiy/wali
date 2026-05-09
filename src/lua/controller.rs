@@ -297,7 +297,7 @@ pub(crate) fn read_text(path: &Path) -> crate::Result<String> {
     })
 }
 
-fn metadata(path: &Path, opts: MetadataOpts) -> crate::Result<Option<Metadata>> {
+pub(crate) fn metadata(path: &Path, opts: MetadataOpts) -> crate::Result<Option<Metadata>> {
     let raw = if opts.follow {
         match std::fs::metadata(path) {
             Ok(value) => value,
@@ -368,7 +368,7 @@ fn list_dir(path: &Path) -> crate::Result<Vec<DirEntry>> {
     Ok(entries)
 }
 
-fn walk(root: &Path, opts: WalkOpts) -> crate::Result<Vec<WalkEntry>> {
+pub(crate) fn walk(root: &Path, opts: WalkOpts) -> crate::Result<Vec<WalkEntry>> {
     let root_metadata = metadata(root, MetadataOpts { follow: false })?
         .ok_or_else(|| crate::Error::CommandExec(format!("controller walk root does not exist: {}", root.display())))?;
 

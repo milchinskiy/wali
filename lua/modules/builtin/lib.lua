@@ -257,6 +257,43 @@ function lib.pull_file_opts(args)
 	return opts
 end
 
+
+function lib.push_tree_opts(args)
+	local opts = {
+		replace = args.replace,
+		preserve_mode = args.preserve_mode,
+		symlinks = args.symlinks,
+		skip_special = args.skip_special,
+		max_depth = args.max_depth,
+	}
+	if args.dir_mode ~= nil then
+		opts.dir_mode = lib.mode_bits(args.dir_mode)
+	end
+	if args.file_mode ~= nil then
+		opts.file_mode = lib.mode_bits(args.file_mode)
+	end
+	opts.dir_owner = lib.owner(args.dir_owner)
+	opts.file_owner = lib.owner(args.file_owner)
+	return opts
+end
+
+function lib.pull_tree_opts(args)
+	local opts = {
+		replace = args.replace,
+		preserve_mode = args.preserve_mode,
+		symlinks = args.symlinks,
+		skip_special = args.skip_special,
+		max_depth = args.max_depth,
+	}
+	if args.dir_mode ~= nil then
+		opts.dir_mode = lib.mode_bits(args.dir_mode)
+	end
+	if args.file_mode ~= nil then
+		opts.file_mode = lib.mode_bits(args.file_mode)
+	end
+	return opts
+end
+
 function lib.owner_from_metadata(metadata)
 	if metadata == nil then
 		return nil

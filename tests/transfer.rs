@@ -4,6 +4,7 @@ mod common;
 
 use common::*;
 use std::os::unix::fs::PermissionsExt as _;
+use std::path::PathBuf;
 
 #[test]
 fn push_and_pull_file_are_idempotent_and_resolve_relative_local_paths_from_base_path() {
@@ -505,4 +506,242 @@ return {{
     assert_task_failed_contains(&report, "pull directory symlink", "transfer destination is a directory");
     assert!(std::fs::symlink_metadata(&local_dest).unwrap().file_type().is_symlink());
     assert!(target_dir.is_dir());
+}
+
+#[test]
+fn push_and_pull_tree_are_idempotent_and_resolve_controller_paths_from_base_path() {
+    let sandbox = Sandbox::new("transfer-tree");
+    let base = sandbox.mkdir("base");
+    let assets = base.join("assets");
+    let nested = assets.join("nested");
+    let host_dest = sandbox.path("host/pushed-tree");
+    let pulled = base.join("pulled-tree");
+
+    std::fs::create_dir_all(&nested).expect("failed to create controller source tree");
+    std::fs::write(assets.join("root.txt"), "root\n").expect("failed to write root source file");
+    std::fs::write(nested.join("child.txt"), "child\n").expect("failed to write nested source file");
+    std::os::unix::fs::symlink("root.txt", assets.join("root.link")).expect("failed to create source symlink");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    base_path = {},
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "push tree",
+            module = "wali.builtin.push_tree",
+            args = {{
+                src = "assets",
+                dest = {},
+                replace = true,
+                preserve_mode = false,
+                symlinks = "preserve",
+                dir_mode = "0755",
+                file_mode = "0640",
+            }},
+        }},
+        {{
+            id = "pull tree",
+            depends_on = {{ "push tree" }},
+            module = "wali.builtin.pull_tree",
+            args = {{
+                src = {},
+                dest = "pulled-tree",
+                replace = true,
+                preserve_mode = false,
+                symlinks = "preserve",
+                dir_mode = "0755",
+                file_mode = "0600",
+            }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&base),
+        lua_string(&host_dest),
+        lua_string(&host_dest),
+    ));
+
+    let first = run_apply(&manifest);
+    assert_task_changed(&first, "push tree");
+    assert_task_changed(&first, "pull tree");
+
+    assert_eq!(std::fs::read_to_string(host_dest.join("root.txt")).unwrap(), "root\n");
+    assert_eq!(std::fs::read_to_string(host_dest.join("nested/child.txt")).unwrap(), "child\n");
+    assert_eq!(std::fs::read_link(host_dest.join("root.link")).unwrap(), PathBuf::from("root.txt"));
+    assert_eq!(
+        std::fs::metadata(host_dest.join("root.txt"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o640
+    );
+
+    assert_eq!(std::fs::read_to_string(pulled.join("root.txt")).unwrap(), "root\n");
+    assert_eq!(std::fs::read_to_string(pulled.join("nested/child.txt")).unwrap(), "child\n");
+    assert_eq!(std::fs::read_link(pulled.join("root.link")).unwrap(), PathBuf::from("root.txt"));
+    assert_eq!(std::fs::metadata(pulled.join("root.txt")).unwrap().permissions().mode() & 0o777, 0o600);
+
+    let push_result = task_result(&first, "push tree");
+    assert_eq!(
+        push_result
+            .pointer("/data/counts/file")
+            .and_then(serde_json::Value::as_u64),
+        Some(2)
+    );
+    assert_eq!(
+        push_result
+            .pointer("/data/counts/symlink")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+
+    let second = run_apply(&manifest);
+    assert_task_unchanged(&second, "push tree");
+    assert_task_unchanged(&second, "pull tree");
+}
+
+#[test]
+fn check_validates_push_tree_controller_source_without_pushing() {
+    let sandbox = Sandbox::new("transfer-tree-check-source-ok");
+    let base = sandbox.mkdir("base");
+    let assets = base.join("assets");
+    let host_dest = sandbox.path("host/pushed-tree");
+
+    std::fs::create_dir_all(&assets).expect("failed to create controller source tree");
+    std::fs::write(assets.join("root.txt"), "checked tree\n").expect("failed to write source file");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    base_path = {},
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "check push tree",
+            module = "wali.builtin.push_tree",
+            args = {{ src = "assets", dest = {} }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&base),
+        lua_string(&host_dest),
+    ));
+
+    let report = run_check(&manifest);
+    assert_task_unchanged(&report, "check push tree");
+    assert!(!host_dest.exists(), "wali check must not push controller tree to host");
+}
+
+#[test]
+fn check_rejects_missing_push_tree_controller_source() {
+    let sandbox = Sandbox::new("transfer-tree-check-source-missing");
+    let base = sandbox.mkdir("base");
+    let host_dest = sandbox.path("host/pushed-tree");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    base_path = {},
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "missing push tree source",
+            module = "wali.builtin.push_tree",
+            args = {{ src = "missing-assets", dest = {} }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&base),
+        lua_string(&host_dest),
+    ));
+
+    assert_check_failure_contains(&manifest, "transfer source does not exist");
+}
+
+#[test]
+fn check_allows_pull_tree_source_created_by_earlier_task() {
+    let sandbox = Sandbox::new("transfer-tree-check-generated-source");
+    let base = sandbox.mkdir("base");
+    let assets = base.join("assets");
+    let host_dest = sandbox.path("host/pushed-tree");
+    let pulled = base.join("pulled-tree");
+
+    std::fs::create_dir_all(&assets).expect("failed to create controller source tree");
+    std::fs::write(assets.join("root.txt"), "checked tree\n").expect("failed to write source file");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    base_path = {},
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "push tree",
+            module = "wali.builtin.push_tree",
+            args = {{ src = "assets", dest = {} }},
+        }},
+        {{
+            id = "pull generated tree",
+            depends_on = {{ "push tree" }},
+            module = "wali.builtin.pull_tree",
+            args = {{ src = {}, dest = "pulled-tree" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&base),
+        lua_string(&host_dest),
+        lua_string(&host_dest),
+    ));
+
+    let report = run_check(&manifest);
+    assert_task_unchanged(&report, "push tree");
+    assert_task_unchanged(&report, "pull generated tree");
+    assert!(!host_dest.exists(), "wali check must not push controller tree to host");
+    assert!(!pulled.exists(), "wali check must not pull target tree to controller");
+}
+
+#[test]
+fn pull_tree_replace_false_preserves_existing_controller_file() {
+    let sandbox = Sandbox::new("transfer-tree-pull-replace-false");
+    let remote_src = sandbox.mkdir("remote-tree");
+    let local_dest = sandbox.mkdir("local-tree");
+    std::fs::write(remote_src.join("file.txt"), "remote content\n").expect("failed to write remote source");
+    std::fs::write(local_dest.join("file.txt"), "local content\n").expect("failed to write local destination");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "pull tree preserve",
+            module = "wali.builtin.pull_tree",
+            args = {{ src = {}, dest = {}, replace = false }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&remote_src),
+        lua_string(&local_dest),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_unchanged(&report, "pull tree preserve");
+    assert_eq!(std::fs::read_to_string(local_dest.join("file.txt")).unwrap(), "local content\n");
 }

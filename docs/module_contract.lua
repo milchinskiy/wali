@@ -69,8 +69,9 @@
 --   list_dir output is sorted deterministically by entry name.
 --
 -- apply ctx.transfer additionally exposes mutation helpers:
---   push_file(src, dest, opts), pull_file(src, dest, opts)
---   relative controller paths are resolved against manifest base_path.
+--   push_file(src, dest, opts), push_tree(src, dest, opts),
+--   pull_file(src, dest, opts), pull_tree(src, dest, opts)
+--   controller-side paths are resolved against manifest base_path.
 --
 -- apply ctx.host.fs additionally exposes mutation helpers:
 --   write, copy_file, create_dir, remove_file, remove_dir, mktemp, chmod,
@@ -198,7 +199,9 @@ return {
 --   wali.builtin.file
 --   wali.builtin.copy_file
 --   wali.builtin.push_file
+--   wali.builtin.push_tree
 --   wali.builtin.pull_file
+--   wali.builtin.pull_tree
 --   wali.builtin.link
 --   wali.builtin.remove
 --   wali.builtin.touch

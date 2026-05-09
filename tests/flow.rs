@@ -60,8 +60,14 @@ return {
         if ctx.transfer.push_file ~= nil then
             return fail("validate context must not expose transfer.push_file")
         end
+        if ctx.transfer.push_tree ~= nil then
+            return fail("validate context must not expose transfer.push_tree")
+        end
         if ctx.transfer.pull_file ~= nil then
             return fail("validate context must not expose transfer.pull_file")
+        end
+        if ctx.transfer.pull_tree ~= nil then
+            return fail("validate context must not expose transfer.pull_tree")
         end
         if ctx.host.fs.write ~= nil then
             return fail("validate context must not expose fs.write")

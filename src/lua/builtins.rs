@@ -41,8 +41,18 @@ pub(crate) const MODULES: &[BuiltinModule] = &[
         task_module: true,
     },
     BuiltinModule {
+        name: "wali.builtin.push_tree",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/push_tree.lua")),
+        task_module: true,
+    },
+    BuiltinModule {
         name: "wali.builtin.pull_file",
         content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_file.lua")),
+        task_module: true,
+    },
+    BuiltinModule {
+        name: "wali.builtin.pull_tree",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_tree.lua")),
         task_module: true,
     },
     BuiltinModule {

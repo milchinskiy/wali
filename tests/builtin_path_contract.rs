@@ -74,8 +74,20 @@ fn builtin_host_paths_must_be_absolute_during_check() {
             "dest must be absolute",
         ),
         (
+            "push tree dest",
+            "wali.builtin.push_tree",
+            format!(r#"{{ src = {}, dest = "relative" }}"#, abs_a),
+            "dest must be absolute",
+        ),
+        (
             "pull src",
             "wali.builtin.pull_file",
+            r#"{ src = "relative", dest = "controller-relative" }"#.to_owned(),
+            "src must be absolute",
+        ),
+        (
+            "pull tree src",
+            "wali.builtin.pull_tree",
             r#"{ src = "relative", dest = "controller-relative" }"#.to_owned(),
             "src must be absolute",
         ),
@@ -132,8 +144,20 @@ fn builtin_host_path_empty_strings_are_rejected_clearly() {
             "dest must not be empty",
         ),
         (
+            "push tree dest",
+            "wali.builtin.push_tree",
+            format!(r#"{{ src = {}, dest = "" }}"#, abs_a),
+            "dest must not be empty",
+        ),
+        (
             "pull src",
             "wali.builtin.pull_file",
+            r#"{ src = "", dest = "controller-relative" }"#.to_owned(),
+            "src must not be empty",
+        ),
+        (
+            "pull tree src",
+            "wali.builtin.pull_tree",
             r#"{ src = "", dest = "controller-relative" }"#.to_owned(),
             "src must not be empty",
         ),
@@ -191,10 +215,15 @@ fn controller_relative_paths_remain_valid_for_transfer_and_template_sources() {
     let base = sandbox.mkdir("base");
     let host_dir = sandbox.mkdir("host");
     let controller_pull_dest = base.join("pulled/output.txt");
+    let controller_pull_tree_dest = base.join("pulled-tree");
     let pushed = host_dir.join("pushed.txt");
+    let pushed_tree = host_dir.join("pushed-tree");
     let rendered = host_dir.join("rendered.txt");
 
     std::fs::write(base.join("input.txt"), "controller data\n").expect("failed to write controller input");
+    std::fs::create_dir_all(base.join("tree/nested")).expect("failed to create controller tree");
+    std::fs::write(base.join("tree/nested/file.txt"), "controller tree data\n")
+        .expect("failed to write controller tree input");
     std::fs::write(base.join("template.txt.j2"), "value={{ value }}\n").expect("failed to write template input");
 
     let manifest = sandbox.write_manifest(&format!(
@@ -217,6 +246,17 @@ return {{
             args = {{ src = {}, dest = "pulled/output.txt", create_parents = true }},
         }},
         {{
+            id = "push controller-relative tree",
+            module = "wali.builtin.push_tree",
+            args = {{ src = "tree", dest = {} }},
+        }},
+        {{
+            id = "pull controller-relative tree",
+            depends_on = {{ "push controller-relative tree" }},
+            module = "wali.builtin.pull_tree",
+            args = {{ src = {}, dest = "pulled-tree" }},
+        }},
+        {{
             id = "render controller-relative template",
             module = "wali.builtin.template",
             args = {{ src = "template.txt.j2", dest = {}, vars = {{ value = "ok" }}, create_parents = true }},
@@ -227,14 +267,23 @@ return {{
         lua_string(&base),
         lua_string(&pushed),
         lua_string(&pushed),
+        lua_string(&pushed_tree),
+        lua_string(&pushed_tree),
         lua_string(&rendered),
     ));
 
     let report = run_apply(&manifest);
     assert_task_changed(&report, "push controller-relative source");
     assert_task_changed(&report, "pull controller-relative destination");
+    assert_task_changed(&report, "push controller-relative tree");
+    assert_task_changed(&report, "pull controller-relative tree");
     assert_task_changed(&report, "render controller-relative template");
     assert_eq!(std::fs::read_to_string(&pushed).unwrap(), "controller data\n");
     assert_eq!(std::fs::read_to_string(&controller_pull_dest).unwrap(), "controller data\n");
+    assert_eq!(std::fs::read_to_string(pushed_tree.join("nested/file.txt")).unwrap(), "controller tree data\n");
+    assert_eq!(
+        std::fs::read_to_string(controller_pull_tree_dest.join("nested/file.txt")).unwrap(),
+        "controller tree data\n"
+    );
     assert_eq!(std::fs::read_to_string(&rendered).unwrap(), "value=ok\n");
 }

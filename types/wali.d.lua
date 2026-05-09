@@ -75,6 +75,27 @@ null = nil
 ---@field mode? integer POSIX mode bits for the controller-side destination where supported.
 ---@field replace? boolean Replace existing destination. Defaults to true.
 
+
+---@class WaliPushTreeOpts
+---@field replace? boolean Replace existing target-host file/symlink destinations. Defaults to true.
+---@field preserve_mode? boolean Preserve controller-side source mode bits where supported. Defaults to true.
+---@field symlinks? WaliTreeSymlinkPolicy Preserve, skip, or refuse source symlinks. Defaults to 'preserve'.
+---@field skip_special? boolean Skip controller-side special entries instead of failing. Defaults to false.
+---@field max_depth? integer Maximum traversal depth, zero or greater.
+---@field dir_mode? integer POSIX mode bits for destination directories.
+---@field file_mode? integer POSIX mode bits for destination files.
+---@field dir_owner? WaliOwner Target-host owner for destination directories.
+---@field file_owner? WaliOwner Target-host owner for destination files.
+
+---@class WaliPullTreeOpts
+---@field replace? boolean Replace existing controller-side file/symlink destinations. Defaults to true.
+---@field preserve_mode? boolean Preserve target-host source mode bits where supported. Defaults to true.
+---@field symlinks? WaliTreeSymlinkPolicy Preserve, skip, or refuse source symlinks. Defaults to 'preserve'.
+---@field skip_special? boolean Skip target-host special entries instead of failing. Defaults to false.
+---@field max_depth? integer Maximum traversal depth, zero or greater.
+---@field dir_mode? integer POSIX mode bits for controller-side destination directories where supported.
+---@field file_mode? integer POSIX mode bits for controller-side destination files where supported.
+
 ---@class WaliMetadata
 ---@field kind WaliPathKind
 ---@field size integer
@@ -283,7 +304,9 @@ null = nil
 
 ---@class WaliApplyTransferApi
 ---@field push_file fun(src: string, dest: string, opts?: WaliWriteOpts): WaliExecutionResult
+---@field push_tree fun(src: string, dest: string, opts?: WaliPushTreeOpts): WaliExecutionResult
 ---@field pull_file fun(src: string, dest: string, opts?: WaliPullFileOpts): WaliExecutionResult
+---@field pull_tree fun(src: string, dest: string, opts?: WaliPullTreeOpts): WaliExecutionResult
 
 ---@class WaliRandApi
 ---@field irange fun(min: integer, max: integer): integer Non-negative inclusive integer range.

@@ -278,6 +278,8 @@ fn tree_modules_reject_invalid_max_depth_during_check() {
     for (module, task_prefix) in [
         ("wali.builtin.copy_tree", "copy tree"),
         ("wali.builtin.link_tree", "link tree"),
+        ("wali.builtin.push_tree", "push tree"),
+        ("wali.builtin.pull_tree", "pull tree"),
     ] {
         for (max_depth, needle) in [
             ("-1", "max_depth must be zero or greater"),
