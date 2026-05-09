@@ -2,7 +2,7 @@
 --
 -- For LuaLS/editor completion, use the definition files under ../types/. They
 -- contain the machine-readable contract for ctx, require("manifest"),
--- require("wali.api"), require("wali.builtin.lib"), and builtin module
+-- require("wali"), require("wali.api"), require("wali.builtin.lib"), and builtin module
 -- argument tables. This file remains a readable overview and example.
 --
 -- Lua execution phases:
@@ -72,6 +72,10 @@
 --   push_file(src, dest, opts), push_tree(src, dest, opts),
 --   pull_file(src, dest, opts), pull_tree(src, dest, opts)
 --   controller-side paths are resolved against manifest base_path.
+--
+-- require("wali") exposes runtime compatibility helpers:
+--   version, version_info, compatible(requirement), require_version(requirement, label)
+--   Requirements are whitespace-separated semver comparators such as ">=0.2.0 <0.3.0".
 --
 -- require("manifest") additionally exposes here(...), which returns an
 -- absolute controller path relative to the manifest directory. It is intended

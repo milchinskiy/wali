@@ -104,9 +104,9 @@ return {
 Wali ships LuaLS definition files under `types/`. They are editor stubs only;
 Wali does not load them at runtime. Add the directory to LuaLS
 `workspace.library` to get completion and diagnostics for raw manifests
-(`WaliManifestDefinition`), `ctx`, `require("manifest")`, `require("wali.api")`,
-and `require("wali.builtin.lib")`. Release packages include the same stubs, and
-`scripts/install.sh` installs them to
+(`WaliManifestDefinition`), `ctx`, `require("manifest")`, `require("wali")`,
+`require("wali.api")`, and `require("wali.builtin.lib")`. Release packages
+include the same stubs, and `scripts/install.sh` installs them to
 `${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Use
 `WALI_TYPES_DIR` for a custom location, or `WALI_INSTALL_TYPES=0` to skip
 installing editor support files. The repository also includes
@@ -327,6 +327,31 @@ for example `requires.all[1].any[1].command must not be empty`.
 
 Use `requires` for host capability checks. Do not use `validate` to run commands
 just to find out whether a command exists.
+
+## Runtime compatibility
+
+External module libraries can check the running Wali version through
+`require("wali")`. Use this near the top of a module or shared helper when a
+module depends on a specific runtime contract:
+
+```lua
+local wali = require("wali")
+wali.require_version(">=0.2.0 <0.3.0", "my-module-library")
+```
+
+The runtime module exposes:
+
+```lua
+local wali = require("wali")
+
+wali.version          -- e.g. "0.2.0"
+wali.version_info     -- { major = 0, minor = 2, patch = 0, text = "0.2.0" }
+wali.compatible(">=0.2.0 <0.3.0")
+wali.require_version(">=0.2.0 <0.3.0", "my module")
+```
+
+Version requirements are whitespace-separated comparators combined with logical
+AND. Supported comparators are `>`, `>=`, `<`, `<=`, `=`, `==`, `!=`, and `~=`.
 
 ## Validate
 

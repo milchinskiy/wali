@@ -149,7 +149,7 @@ return {
             namespace = "ops",
             git = {
                 url = "https://github.com/milchinskiy/wali-ops.git",
-                ref = "v0.1.0",
+                ref = "v0.2.0",
                 path = "modules",
                 depth = 1,
             },
@@ -195,11 +195,11 @@ See the `wali-ops` README for the full external module reference.
 
 Wali ships LuaLS definition files under [`types/`](types/). Add that directory
 to LuaLS `workspace.library` for completion and diagnostics for raw manifest
-tables, the `require("manifest")` helper, custom modules, `ctx`, `wali.api`, and
-`wali.builtin.lib`. The release installer copies these stubs to
-`${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Set
-`WALI_TYPES_DIR` to install them elsewhere, or set `WALI_INSTALL_TYPES=0` to
-skip editor stub installation. The repository includes
+tables, the `require("manifest")` helper, custom modules, `ctx`,
+`require("wali")`, `wali.api`, and `wali.builtin.lib`. The release installer
+copies these stubs to `${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by
+default. Set `WALI_TYPES_DIR` to install them elsewhere, or set
+`WALI_INSTALL_TYPES=0` to skip editor stub installation. The repository includes
 [`.luarc.example.json`](.luarc.example.json) as a starting point.
 
 ## Documentation

@@ -26,8 +26,7 @@ module, and state-file contracts may still evolve before 1.0.
   conflicting recursive leaves are skipped while the module continues with
   remaining entries.
 - Recursive-only options such as `max_depth` are now ignored when
-  `recursive = false`; invalid values are rejected only when the recursive mode
-  actually uses them.
+  `recursive = false`.
 - `wali.builtin.write` now handles both inline text and controller-side source
   files, and renders through MiniJinja automatically when effective variables
   are present.
@@ -36,6 +35,9 @@ module, and state-file contracts may still evolve before 1.0.
   hits are reported as skipped tasks; map-shaped guard tables are rejected.
 - Module apply results may now explicitly skip a task with
   `require("wali.api").result.skip(reason)`.
+- Custom modules can now inspect and enforce runtime compatibility with
+  `require("wali")`, including `wali.version`, `wali.compatible(requirement)`,
+  and `wali.require_version(requirement, label)`.
 - LuaLS stubs, examples, builtin docs, manifest docs, module contract docs, and
   the release smoke test were updated for the new builtin contract.
 - Recursive `link`, `copy`, `push`, and `pull` now preflight destination kind

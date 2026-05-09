@@ -10,6 +10,14 @@
 ---@type WaliJsonNull
 null = nil
 
+---@class WaliVersionInfo
+---@field major integer
+---@field minor integer
+---@field patch integer
+---@field prerelease? string
+---@field build? string
+---@field text string
+
 ---@alias WaliJsonScalar WaliJsonNull|string|number|boolean
 ---@alias WaliJsonValue WaliJsonScalar|WaliJsonObject|WaliJsonArray
 ---@alias WaliJsonObject table<string, WaliJsonValue>
@@ -41,13 +49,13 @@ null = nil
 ---@field order? WaliWalkOrder Traversal order. Defaults to 'pre'.
 
 ---@class WaliWriteOpts
----@field parents? boolean Create missing parent directories.
+---@field create_parents? boolean Create missing parent directories.
 ---@field mode? integer POSIX mode bits as an integer, normally from `lib.mode_bits()`.
 ---@field owner? WaliOwner
 ---@field replace? boolean Replace existing regular file content. Defaults to true.
 
 ---@class WaliCopyFileOpts
----@field parents? boolean Create missing parent directories.
+---@field create_parents? boolean Create missing parent directories.
 ---@field mode? integer POSIX mode bits as an integer, normally from `lib.mode_bits()`.
 ---@field owner? WaliOwner
 ---@field replace? boolean Replace existing regular file content. Defaults to true.
@@ -70,7 +78,7 @@ null = nil
 ---@field prefix? string Filename prefix.
 
 ---@class WaliPullFileOpts
----@field parents? boolean Create missing controller-side parent directories.
+---@field create_parents? boolean Create missing controller-side parent directories.
 ---@field mode? integer POSIX mode bits for the controller-side destination where supported.
 ---@field replace? boolean Replace existing destination. Defaults to true.
 

@@ -6,6 +6,11 @@ pub(crate) struct BuiltinModule {
 
 pub(crate) const MODULES: &[BuiltinModule] = &[
     BuiltinModule {
+        name: "wali",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/wali.lua")),
+        task_module: false,
+    },
+    BuiltinModule {
         name: "wali.api",
         content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/api.lua")),
         task_module: false,
@@ -121,6 +126,7 @@ mod tests {
     fn lua_lsp_contract_mentions_core_runtime_surface() {
         let core_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali.d.lua"));
         let manifest_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/manifest.d.lua"));
+        let runtime_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali/init.d.lua"));
         let api_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali/api.d.lua"));
         let lib_types = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/types/wali/builtin/lib.d.lua"));
 
@@ -151,6 +157,15 @@ mod tests {
             "manifest.task",
         ] {
             assert!(manifest_types.contains(item), "missing manifest LuaLS type: {item}");
+        }
+
+        for item in [
+            "wali.version",
+            "wali.compatible",
+            "wali.require_version",
+            "WaliVersionInfo",
+        ] {
+            assert!(runtime_types.contains(item), "missing wali runtime LuaLS type: {item}");
         }
 
         for item in [
