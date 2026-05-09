@@ -178,7 +178,12 @@ mod tests {
             assert!(manifest_types.contains(item), "missing manifest LuaLS type: {item}");
         }
 
-        for item in ["api.result.apply", "api.result.validation", "WaliApplyResultBuilder"] {
+        for item in [
+            "api.result.apply",
+            "api.result.validation",
+            "WaliApplyResultBuilder",
+            "controller_fs",
+        ] {
             assert!(api_types.contains(item), "missing wali.api LuaLS type: {item}");
         }
 

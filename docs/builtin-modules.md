@@ -273,7 +273,9 @@ Behavior:
   file, even when the symlink target already has identical content;
 - local destination directories, including symlinks to directories, and special
   entries are refused;
-- `owner` is intentionally not supported for local controller writes.
+- `owner` is intentionally not supported for local controller writes;
+- created or updated controller-side destinations are reported as
+  `controller_fs_entry` changes and are not removed by target-host cleanup.
 
 ## `wali.builtin.pull_tree`
 
@@ -321,7 +323,9 @@ Behavior:
 - `max_depth` must be zero or greater and limits the target-host source walk
   depth when provided;
 - extra controller-side destination entries are not pruned;
-- `owner` is intentionally not supported for local controller writes.
+- `owner` is intentionally not supported for local controller writes;
+- created or updated controller-side destinations are reported as
+  `controller_fs_entry` changes and are not removed by target-host cleanup.
 
 `dir_mode` / `file_mode` override source modes. Without overrides,
 `preserve_mode = true` preserves mode bits from target-host source entries on

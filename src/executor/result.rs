@@ -31,7 +31,10 @@ impl ChangeKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeSubject {
+    /// Target-host filesystem entry. Created entries are eligible for state cleanup.
     FsEntry,
+    /// Controller-side filesystem entry. Reported for pull operations; not cleaned on target hosts.
+    ControllerFsEntry,
     Command,
 }
 
@@ -54,6 +57,16 @@ impl ExecutionChange {
         Self {
             kind,
             subject: ChangeSubject::FsEntry,
+            path: Some(path.into()),
+            detail: None,
+        }
+    }
+
+    #[must_use]
+    pub fn controller_fs_entry(kind: ChangeKind, path: impl Into<super::TargetPath>) -> Self {
+        Self {
+            kind,
+            subject: ChangeSubject::ControllerFsEntry,
             path: Some(path.into()),
             detail: None,
         }
@@ -124,6 +137,15 @@ impl ExecutionResult {
     }
 
     #[must_use]
+    pub fn controller_fs_entry(kind: ChangeKind, path: impl Into<super::TargetPath>) -> Self {
+        Self {
+            changes: vec![ExecutionChange::controller_fs_entry(kind, path)],
+            message: None,
+            data: None,
+        }
+    }
+
+    #[must_use]
     pub fn command(kind: ChangeKind, detail: impl Into<String>) -> Self {
         Self {
             changes: vec![ExecutionChange::command(kind, detail)],
@@ -157,8 +179,10 @@ impl ExecutionResult {
     /// are ignored because command changes are described by `detail`, not by a
     /// target-host filesystem path.
     ///
-    /// Changed `fs_entry` records are state resources, so they must identify a
-    /// non-empty absolute target-host path under the backend path semantics.
+    /// Changed target-host `fs_entry` records are state resources, so they must
+    /// identify a non-empty absolute target-host path under the backend path
+    /// semantics. Changed `controller_fs_entry` records identify controller-side
+    /// paths and are not used as target-host cleanup resources.
     pub fn normalize_apply_contract(&mut self, paths: &impl super::PathSemantics) -> Result<(), String> {
         trim_empty_string(&mut self.message);
 
@@ -168,6 +192,7 @@ impl ExecutionResult {
 
             match change.subject {
                 ChangeSubject::FsEntry => validate_fs_entry_change(change, paths, &field)?,
+                ChangeSubject::ControllerFsEntry => validate_controller_fs_entry_change(change, &field)?,
                 ChangeSubject::Command => {
                     // A command result has no path semantics. Older or generic
                     // module helpers may accidentally carry a `path`; dropping
@@ -221,12 +246,50 @@ fn validate_fs_entry_change(
     Ok(())
 }
 
+fn validate_controller_fs_entry_change(change: &mut ExecutionChange, field: &str) -> Result<(), String> {
+    let context = controller_fs_entry_context(change.kind);
+
+    if change.path.is_none() {
+        if change.kind.changed() {
+            return Err(format!("{field}.path is required for {context}"));
+        }
+        return Ok(());
+    }
+
+    if change.path.as_ref().is_some_and(|path| path.as_str().trim().is_empty()) {
+        change.path = None;
+        if change.kind.changed() {
+            return Err(format!("{field}.path must not be empty for {context}"));
+        }
+        return Ok(());
+    }
+
+    if change
+        .path
+        .as_ref()
+        .is_some_and(|path| change.kind.changed() && !std::path::Path::new(path.as_str()).is_absolute())
+    {
+        return Err(format!("{field}.path must be absolute for {context}"));
+    }
+
+    Ok(())
+}
+
 fn fs_entry_context(kind: ChangeKind) -> &'static str {
     match kind {
         ChangeKind::Created => "created fs_entry change",
         ChangeKind::Updated => "updated fs_entry change",
         ChangeKind::Removed => "removed fs_entry change",
         ChangeKind::Unchanged => "unchanged fs_entry change",
+    }
+}
+
+fn controller_fs_entry_context(kind: ChangeKind) -> &'static str {
+    match kind {
+        ChangeKind::Created => "created controller_fs_entry change",
+        ChangeKind::Updated => "updated controller_fs_entry change",
+        ChangeKind::Removed => "removed controller_fs_entry change",
+        ChangeKind::Unchanged => "unchanged controller_fs_entry change",
     }
 }
 

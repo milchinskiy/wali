@@ -356,7 +356,7 @@ fn pull_tree(
                 }
                 TreeSymlinkPolicy::Skip => {
                     counts.skipped += 1;
-                    result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, local_report_path(&path)));
+                    result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Unchanged, local_report_path(&path)));
                 }
                 TreeSymlinkPolicy::Error => {
                     return Err(crate::Error::CommandExec(format!("refusing to pull source symlink: {}", entry.path)));
@@ -366,7 +366,7 @@ fn pull_tree(
                 counts.other += 1;
                 if opts.skip_special {
                     counts.skipped += 1;
-                    result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, local_report_path(&path)));
+                    result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Unchanged, local_report_path(&path)));
                 } else {
                     return Err(crate::Error::CommandExec(format!(
                         "refusing to pull special filesystem entry without skip_special=true: {}",
@@ -811,7 +811,7 @@ fn ensure_local_dir(result: &mut ExecutionResult, path: &Path, mode: Option<File
             if let Some(mode) = mode {
                 set_local_mode(path, mode)?;
             }
-            result.merge(ExecutionResult::fs_entry(ChangeKind::Created, local_report_path(path)));
+            result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Created, local_report_path(path)));
         }
         Some(FsPathKind::Dir) => {
             let changed = apply_local_mode_if_needed(path, mode)?;
@@ -820,7 +820,7 @@ fn ensure_local_dir(result: &mut ExecutionResult, path: &Path, mode: Option<File
             } else {
                 ChangeKind::Unchanged
             };
-            result.merge(ExecutionResult::fs_entry(kind, local_report_path(path)));
+            result.merge(ExecutionResult::controller_fs_entry(kind, local_report_path(path)));
         }
         Some(kind) => {
             return Err(crate::Error::CommandExec(format!(
@@ -841,14 +841,14 @@ fn ensure_local_symlink(
 ) -> crate::Result<()> {
     let Some(kind) = local_lstat_kind(link_path)? else {
         create_local_symlink(target_path.as_str(), link_path)?;
-        result.merge(ExecutionResult::fs_entry(ChangeKind::Created, local_report_path(link_path)));
+        result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Created, local_report_path(link_path)));
         return Ok(());
     };
 
     if kind == FsPathKind::Symlink
         && std::fs::read_link(link_path).is_ok_and(|current| current == Path::new(target_path.as_str()))
     {
-        result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, local_report_path(link_path)));
+        result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Unchanged, local_report_path(link_path)));
         return Ok(());
     }
 
@@ -872,9 +872,9 @@ fn ensure_local_symlink(
     }
 
     std::fs::remove_file(link_path)?;
-    result.merge(ExecutionResult::fs_entry(ChangeKind::Removed, local_report_path(link_path)));
+    result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Removed, local_report_path(link_path)));
     create_local_symlink(target_path.as_str(), link_path)?;
-    result.merge(ExecutionResult::fs_entry(ChangeKind::Created, local_report_path(link_path)));
+    result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Created, local_report_path(link_path)));
     Ok(())
 }
 
@@ -983,7 +983,7 @@ fn write_local_file(path: &Path, content: &[u8], opts: &PullFileOpts) -> crate::
                 )));
             }
             if !opts.replace {
-                return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, local_report_path(path)));
+                return Ok(ExecutionResult::controller_fs_entry(ChangeKind::Unchanged, local_report_path(path)));
             }
             None
         }
@@ -995,11 +995,11 @@ fn write_local_file(path: &Path, content: &[u8], opts: &PullFileOpts) -> crate::
                     } else {
                         ChangeKind::Unchanged
                     };
-                    ExecutionResult::fs_entry(kind, local_report_path(path))
+                    ExecutionResult::controller_fs_entry(kind, local_report_path(path))
                 });
             }
             if !opts.replace {
-                return Ok(ExecutionResult::fs_entry(ChangeKind::Unchanged, local_report_path(path)));
+                return Ok(ExecutionResult::controller_fs_entry(ChangeKind::Unchanged, local_report_path(path)));
             }
             local_metadata_mode(metadata)
         }
@@ -1029,7 +1029,7 @@ fn write_local_file(path: &Path, content: &[u8], opts: &PullFileOpts) -> crate::
         crate::Error::Io(error)
     })?;
 
-    Ok(ExecutionResult::fs_entry(result, local_report_path(path)))
+    Ok(ExecutionResult::controller_fs_entry(result, local_report_path(path)))
 }
 
 fn local_symlink_points_to_directory(path: &Path) -> crate::Result<bool> {

@@ -455,14 +455,17 @@ Common change kinds are:
 
 Current subjects include:
 
-- fs_entry
-- command
+- `fs_entry` for target-host filesystem entries;
+- `controller_fs_entry` for controller-side filesystem entries;
+- `command` for command execution summaries.
 
 Apply-result contract rules:
 
 - changed `fs_entry` records (`created`, `updated`, or `removed`) must include a
   non-empty absolute target-host `path`;
-- unchanged `fs_entry` records may omit `path` when the module only wants to
+- changed `controller_fs_entry` records must include a non-empty absolute
+  controller-side `path`;
+- unchanged filesystem records may omit `path` when the module only wants to
   explain that no mutation happened;
 - `command` records are described by `detail`; `path` has no meaning for command
   changes and is ignored by Wali;
@@ -471,7 +474,9 @@ Apply-result contract rules:
 
 These checks happen at the Rust boundary after `apply` returns. They are strict
 for state-affecting filesystem changes because apply state and cleanup rely on
-those paths being complete and deterministic.
+those paths being complete and deterministic. State-based cleanup only removes
+created target-host `fs_entry` resources; controller-side artifacts are reported
+for visibility but are not removed through host cleanup.
 
 ## Host filesystem API
 

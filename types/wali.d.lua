@@ -21,7 +21,7 @@ null = nil
 ---@alias WaliWalkOrder 'native'|'pre'|'post'
 ---@alias WaliPtyMode 'never'|'auto'|'require'
 ---@alias WaliChangeKind 'unchanged'|'created'|'updated'|'removed'
----@alias WaliChangeSubject 'fs_entry'|'command'
+---@alias WaliChangeSubject 'fs_entry'|'controller_fs_entry'|'command'
 ---@alias WaliCommandChangedPolicy 'on_run'|'always'|'never'
 ---@alias WaliTreeSymlinkPolicy 'preserve'|'skip'|'error'
 ---@alias WaliPermissionsExpect 'any'|'file'|'dir'
@@ -325,7 +325,7 @@ null = nil
 ---@class WaliExecutionChange
 ---@field kind WaliChangeKind
 ---@field subject WaliChangeSubject
----@field path? string Required for changed fs_entry records.
+---@field path? string Required for changed fs_entry and controller_fs_entry records.
 ---@field detail? string
 
 ---@generic TArgs

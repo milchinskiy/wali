@@ -100,9 +100,10 @@ Modules return structured results. Results must clearly distinguish unchanged,
 changed, failed, and skipped work. Resource records are not cosmetic: cleanup
 uses them to decide what may be removed later.
 
-Cleanup is deliberately conservative. It removes resources recorded as `created`
-by a previous successful apply and inside the currently selected manifest scope.
-It does not remove entries that were updated, unchanged, or not recorded.
+Cleanup is deliberately conservative. It removes target-host resources recorded
+as `created` by a previous successful apply and inside the currently selected
+manifest scope. It does not remove entries that were updated, unchanged, not
+recorded, or reported as controller-side artifacts by pull operations.
 
 ## Compatibility
 

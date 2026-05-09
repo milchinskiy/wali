@@ -442,11 +442,15 @@ mod tests {
     }
 
     fn created_resource(task_id: &str, path: &str) -> StateResource {
+        created_resource_with_subject(task_id, ChangeSubject::FsEntry, path)
+    }
+
+    fn created_resource_with_subject(task_id: &str, subject: ChangeSubject, path: &str) -> StateResource {
         StateResource {
             host_id: "localhost".to_string(),
             task_id: task_id.to_string(),
             kind: ChangeKind::Created,
-            subject: ChangeSubject::FsEntry,
+            subject,
             path: Some(TargetPath::from(path)),
             detail: None,
             run_as: None,
@@ -473,6 +477,25 @@ mod tests {
         assert_eq!(cleanup.hosts.len(), 1);
         assert_eq!(cleanup.hosts[0].tasks.len(), 2);
         assert_eq!(paths, BTreeSet::from(["/drop", "/keep"]));
+    }
+
+    #[test]
+    fn cleanup_ignores_controller_filesystem_resources() {
+        let previous = plan(vec![task("pull", "wali.builtin.pull_file", "/controller-artifact")]);
+        let state = state(
+            &previous,
+            vec![created_resource_with_subject(
+                "pull",
+                ChangeSubject::ControllerFsEntry,
+                "/controller-artifact",
+            )],
+        );
+        let current = plan(vec![task("pull", "wali.builtin.pull_file", "/controller-artifact")]);
+
+        let cleanup =
+            build_cleanup_plan(&state, &current, &crate::plan::Selection::default()).expect("cleanup plan failed");
+
+        assert!(cleanup.hosts.is_empty());
     }
 
     #[test]
@@ -520,6 +543,7 @@ mod tests {
                 result: ExecutionResult {
                     changes: vec![
                         ExecutionChange::fs_entry(ChangeKind::Created, "/created"),
+                        ExecutionChange::controller_fs_entry(ChangeKind::Created, "/controller-created"),
                         ExecutionChange::command(ChangeKind::Updated, "ran command"),
                     ],
                     message: None,
@@ -530,13 +554,15 @@ mod tests {
 
         let resources = state_resources(&plan, &captured).expect("resource extraction failed");
 
-        assert_eq!(resources.len(), 2);
+        assert_eq!(resources.len(), 3);
         assert_eq!(resources[0].host_id, "localhost");
         assert_eq!(resources[0].task_id, "managed");
         assert_eq!(resources[0].kind, ChangeKind::Created);
         assert_eq!(resources[0].subject, ChangeSubject::FsEntry);
         assert_eq!(resources[0].path.as_ref().map(TargetPath::as_str), Some("/created"));
         assert!(resources[0].run_as.is_some());
-        assert_eq!(resources[1].subject, ChangeSubject::Command);
+        assert_eq!(resources[1].subject, ChangeSubject::ControllerFsEntry);
+        assert_eq!(resources[1].path.as_ref().map(TargetPath::as_str), Some("/controller-created"));
+        assert_eq!(resources[2].subject, ChangeSubject::Command);
     }
 }

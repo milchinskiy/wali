@@ -88,8 +88,9 @@ wali cleanup --state-file apply-state.json manifest.lua
 `plan` compiles the manifest without connecting to hosts. `check` connects,
 prepares modules, evaluates host predicates, normalizes arguments, and validates
 module input without mutating hosts. `apply` performs the checked changes.
-`cleanup` removes only filesystem entries recorded as `created` in a previous
-successful apply state file.
+`cleanup` removes only target-host filesystem entries recorded as `created` in
+a previous successful apply state file. Controller-side artifacts reported by
+pull operations are not removed by host cleanup.
 
 ## Builtin modules
 

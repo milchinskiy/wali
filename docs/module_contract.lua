@@ -188,8 +188,10 @@ return {
 
 	-- Apply-result rules:
 	--   changed fs_entry records (created/updated/removed) require a non-empty
-	--   absolute target-host path;
-	--   unchanged fs_entry records may omit path when no concrete resource changed;
+	--   absolute target-host path and are eligible for cleanup;
+	--   changed controller_fs_entry records require a non-empty absolute
+	--   controller-side path and are not removed by target-host cleanup;
+	--   unchanged filesystem records may omit path when no concrete resource changed;
 	--   command records use detail; path is ignored for command changes;
 	--   whitespace-only message/detail fields are treated as absent.
 }

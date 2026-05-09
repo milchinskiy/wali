@@ -29,6 +29,9 @@ module, and state-file contracts may still evolve before 1.0.
   path shape and controller destination conflicts, while target source existence
   and kind are verified during apply so a preceding task can create the source
   tree.
+- Controller-side writes from pull transfers are reported as
+  `controller_fs_entry` changes instead of target-host `fs_entry` changes, so
+  state cleanup cannot accidentally remove same-named paths on remote hosts.
 
 ## 0.1.1
 

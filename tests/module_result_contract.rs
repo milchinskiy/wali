@@ -95,6 +95,65 @@ fn changed_fs_entry_result_rejects_missing_empty_or_relative_path() {
 }
 
 #[test]
+fn controller_fs_entry_result_uses_controller_path_contract() {
+    let cases = [
+        (
+            "controller_missing_path",
+            r#"
+        return {
+            changes = {
+                { kind = "created", subject = "controller_fs_entry" },
+            },
+        }
+"#,
+            "invalid apply result: changes[1].path is required for created controller_fs_entry change",
+        ),
+        (
+            "controller_relative_path",
+            r#"
+        return {
+            changes = {
+                { kind = "updated", subject = "controller_fs_entry", path = "relative/path" },
+            },
+        }
+"#,
+            "invalid apply result: changes[1].path must be absolute for updated controller_fs_entry change",
+        ),
+    ];
+
+    for (name, body, needle) in cases {
+        let sandbox = Sandbox::new(&format!("result-contract-{name}"));
+        let modules = sandbox.mkdir("modules");
+        write_module(&modules, name, body);
+        let manifest = manifest_for_module(&sandbox, &modules, name);
+
+        assert_apply_failure_contains(&manifest, needle);
+    }
+
+    let sandbox = Sandbox::new("result-contract-controller-valid-path");
+    let modules = sandbox.mkdir("modules");
+    let path = sandbox.path("controller-tracked.txt");
+    write_module(
+        &modules,
+        "controller_valid_path",
+        &format!(
+            r#"
+        return {{
+            changes = {{
+                {{ kind = "created", subject = "controller_fs_entry", path = {} }},
+            }},
+        }}
+"#,
+            lua_string(&path),
+        ),
+    );
+    let manifest = manifest_for_module(&sandbox, &modules, "controller_valid_path");
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "result contract");
+}
+
+#[test]
 fn unchanged_fs_entry_result_may_omit_path() {
     let sandbox = Sandbox::new("result-contract-unchanged-no-path");
     let modules = sandbox.mkdir("modules");
