@@ -20,6 +20,9 @@ module, and state-file contracts may still evolve before 1.0.
   helpers for custom modules.
 - LuaLS stubs for the new tree transfer modules and transfer helper option
   tables.
+- `manifest.here(...)` helper for building absolute controller paths relative
+  to the manifest directory, useful for localhost-only manifests that need an
+  absolute target-host path such as `link_tree.src`.
 
 ### Changed
 

@@ -120,6 +120,12 @@ relative to manifest `base_path`. Tree transfer is split by namespace:
 `push_tree` reads a controller-side tree and writes a target-host tree, while
 `pull_tree` reads a target-host tree and writes a controller-side tree.
 
+For localhost manifests that intentionally need an absolute path next to the
+manifest file, use `require("manifest").here(...)`. For example, dotfile
+manifests can pass `src = m.here("home")` to `link_tree`; the resulting path is
+absolute on the controller and is valid for `link_tree` only when the target
+host sees the same filesystem, normally `localhost`.
+
 ## External modules
 
 Wali can load task modules from local directories or Git repositories. The core

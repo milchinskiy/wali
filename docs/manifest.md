@@ -51,6 +51,38 @@ The helper rejects unknown option names and non-table option values. Helper ids
 and task module names must be strings without leading/trailing whitespace or
 control characters.
 
+The helper also exposes `m.here(...)` for manifests that need an absolute
+controller path relative to the manifest directory:
+
+```lua
+local m = require("manifest")
+
+return {
+    hosts = {
+        m.host.localhost("localhost"),
+    },
+
+    tasks = {
+        m.task("link dotfiles")("wali.builtin.link_tree", {
+            src = m.here("home"),
+            dest = "/home/alice",
+            replace = true,
+        }),
+    },
+}
+```
+
+`m.here()` returns the absolute manifest directory. `m.here("dir", "file")`
+lexically joins relative path parts from that directory. It does not inspect the
+filesystem, does not require the result to exist, and does not use `base_path`.
+Empty, absolute, and control-character path parts are rejected.
+
+Use `m.here(...)` with target-host modules only when that absolute controller
+path is also meaningful on the target host. This is normally true for
+`localhost` dotfile manifests. For SSH hosts, prefer `push_tree`/`push_file`, or
+first transfer files to a known target-host directory and then use target-host
+modules against that directory.
+
 LuaLS users can add `types/` to `workspace.library` to get completion for raw
 manifest tables (`WaliManifestDefinition`), `require("manifest")`, host helpers,
 task helper options, module sources, host selectors, `when` predicates, and

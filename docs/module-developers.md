@@ -684,6 +684,12 @@ directory. `base_path` must resolve to an existing directory. No project-root
 boundary is imposed: wali assumes the manifest author controls which local files
 may be read or written.
 
+`require("manifest").here(...)` is a manifest authoring helper, not a module
+runtime resolver. It returns an absolute controller path relative to the
+manifest directory and is useful only when the receiving module expects an
+absolute path in the same filesystem namespace, such as `link_tree.src` in a
+localhost-only dotfiles manifest.
+
 `push_file` accepts the same write options as `ctx.host.fs.write(...)`:
 
 ```lua

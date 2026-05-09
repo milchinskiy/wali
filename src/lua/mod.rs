@@ -31,11 +31,14 @@ impl LuaRuntime {
         Ok(LuaRuntime { lua })
     }
 
-    pub fn with_manifest_flow() -> mlua::Result<Self> {
+    pub fn with_manifest_flow<P>(manifest_dir: P) -> mlua::Result<Self>
+    where
+        P: AsRef<std::path::Path>,
+    {
         let runtime = Self::new()?;
 
-        runtime.register_module_content(
-            "manifest",
+        runtime.register_manifest_module(
+            manifest_dir,
             include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/manifest.lua")),
         )?;
 
@@ -67,6 +70,26 @@ impl LuaRuntime {
         let extra_paths =
             format!("{};{}", path.join("?.lua").to_string_lossy(), path.join("?/init.lua").to_string_lossy());
         package.set("path", format!("{extra_paths};{current_path}"))
+    }
+
+    fn register_manifest_module<P, C>(&self, manifest_dir: P, content: C) -> mlua::Result<()>
+    where
+        P: AsRef<std::path::Path>,
+        C: AsRef<str>,
+    {
+        let module: mlua::Table = self.eval("manifest", content.as_ref())?;
+        let manifest_dir = manifest_dir.as_ref().to_path_buf();
+
+        module.set("here", {
+            let manifest_dir = manifest_dir.clone();
+            self.lua.create_function(move |_, parts: mlua::Variadic<String>| {
+                manifest_here(&manifest_dir, parts)
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .map_err(mlua::Error::external)
+            })?
+        })?;
+
+        self.lua.register_module("manifest", module)
     }
 
     pub fn register_module_content<N, C>(&self, name: N, content: C) -> mlua::Result<()>
@@ -128,6 +151,34 @@ impl LuaRuntime {
         let module: mlua::Table = self.require(load_name.as_ref())?;
         module::Module::new(display_name, &self.lua, module)
     }
+}
+
+fn manifest_here(manifest_dir: &std::path::Path, parts: mlua::Variadic<String>) -> crate::Result<std::path::PathBuf> {
+    let mut path = manifest_dir.to_path_buf();
+
+    for part in parts {
+        validate_manifest_here_part(&part)?;
+        let part_path = std::path::Path::new(&part);
+        if part_path.is_absolute() {
+            return Err(crate::Error::InvalidManifest(format!("manifest here path part must be relative: {part}")));
+        }
+        path.push(part_path);
+    }
+
+    Ok(controller::normalize_path(&path))
+}
+
+fn validate_manifest_here_part(part: &str) -> crate::Result {
+    if part.is_empty() {
+        return Err(crate::Error::InvalidManifest("manifest here path part must not be empty".into()));
+    }
+    if part.chars().any(char::is_control) {
+        return Err(crate::Error::InvalidManifest(
+            "manifest here path part must not contain control characters".into(),
+        ));
+    }
+
+    Ok(())
 }
 
 fn validate_include_path(path: &std::path::Path) -> mlua::Result<()> {

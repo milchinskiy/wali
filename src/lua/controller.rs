@@ -208,7 +208,7 @@ pub(crate) fn resolve_regular_file(base_path: &Path, path: &str, label: &str) ->
     Ok(path)
 }
 
-fn normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     let mut prefix: Option<OsString> = None;
     let mut absolute = false;
     let mut parts: Vec<OsString> = Vec::new();

@@ -529,6 +529,22 @@ directory or symlink is created.
   directories;
 - extra destination entries are not pruned.
 
+For localhost-only dotfile manifests, `src` can be built from the manifest
+directory with `m.here(...)`:
+
+```lua
+local m = require("manifest")
+
+m.task("link dotfiles")("wali.builtin.link_tree", {
+    src = m.here("home"),
+    dest = "/home/alice",
+    replace = true,
+})
+```
+
+This remains a target-host absolute path. Use this pattern only when the target
+host is `localhost` or when the same absolute path exists on the target host.
+
 ## `wali.builtin.copy_tree`
 
 Copies a source directory tree into a destination directory on the same target

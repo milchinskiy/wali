@@ -121,6 +121,48 @@ return {{
 }
 
 #[test]
+fn link_tree_can_use_manifest_here_for_local_dotfiles_tree() {
+    let sandbox = Sandbox::new("link-tree-manifest-here");
+    let manifest_dir = sandbox.mkdir("dotfiles");
+    let src = manifest_dir.join("home");
+    let nested = src.join(".config/nvim");
+    std::fs::create_dir_all(&nested).expect("failed to create dotfiles tree");
+    std::fs::write(src.join(".gitconfig"), "[user]\n").expect("failed to write dotfile");
+    std::fs::write(nested.join("init.lua"), "vim.opt.number = true\n").expect("failed to write nvim config");
+
+    let dest = sandbox.path("home");
+    let manifest = manifest_dir.join("manifest.lua");
+    std::fs::write(
+        &manifest,
+        format!(
+            r#"
+local m = require("manifest")
+
+return {{
+    hosts = {{
+        m.host.localhost("localhost"),
+    }},
+    tasks = {{
+        m.task("link dotfiles")("wali.builtin.link_tree", {{
+            src = m.here("home"),
+            dest = {},
+            replace = true,
+        }}),
+    }},
+}}
+"#,
+            lua_string(&dest),
+        ),
+    )
+    .expect("failed to write manifest");
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "link dotfiles");
+    assert_eq!(std::fs::read_link(dest.join(".gitconfig")).unwrap(), src.join(".gitconfig"));
+    assert_eq!(std::fs::read_link(dest.join(".config/nvim/init.lua")).unwrap(), src.join(".config/nvim/init.lua"));
+}
+
+#[test]
 fn copy_tree_skip_symlinks_reports_skipped_without_copying_link() {
     let sandbox = Sandbox::new("copy-tree-skip-symlinks");
     let src = sandbox.path("src");

@@ -73,6 +73,10 @@
 --   pull_file(src, dest, opts), pull_tree(src, dest, opts)
 --   controller-side paths are resolved against manifest base_path.
 --
+-- require("manifest") additionally exposes here(...), which returns an
+-- absolute controller path relative to the manifest directory. It is intended
+-- for manifest authoring, not module apply-time path resolution.
+--
 -- apply ctx.host.fs additionally exposes mutation helpers:
 --   write, copy_file, create_dir, remove_file, remove_dir, mktemp, chmod,
 --   chown, rename, symlink

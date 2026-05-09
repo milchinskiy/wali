@@ -88,7 +88,9 @@ Target-host filesystem modules require absolute host paths unless a module
 explicitly documents otherwise. Controller-side transfer and template paths may
 be absolute or relative to manifest `base_path`. Tree transfer modules keep
 these namespaces explicit: `push_tree` is controller-to-host, and `pull_tree` is
-host-to-controller.
+host-to-controller. `manifest.here(...)` exists only to let a manifest name an
+absolute controller path next to itself; it does not change a target-host module
+into a controller-side module.
 
 Destructive operations should reject ambiguous or dangerous inputs before
 mutation. Tree operations should reject source/destination nesting that would

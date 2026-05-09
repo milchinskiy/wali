@@ -4,6 +4,7 @@
 ---@class WaliManifestModule
 ---@field host WaliManifestHostHelperApi
 ---@field task fun(id: string): WaliManifestTaskFactory
+---@field here fun(...: string): string Absolute controller path relative to the manifest directory.
 local manifest = {}
 
 ---@class WaliManifestHostHelperApi
@@ -237,5 +238,11 @@ function manifest.host.ssh(id, opts) end
 ---@param id string
 ---@return WaliManifestTaskFactory
 function manifest.task(id) end
+
+---Return an absolute controller path relative to the manifest directory.
+---This helper does not inspect the filesystem and does not use `base_path`.
+---@param ... string Relative path parts. Absolute, empty, and control-character parts are rejected.
+---@return string
+function manifest.here(...) end
 
 return manifest
