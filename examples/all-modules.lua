@@ -36,38 +36,34 @@ return {
 	},
 
 	tasks = {
-		m.task("create workspace")("wali.builtin.dir", {
+		m.task("create workspace")("wali.builtin.mkdir", {
 			path = root,
-			state = "present",
 			parents = true,
 			mode = "0755",
 		}),
 
-		m.task("create source tree")("wali.builtin.dir", {
+		m.task("create source tree")("wali.builtin.mkdir", {
 			path = p("source"),
-			state = "present",
 			parents = true,
 			mode = "0755",
 		}, after("create workspace")),
 
-		m.task("create work directory")("wali.builtin.dir", {
+		m.task("create work directory")("wali.builtin.mkdir", {
 			path = p("work"),
-			state = "present",
 			parents = true,
 			mode = "0755",
 		}, after("create workspace")),
 
-		m.task("write source file")("wali.builtin.file", {
-			path = p("source", "source.txt"),
-			state = "present",
+		m.task("write source file")("wali.builtin.write", {
+			dest = p("source", "source.txt"),
 			content = "managed by wali\n",
-			create_parents = true,
+			parents = true,
 			replace = true,
 		}, after("create source tree")),
 
 		m.task("touch marker file")("wali.builtin.touch", {
 			path = p("source", "marker.txt"),
-			create_parents = true,
+			parents = true,
 			mode = "0644",
 		}, after("create source tree")),
 
@@ -78,25 +74,24 @@ return {
 		}, after("write source file")),
 
 		m.task("create source symlink")("wali.builtin.link", {
-			path = p("source", "source.link"),
-			target = p("source", "source.txt"),
-			state = "present",
+			dest = p("source", "source.link"),
+			src = p("source", "source.txt"),
 			replace = true,
 		}, after("write source file")),
 
-		m.task("copy source file")("wali.builtin.copy_file", {
+		m.task("copy source file")("wali.builtin.copy", {
 			src = p("source", "source.txt"),
 			dest = p("work", "source-copy.txt"),
-			create_parents = true,
+			parents = true,
 			replace = true,
 			preserve_mode = true,
 		}, after("enforce source file permissions", "create work directory")),
 
-		m.task("render inline template")("wali.builtin.template", {
+		m.task("render inline template")("wali.builtin.write", {
 			content = "app={{ app }}\nrole={{ role }}\nroot={{ root }}\nnote={{ note }}\n",
 			dest = p("work", "rendered.conf"),
-			vars = { note = "rendered by wali.builtin.template" },
-			create_parents = true,
+			vars = { note = "rendered by wali.builtin.write" },
+			parents = true,
 			replace = true,
 			mode = "0644",
 		}, after("create work directory")),
@@ -107,41 +102,44 @@ return {
 			creates = p("work", "command.txt"),
 		}, after("create work directory")),
 
-		m.task("push controller file")("wali.builtin.push_file", {
+		m.task("push controller file")("wali.builtin.push", {
 			src = "test.lua",
 			dest = p("work", "pushed-test.lua"),
-			create_parents = true,
+			parents = true,
 			replace = true,
 			mode = "0644",
 		}, after("create work directory")),
 
-		m.task("pull pushed file")("wali.builtin.pull_file", {
+		m.task("pull pushed file")("wali.builtin.pull", {
 			src = p("work", "pushed-test.lua"),
 			dest = controller_path("pulled-test.lua"),
-			create_parents = true,
+			parents = true,
 			replace = true,
 			mode = "0644",
 		}, after("push controller file")),
 
-		m.task("push controller tree")("wali.builtin.push_tree", {
+		m.task("push controller tree")("wali.builtin.push", {
 			src = "custom-mods",
 			dest = p("work", "pushed-custom-mods"),
+			recursive = true,
 			replace = true,
 			preserve_mode = true,
 			symlinks = "preserve",
 		}, after("create work directory")),
 
-		m.task("pull pushed tree")("wali.builtin.pull_tree", {
+		m.task("pull pushed tree")("wali.builtin.pull", {
 			src = p("work", "pushed-custom-mods"),
 			dest = controller_path("pulled-custom-mods"),
+			recursive = true,
 			replace = true,
 			preserve_mode = true,
 			symlinks = "preserve",
 		}, after("push controller tree")),
 
-		m.task("copy tree preserving symlinks")("wali.builtin.copy_tree", {
+		m.task("copy tree preserving symlinks")("wali.builtin.copy", {
 			src = p("source"),
 			dest = p("tree-copy-preserve"),
+			recursive = true,
 			replace = true,
 			preserve_mode = true,
 			symlinks = "preserve",
@@ -149,9 +147,10 @@ return {
 			file_mode = "0644",
 		}, after("touch marker file", "create source symlink", "enforce source file permissions")),
 
-		m.task("copy tree skipping symlinks")("wali.builtin.copy_tree", {
+		m.task("copy tree skipping symlinks")("wali.builtin.copy", {
 			src = p("source"),
 			dest = p("tree-copy-skip"),
+			recursive = true,
 			replace = true,
 			preserve_mode = true,
 			symlinks = "skip",
@@ -159,9 +158,10 @@ return {
 			file_mode = "0644",
 		}, after("touch marker file", "create source symlink", "enforce source file permissions")),
 
-		m.task("link source tree")("wali.builtin.link_tree", {
+		m.task("link source tree")("wali.builtin.link", {
 			src = p("source"),
 			dest = p("tree-link"),
+			recursive = true,
 			replace = true,
 			dir_mode = "0755",
 		}, after("touch marker file", "create source symlink", "enforce source file permissions")),

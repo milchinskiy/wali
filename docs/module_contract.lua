@@ -173,7 +173,7 @@ return {
 	---Apply the task. Return an ExecutionResult-compatible table.
 	---@param ctx WaliApplyCtx
 	---@param args any
-	---@return WaliExecutionResult
+	---@return WaliExecutionResult|WaliApplySkipResult
 	apply = function(ctx, args)
 		-- do something
 		return {
@@ -186,6 +186,8 @@ return {
 			message = "optional human summary",
 			data = { optional = "structured machine-readable payload" },
 		}
+		-- or
+		-- return require("wali.api").result.skip("nothing to do")
 		-- or
 		-- error("error message")
 	end,
@@ -201,28 +203,23 @@ return {
 }
 
 -- Builtin modules are reserved under the wali.builtin.* namespace:
---   wali.builtin.dir
---   wali.builtin.file
---   wali.builtin.copy_file
---   wali.builtin.push_file
---   wali.builtin.push_tree
---   wali.builtin.pull_file
---   wali.builtin.pull_tree
---   wali.builtin.link
---   wali.builtin.remove
 --   wali.builtin.touch
---   wali.builtin.link_tree
---   wali.builtin.copy_tree
+--   wali.builtin.mkdir
+--   wali.builtin.write
+--   wali.builtin.link
+--   wali.builtin.copy
+--   wali.builtin.push
+--   wali.builtin.pull
+--   wali.builtin.remove
 --   wali.builtin.permissions
 --   wali.builtin.command
---   wali.builtin.template
 -- Shared builtin Lua helpers are available as wali.builtin.lib.
 
 -- Shared helper library for custom modules:
 --   local lib = require("wali.builtin.lib")
 --
 -- Stable helper groups:
---   lib.result.apply(), lib.result.validation()
+--   lib.result.apply(), lib.result.validation(), lib.result.skip(reason)
 --   lib.validation_ok(message?), lib.validation_error(message)
 --   lib.schema.mode(), lib.schema.owner()
 --   lib.mode_bits("0644"), lib.owner({ user = "root", group = 0 })

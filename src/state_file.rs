@@ -460,11 +460,11 @@ mod tests {
     #[test]
     fn cleanup_plan_uses_explicit_resources_not_report_json() {
         let previous = plan(vec![
-            task("keep", "wali.builtin.file", "/keep"),
-            task("drop", "wali.builtin.file", "/drop"),
+            task("keep", "wali.builtin.write", "/keep"),
+            task("drop", "wali.builtin.write", "/drop"),
         ]);
         let state = state(&previous, vec![created_resource("keep", "/keep"), created_resource("drop", "/drop")]);
-        let current = plan(vec![task("keep", "wali.builtin.file", "/keep")]);
+        let current = plan(vec![task("keep", "wali.builtin.write", "/keep")]);
 
         let cleanup =
             build_cleanup_plan(&state, &current, &crate::plan::Selection::default()).expect("cleanup plan failed");
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn cleanup_ignores_controller_filesystem_resources() {
-        let previous = plan(vec![task("pull", "wali.builtin.pull_file", "/controller-artifact")]);
+        let previous = plan(vec![task("pull", "wali.builtin.pull", "/controller-artifact")]);
         let state = state(
             &previous,
             vec![created_resource_with_subject(
@@ -490,7 +490,7 @@ mod tests {
                 "/controller-artifact",
             )],
         );
-        let current = plan(vec![task("pull", "wali.builtin.pull_file", "/controller-artifact")]);
+        let current = plan(vec![task("pull", "wali.builtin.pull", "/controller-artifact")]);
 
         let cleanup =
             build_cleanup_plan(&state, &current, &crate::plan::Selection::default()).expect("cleanup plan failed");
@@ -501,11 +501,11 @@ mod tests {
     #[test]
     fn task_scoped_cleanup_preserves_unselected_previous_tasks() {
         let previous = plan(vec![
-            task("keep", "wali.builtin.file", "/keep"),
-            task("drop", "wali.builtin.file", "/drop"),
+            task("keep", "wali.builtin.write", "/keep"),
+            task("drop", "wali.builtin.write", "/drop"),
         ]);
         let state = state(&previous, vec![created_resource("keep", "/keep"), created_resource("drop", "/drop")]);
-        let current = plan(vec![task("keep", "wali.builtin.file", "/keep")]);
+        let current = plan(vec![task("keep", "wali.builtin.write", "/keep")]);
         let mut selection = crate::plan::Selection::default();
         selection.insert_task("keep");
 
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn state_resources_include_only_successful_task_changes_with_run_as() {
-        let mut managed = task("managed", "wali.builtin.file", "/created");
+        let mut managed = task("managed", "wali.builtin.write", "/created");
         managed.run_as = Some(RunAs {
             id: "root".to_string(),
             user: "root".to_string(),

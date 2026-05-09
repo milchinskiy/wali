@@ -160,8 +160,8 @@ LuaLS flag accidental use of apply-only APIs such as `ctx.host.cmd.*`,
 `ctx.host.fs.write`, `ctx.transfer.push_file`, `ctx.rand.*`, or `ctx.sleep_ms`
 inside validation code.
 
-Builtin module argument table types are available as `WaliBuiltinFileArgs`,
-`WaliBuiltinCommandArgs`, `WaliBuiltinTemplateArgs`, and similar classes in
+Builtin module argument table types are available as `WaliBuiltinWriteArgs`,
+`WaliBuiltinCommandArgs`, `WaliBuiltinPushArgs`, and similar classes in
 `types/wali/builtin-modules.d.lua`. External module repositories should ship
 their own `types/*.d.lua` files for their public task modules.
 
@@ -245,19 +245,17 @@ end
 
 Supported schema kinds are:
 
-```text
-any
-null
-string
-number
-integer
-boolean
-list
-tuple
-enum
-object
-map
-```
+- any
+- null
+- string
+- number
+- integer
+- boolean
+- list
+- tuple
+- enum
+- object
+- map
 
 Use schemas to catch wrong argument types early and to apply simple defaults:
 
@@ -267,7 +265,7 @@ schema = {
     required = true,
     props = {
         path = { type = "string", required = true },
-        state = { type = "enum", values = { "present", "absent" }, default = "present" },
+        parents = { type = "boolean", default = true },
         tags = { type = "list", items = { type = "string" }, default = {} },
         owner = {
             type = "object",
@@ -428,7 +426,10 @@ local api = require("wali.api")
 apply = function(ctx, args)
     local result = api.result.apply()
     result:merge(ctx.host.fs.create_dir(args.dir, { recursive = true }))
-    result:merge(ctx.host.fs.write(args.file, args.content, { create_parents = true }))
+    result:merge(ctx.host.fs.write(
+        args.file, args.content,
+        { create_parents = true }
+    ))
     return result:build()
 end
 ```
@@ -562,9 +563,9 @@ imposed. wali assumes the manifest author controls which controller files may be
 read.
 
 The controller filesystem API is intentionally read-only. Controller-side writes
-currently happen only through `wali.builtin.pull_file`,
-`wali.builtin.pull_tree`, `ctx.transfer.pull_file`, or `ctx.transfer.pull_tree`,
-where the transfer operation itself owns the write semantics.
+currently happen only through `wali.builtin.pull`, `ctx.transfer.pull_file`, or
+`ctx.transfer.pull_tree`, where the transfer operation itself owns the write
+semantics.
 
 `metadata` follows symlinks by default, matching `stat`. Use `lstat` or
 `metadata(path, { follow = false })` when the module owns the path itself.
@@ -687,8 +688,8 @@ may be read or written.
 `require("manifest").here(...)` is a manifest authoring helper, not a module
 runtime resolver. It returns an absolute controller path relative to the
 manifest directory and is useful only when the receiving module expects an
-absolute path in the same filesystem namespace, such as `link_tree.src` in a
-localhost-only dotfiles manifest.
+absolute path in the same filesystem namespace, such as recursive
+`wali.builtin.link` `src` in a localhost-only dotfiles manifest.
 
 `push_file` accepts the same write options as `ctx.host.fs.write(...)`:
 
@@ -782,7 +783,10 @@ the host default.
 Command output uses split streams by default:
 
 ```lua
-local out = ctx.host.cmd.exec({ program = "sh", args = { "-c", "printf out; printf err >&2" } })
+local out = ctx.host.cmd.exec({
+    program = "sh",
+    args = { "-c", "printf out; printf err >&2" }
+})
 -- out.stdout == "out"
 -- out.stderr == "err"
 -- out.output == nil

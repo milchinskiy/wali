@@ -1,6 +1,12 @@
-use mlua::LuaSerdeExt;
+use mlua::{LuaSerdeExt, Value as LuaValue};
 
 use crate::executor::{Backend, ExecutionResult};
+
+#[derive(Debug, Clone)]
+pub enum ApplyOutcome {
+    Applied(ExecutionResult),
+    Skipped(String),
+}
 
 pub mod requires;
 pub mod schema;
@@ -107,14 +113,18 @@ impl Module {
         ctx: mlua::Table,
         args: mlua::Value,
         paths: &impl crate::executor::PathSemantics,
-    ) -> crate::Result<ExecutionResult> {
+    ) -> crate::Result<ApplyOutcome> {
         let value = self
             .module
             .get::<mlua::Function>("apply")?
             .call::<mlua::Value>((ctx, args))?;
 
-        if matches!(value, mlua::Value::Nil) {
-            return Ok(ExecutionResult::default());
+        if matches!(value, LuaValue::Nil) {
+            return Ok(ApplyOutcome::Applied(ExecutionResult::default()));
+        }
+
+        if let Some(reason) = apply_skip_reason(&self.name, &value)? {
+            return Ok(ApplyOutcome::Skipped(reason));
         }
 
         let mut result = lua
@@ -131,6 +141,31 @@ impl Module {
                 message: format!("invalid apply result: {message}"),
             })?;
 
-        Ok(result)
+        Ok(ApplyOutcome::Applied(result))
+    }
+}
+
+fn apply_skip_reason(module_id: &str, value: &LuaValue) -> crate::Result<Option<String>> {
+    let LuaValue::Table(table) = value else {
+        return Ok(None);
+    };
+
+    let skipped: LuaValue = table.get("skipped")?;
+    match skipped {
+        LuaValue::Nil => Ok(None),
+        LuaValue::String(reason) => {
+            let reason = reason.to_str()?.trim().to_owned();
+            if reason.is_empty() {
+                return Err(crate::Error::ModuleApply {
+                    id: module_id.to_owned(),
+                    message: "invalid apply result: skipped reason must not be empty".to_owned(),
+                });
+            }
+            Ok(Some(reason))
+        }
+        _ => Err(crate::Error::ModuleApply {
+            id: module_id.to_owned(),
+            message: "invalid apply result: skipped must be a string".to_owned(),
+        }),
     }
 }

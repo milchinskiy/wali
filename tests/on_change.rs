@@ -21,11 +21,11 @@ return {{
     tasks = {{
         {{
             id = "render config",
-            module = "wali.builtin.template",
+            module = "wali.builtin.write",
             args = {{
                 content = "port={{{{ port }}}}\n",
                 dest = {},
-                create_parents = true,
+                parents = true,
             }},
         }},
         {{
@@ -72,8 +72,8 @@ return {{
     tasks = {{
         {{
             id = "render config",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "config\n", create_parents = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "config\n", parents = true }},
         }},
         {{
             id = "reload app",
@@ -83,8 +83,8 @@ return {{
         }},
         {{
             id = "unrelated",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "unrelated\n", create_parents = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "unrelated\n", parents = true }},
         }},
     }},
 }}
@@ -143,8 +143,8 @@ return {{
     tasks = {{
         {{
             id = "source",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "source\n", create_parents = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "source\n", parents = true }},
         }},
         {{
             id = "gated invalid task",
@@ -179,14 +179,14 @@ return {{
         {{
             id = "source",
             when = {{ path_exist = {} }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "source\n", create_parents = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "source\n", parents = true }},
         }},
         {{
             id = "gated",
             on_change = {{ "source" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "gated\n", create_parents = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "gated\n", parents = true }},
         }},
     }},
 }}
@@ -220,13 +220,13 @@ return {{
     tasks = {{
         {{
             id = "stable source",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "stable\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "stable\n" }},
         }},
         {{
             id = "changing source",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "changing\n", create_parents = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "changing\n", parents = true }},
         }},
         {{
             id = "gated",

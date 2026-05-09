@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn source_selection_ignores_external_sources_for_builtin_tasks() {
         let modules = vec![module(None, "/unused"), module(Some("acme"), "/acme")];
-        let task_modules = std::collections::BTreeSet::from(["wali.builtin.file".to_string()]);
+        let task_modules = std::collections::BTreeSet::from(["wali.builtin.write".to_string()]);
 
         let selected = select_sources_for_task_modules(&modules, &task_modules);
 

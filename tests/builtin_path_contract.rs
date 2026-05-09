@@ -34,12 +34,12 @@ fn builtin_host_paths_must_be_absolute_during_check() {
     let abs_b = lua_string(&sandbox.path("b"));
 
     let cases = vec![
-        ("dir path", "wali.builtin.dir", r#"{ path = "relative" }"#.to_owned(), "path must be absolute"),
+        ("mkdir path", "wali.builtin.mkdir", r#"{ path = "relative" }"#.to_owned(), "path must be absolute"),
         (
-            "file path",
-            "wali.builtin.file",
-            r#"{ path = "relative", content = "data" }"#.to_owned(),
-            "path must be absolute",
+            "write dest",
+            "wali.builtin.write",
+            r#"{ dest = "relative", content = "data" }"#.to_owned(),
+            "dest must be absolute",
         ),
         ("touch path", "wali.builtin.touch", r#"{ path = "relative" }"#.to_owned(), "path must be absolute"),
         (
@@ -49,53 +49,35 @@ fn builtin_host_paths_must_be_absolute_during_check() {
             "path must be absolute",
         ),
         (
-            "link path",
+            "link dest",
             "wali.builtin.link",
-            r#"{ path = "relative", target = "relative-target" }"#.to_owned(),
-            "path must be absolute",
+            r#"{ dest = "relative", src = "relative-target" }"#.to_owned(),
+            "dest must be absolute",
         ),
         ("remove path", "wali.builtin.remove", r#"{ path = "relative" }"#.to_owned(), "path must be absolute"),
         (
             "copy src",
-            "wali.builtin.copy_file",
+            "wali.builtin.copy",
             format!(r#"{{ src = "relative", dest = {} }}"#, abs_b),
             "src must be absolute",
         ),
         (
             "copy dest",
-            "wali.builtin.copy_file",
+            "wali.builtin.copy",
             format!(r#"{{ src = {}, dest = "relative" }}"#, abs_a),
             "dest must be absolute",
         ),
         (
             "push dest",
-            "wali.builtin.push_file",
-            format!(r#"{{ src = {}, dest = "relative" }}"#, abs_a),
-            "dest must be absolute",
-        ),
-        (
-            "push tree dest",
-            "wali.builtin.push_tree",
+            "wali.builtin.push",
             format!(r#"{{ src = {}, dest = "relative" }}"#, abs_a),
             "dest must be absolute",
         ),
         (
             "pull src",
-            "wali.builtin.pull_file",
+            "wali.builtin.pull",
             r#"{ src = "relative", dest = "controller-relative" }"#.to_owned(),
             "src must be absolute",
-        ),
-        (
-            "pull tree src",
-            "wali.builtin.pull_tree",
-            r#"{ src = "relative", dest = "controller-relative" }"#.to_owned(),
-            "src must be absolute",
-        ),
-        (
-            "template dest",
-            "wali.builtin.template",
-            r#"{ content = "data", dest = "relative" }"#.to_owned(),
-            "dest must be absolute",
         ),
         (
             "command cwd",
@@ -129,44 +111,17 @@ fn builtin_host_path_empty_strings_are_rejected_clearly() {
     let abs_a = lua_string(&sandbox.path("a"));
 
     let cases = vec![
-        ("dir path", "wali.builtin.dir", r#"{ path = "" }"#.to_owned(), "path must not be empty"),
-        ("copy src", "wali.builtin.copy_file", format!(r#"{{ src = "", dest = {} }}"#, abs_a), "src must not be empty"),
-        (
-            "copy dest",
-            "wali.builtin.copy_file",
-            format!(r#"{{ src = {}, dest = "" }}"#, abs_a),
-            "dest must not be empty",
-        ),
-        (
-            "push dest",
-            "wali.builtin.push_file",
-            format!(r#"{{ src = {}, dest = "" }}"#, abs_a),
-            "dest must not be empty",
-        ),
-        (
-            "push tree dest",
-            "wali.builtin.push_tree",
-            format!(r#"{{ src = {}, dest = "" }}"#, abs_a),
-            "dest must not be empty",
-        ),
+        ("mkdir path", "wali.builtin.mkdir", r#"{ path = "" }"#.to_owned(), "path must not be empty"),
+        ("copy src", "wali.builtin.copy", format!(r#"{{ src = "", dest = {} }}"#, abs_a), "src must not be empty"),
+        ("copy dest", "wali.builtin.copy", format!(r#"{{ src = {}, dest = "" }}"#, abs_a), "dest must not be empty"),
+        ("push dest", "wali.builtin.push", format!(r#"{{ src = {}, dest = "" }}"#, abs_a), "dest must not be empty"),
         (
             "pull src",
-            "wali.builtin.pull_file",
+            "wali.builtin.pull",
             r#"{ src = "", dest = "controller-relative" }"#.to_owned(),
             "src must not be empty",
         ),
-        (
-            "pull tree src",
-            "wali.builtin.pull_tree",
-            r#"{ src = "", dest = "controller-relative" }"#.to_owned(),
-            "src must not be empty",
-        ),
-        (
-            "template dest",
-            "wali.builtin.template",
-            r#"{ content = "data", dest = "" }"#.to_owned(),
-            "dest must not be empty",
-        ),
+        ("write dest", "wali.builtin.write", r#"{ content = "data", dest = "" }"#.to_owned(), "dest must not be empty"),
         (
             "command cwd",
             "wali.builtin.command",
@@ -179,12 +134,7 @@ fn builtin_host_path_empty_strings_are_rejected_clearly() {
             r#"{ program = "true", creates = "" }"#.to_owned(),
             "creates must not be empty",
         ),
-        (
-            "link target",
-            "wali.builtin.link",
-            format!(r#"{{ path = {}, target = "" }}"#, abs_a),
-            "target must not be empty",
-        ),
+        ("link src", "wali.builtin.link", format!(r#"{{ dest = {}, src = "" }}"#, abs_a), "src must not be empty"),
     ];
 
     for (case, module, args, needle) in cases {
@@ -201,7 +151,7 @@ fn builtin_link_target_may_be_relative() {
         &sandbox,
         "relative target link",
         "wali.builtin.link",
-        &format!(r#"{{ path = {}, target = "relative-target", replace = true }}"#, lua_string(&link)),
+        &format!(r#"{{ dest = {}, src = "relative-target", replace = true }}"#, lua_string(&link)),
     );
 
     let report = run_apply(&manifest);
@@ -236,30 +186,30 @@ return {{
     tasks = {{
         {{
             id = "push controller-relative source",
-            module = "wali.builtin.push_file",
-            args = {{ src = "input.txt", dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = "input.txt", dest = {}, parents = true }},
         }},
         {{
             id = "pull controller-relative destination",
             depends_on = {{ "push controller-relative source" }},
-            module = "wali.builtin.pull_file",
-            args = {{ src = {}, dest = "pulled/output.txt", create_parents = true }},
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = "pulled/output.txt", parents = true }},
         }},
         {{
             id = "push controller-relative tree",
-            module = "wali.builtin.push_tree",
-            args = {{ src = "tree", dest = {} }},
+            module = "wali.builtin.push",
+            args = {{ src = "tree", dest = {}, recursive = true }},
         }},
         {{
             id = "pull controller-relative tree",
             depends_on = {{ "push controller-relative tree" }},
-            module = "wali.builtin.pull_tree",
-            args = {{ src = {}, dest = "pulled-tree" }},
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = "pulled-tree", recursive = true }},
         }},
         {{
             id = "render controller-relative template",
-            module = "wali.builtin.template",
-            args = {{ src = "template.txt.j2", dest = {}, vars = {{ value = "ok" }}, create_parents = true }},
+            module = "wali.builtin.write",
+            args = {{ src = "template.txt.j2", dest = {}, vars = {{ value = "ok" }}, parents = true }},
         }},
     }},
 }}

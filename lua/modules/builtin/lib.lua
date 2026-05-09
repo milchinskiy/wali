@@ -227,7 +227,7 @@ end
 
 function lib.write_file_opts(args)
 	local opts = lib.mode_owner_opts(args)
-	opts.create_parents = args.create_parents
+	opts.create_parents = args.parents
 	opts.replace = args.replace
 	return opts
 end
@@ -240,7 +240,7 @@ end
 
 function lib.copy_file_opts(args)
 	local opts = lib.mode_owner_opts(args)
-	opts.create_parents = args.create_parents
+	opts.create_parents = args.parents
 	opts.replace = args.replace
 	opts.preserve_mode = args.preserve_mode
 	return opts
@@ -248,7 +248,7 @@ end
 
 function lib.pull_file_opts(args)
 	local opts = {
-		create_parents = args.create_parents,
+		create_parents = args.parents,
 		replace = args.replace,
 	}
 	if args.mode ~= nil then
@@ -257,23 +257,26 @@ function lib.pull_file_opts(args)
 	return opts
 end
 
-
 function lib.push_tree_opts(args)
 	local opts = {
 		replace = args.replace,
 		preserve_mode = args.preserve_mode,
 		symlinks = args.symlinks,
 		skip_special = args.skip_special,
-		max_depth = args.max_depth,
+		max_depth = args.recursive and args.max_depth or nil,
 	}
 	if args.dir_mode ~= nil then
 		opts.dir_mode = lib.mode_bits(args.dir_mode)
+	elseif args.mode ~= nil then
+		opts.dir_mode = lib.mode_bits(args.mode)
 	end
 	if args.file_mode ~= nil then
 		opts.file_mode = lib.mode_bits(args.file_mode)
+	elseif args.mode ~= nil then
+		opts.file_mode = lib.mode_bits(args.mode)
 	end
-	opts.dir_owner = lib.owner(args.dir_owner)
-	opts.file_owner = lib.owner(args.file_owner)
+	opts.dir_owner = lib.owner(args.dir_owner or args.owner)
+	opts.file_owner = lib.owner(args.file_owner or args.owner)
 	return opts
 end
 
@@ -283,13 +286,17 @@ function lib.pull_tree_opts(args)
 		preserve_mode = args.preserve_mode,
 		symlinks = args.symlinks,
 		skip_special = args.skip_special,
-		max_depth = args.max_depth,
+		max_depth = args.recursive and args.max_depth or nil,
 	}
 	if args.dir_mode ~= nil then
 		opts.dir_mode = lib.mode_bits(args.dir_mode)
+	elseif args.mode ~= nil then
+		opts.dir_mode = lib.mode_bits(args.mode)
 	end
 	if args.file_mode ~= nil then
 		opts.file_mode = lib.mode_bits(args.file_mode)
+	elseif args.mode ~= nil then
+		opts.file_mode = lib.mode_bits(args.mode)
 	end
 	return opts
 end
@@ -319,10 +326,12 @@ function lib.tree_dir_opts(args, metadata)
 	local opts = { recursive = true }
 	if args.dir_mode ~= nil then
 		opts.mode = lib.mode_bits(args.dir_mode)
+	elseif args.mode ~= nil then
+		opts.mode = lib.mode_bits(args.mode)
 	elseif args.preserve_mode then
 		opts.mode = metadata.mode
 	end
-	opts.owner = lib.owner_or_preserved(args.dir_owner, args.preserve_owner, metadata)
+	opts.owner = lib.owner_or_preserved(args.dir_owner or args.owner, args.preserve_owner, metadata)
 	return opts
 end
 
@@ -334,15 +343,41 @@ function lib.tree_copy_file_opts(args, metadata)
 	}
 	if args.file_mode ~= nil then
 		opts.mode = lib.mode_bits(args.file_mode)
+	elseif args.mode ~= nil then
+		opts.mode = lib.mode_bits(args.mode)
 	end
-	opts.owner = lib.owner_or_preserved(args.file_owner, args.preserve_owner, metadata)
+	opts.owner = lib.owner_or_preserved(args.file_owner or args.owner, args.preserve_owner, metadata)
 	return opts
 end
 
 function lib.link_tree_dir_opts(args)
-	local opts = lib.mode_owner_opts(args, { mode = "dir_mode", owner = "dir_owner" })
+	local opts = lib.mode_owner_opts({
+		mode = args.dir_mode or args.mode,
+		owner = args.dir_owner or args.owner,
+	})
 	opts.recursive = true
 	return opts
+end
+
+function lib.skip(reason)
+	return api.result.skip(reason)
+end
+
+function lib.skip_if_replace_false_and_exists(ctx, path, replace, label)
+	if replace then
+		return nil
+	end
+	if ctx.host.fs.lstat(path) ~= nil then
+		return lib.skip((label or "destination") .. " already exists and replace is false: " .. path)
+	end
+	return nil
+end
+
+function lib.path_kind_text(metadata)
+	if metadata == nil then
+		return "absent"
+	end
+	return metadata.kind or "unknown"
 end
 
 function lib.output_text(output)
@@ -597,19 +632,19 @@ function lib.ensure_symlink(ctx, result, link_path, target_path, replace)
 	local current = ctx.host.fs.lstat(link_path)
 	if current == nil then
 		result:merge(ctx.host.fs.symlink(target_path, link_path))
-		return
+		return true
+	end
+
+	if not replace then
+		return false, "destination already exists and replace is false: " .. link_path
 	end
 
 	if current.kind == "symlink" then
 		local current_target = ctx.host.fs.read_link(link_path)
 		if current_target == target_path then
 			result:unchanged(link_path, "symlink already points to target")
-			return
+			return true
 		end
-	end
-
-	if not replace then
-		error("path already exists and replace is false: " .. link_path)
 	end
 	if current.kind == "dir" then
 		error("refusing to replace directory with symlink: " .. link_path)
@@ -620,6 +655,7 @@ function lib.ensure_symlink(ctx, result, link_path, target_path, replace)
 
 	result:merge(ctx.host.fs.remove_file(link_path))
 	result:merge(ctx.host.fs.symlink(target_path, link_path))
+	return true
 end
 
 return lib

@@ -16,18 +16,18 @@ pub(crate) const MODULES: &[BuiltinModule] = &[
         task_module: false,
     },
     BuiltinModule {
-        name: "wali.builtin.dir",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/dir.lua")),
+        name: "wali.builtin.touch",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/touch.lua")),
         task_module: true,
     },
     BuiltinModule {
-        name: "wali.builtin.file",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/file.lua")),
+        name: "wali.builtin.mkdir",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/mkdir.lua")),
         task_module: true,
     },
     BuiltinModule {
-        name: "wali.builtin.copy_file",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy_file.lua")),
+        name: "wali.builtin.write",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/write.lua")),
         task_module: true,
     },
     BuiltinModule {
@@ -36,23 +36,18 @@ pub(crate) const MODULES: &[BuiltinModule] = &[
         task_module: true,
     },
     BuiltinModule {
-        name: "wali.builtin.push_file",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/push_file.lua")),
+        name: "wali.builtin.copy",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy.lua")),
         task_module: true,
     },
     BuiltinModule {
-        name: "wali.builtin.push_tree",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/push_tree.lua")),
+        name: "wali.builtin.push",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/push.lua")),
         task_module: true,
     },
     BuiltinModule {
-        name: "wali.builtin.pull_file",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_file.lua")),
-        task_module: true,
-    },
-    BuiltinModule {
-        name: "wali.builtin.pull_tree",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull_tree.lua")),
+        name: "wali.builtin.pull",
+        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/pull.lua")),
         task_module: true,
     },
     BuiltinModule {
@@ -61,28 +56,8 @@ pub(crate) const MODULES: &[BuiltinModule] = &[
         task_module: true,
     },
     BuiltinModule {
-        name: "wali.builtin.touch",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/touch.lua")),
-        task_module: true,
-    },
-    BuiltinModule {
-        name: "wali.builtin.link_tree",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/link_tree.lua")),
-        task_module: true,
-    },
-    BuiltinModule {
-        name: "wali.builtin.copy_tree",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/copy_tree.lua")),
-        task_module: true,
-    },
-    BuiltinModule {
         name: "wali.builtin.permissions",
         content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/permissions.lua")),
-        task_module: true,
-    },
-    BuiltinModule {
-        name: "wali.builtin.template",
-        content: include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/lua/modules/builtin/template.lua")),
         task_module: true,
     },
     BuiltinModule {
@@ -181,6 +156,7 @@ mod tests {
         for item in [
             "api.result.apply",
             "api.result.validation",
+            "api.result.skip",
             "WaliApplyResultBuilder",
             "controller_fs",
         ] {

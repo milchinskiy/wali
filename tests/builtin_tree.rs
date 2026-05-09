@@ -58,13 +58,13 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, replace = true, preserve_mode = true, symlinks = "preserve" }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true, preserve_mode = true, symlinks = "preserve" }},
         }},
         {{
             id = "link tree",
-            module = "wali.builtin.link_tree",
-            args = {{ src = {}, dest = {}, replace = true }},
+            module = "wali.builtin.link",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
         }},
         {{
             id = "probe copied",
@@ -143,9 +143,10 @@ return {{
         m.host.localhost("localhost"),
     }},
     tasks = {{
-        m.task("link dotfiles")("wali.builtin.link_tree", {{
+        m.task("link dotfiles")("wali.builtin.link", {{
             src = m.here("home"),
             dest = {},
+            recursive = true,
             replace = true,
         }}),
     }},
@@ -180,8 +181,8 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, symlinks = "skip" }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, symlinks = "skip" }},
         }},
     }},
 }}
@@ -294,8 +295,8 @@ return {{
     tasks = {{
         {{
             id = "nested tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {} }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true }},
         }},
     }},
 }}
@@ -318,10 +319,10 @@ fn tree_modules_reject_invalid_max_depth_during_check() {
     let dest = lua_string(&sandbox.path("dest"));
 
     for (module, task_prefix) in [
-        ("wali.builtin.copy_tree", "copy tree"),
-        ("wali.builtin.link_tree", "link tree"),
-        ("wali.builtin.push_tree", "push tree"),
-        ("wali.builtin.pull_tree", "pull tree"),
+        ("wali.builtin.copy", "copy tree"),
+        ("wali.builtin.link", "link tree"),
+        ("wali.builtin.push", "push tree"),
+        ("wali.builtin.pull", "pull tree"),
     ] {
         for (max_depth, needle) in [
             ("-1", "max_depth must be zero or greater"),
@@ -337,7 +338,7 @@ return {{
         {{
             id = {},
             module = {},
-            args = {{ src = {}, dest = {}, max_depth = {} }},
+            args = {{ src = {}, dest = {}, recursive = true, max_depth = {} }},
         }},
     }},
 }}
@@ -373,8 +374,8 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, replace = true }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
         }},
     }},
 }}
@@ -413,8 +414,8 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, replace = true }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
         }},
     }},
 }}

@@ -21,13 +21,13 @@ return {{
     tasks = {{
         {{
             id = "keep",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "keep\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "keep\n" }},
         }},
         {{
             id = "obsolete",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "obsolete\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "obsolete\n" }},
         }},
     }},
 }}
@@ -81,13 +81,13 @@ return {{
     tasks = {{
         {{
             id = "selected",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "selected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "selected\n" }},
         }},
         {{
             id = "unselected",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "unselected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "unselected\n" }},
         }},
     }},
 }}
@@ -144,8 +144,8 @@ return {{
     tasks = {{
         {{
             id = "update-existing",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "after\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "after\n" }},
         }},
     }},
 }}
@@ -238,8 +238,8 @@ return {{
     tasks = {{
         {{
             id = "update-existing",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "after\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "after\n" }},
         }},
     }},
 }}
@@ -296,14 +296,14 @@ return {{
         {{
             id = "selected",
             tags = {{ "demo" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "selected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "selected\n" }},
         }},
         {{
             id = "unselected",
             tags = {{ "other" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "unselected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "unselected\n" }},
         }},
     }},
 }}
@@ -362,14 +362,14 @@ return {{
         {{
             id = "write-web",
             host = {{ id = "web" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "web\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "web\n" }},
         }},
         {{
             id = "write-db",
             host = {{ id = "db" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "db\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "db\n" }},
         }},
     }},
 }}

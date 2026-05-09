@@ -21,20 +21,20 @@ return {{
     tasks = {{
         {{
             id = "prepare",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "prepare\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "prepare\n" }},
         }},
         {{
             id = "deploy",
             depends_on = {{ "prepare" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "deploy\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "deploy\n" }},
         }},
         {{
             id = "restart",
             depends_on = {{ "deploy" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "restart\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "restart\n" }},
         }},
     }},
 }}
@@ -122,14 +122,14 @@ return {{
     tasks = {{
         {{
             id = "create-dir",
-            module = "wali.builtin.dir",
-            args = {{ path = {}, state = "present", parents = true }},
+            module = "wali.builtin.mkdir",
+            args = {{ path = {} }},
         }},
         {{
             id = "write-file",
             depends_on = {{ "create-dir" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "content\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "content\n" }},
         }},
         {{
             id = "run-command",

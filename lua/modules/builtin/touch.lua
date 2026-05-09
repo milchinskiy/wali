@@ -2,14 +2,14 @@ local lib = require("wali.builtin.lib")
 
 return {
 	name = "builtin touch",
-	description = "Ensure a regular file exists without replacing existing file content.",
+	description = "Create a regular file if absent without replacing existing content.",
 
 	schema = {
 		type = "object",
 		required = true,
 		props = {
 			path = { type = "string", required = true },
-			create_parents = { type = "boolean", default = false },
+			parents = { type = "boolean", default = false },
 			mode = lib.schema.mode(),
 			owner = lib.schema.owner(),
 		},
@@ -27,7 +27,9 @@ return {
 	apply = function(ctx, args)
 		local current = ctx.host.fs.lstat(args.path)
 		if current == nil then
-			return ctx.host.fs.write(args.path, "", lib.write_file_opts(args))
+			local opts =
+				lib.write_file_opts({ parents = args.parents, replace = false, mode = args.mode, owner = args.owner })
+			return ctx.host.fs.write(args.path, "", opts)
 		end
 
 		if current.kind ~= "file" then

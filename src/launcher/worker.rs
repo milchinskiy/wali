@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::executor::{Backend, ExecutionResult};
+use crate::lua::module::ApplyOutcome;
 use crate::plan::{HostPlan, TaskInstance};
 use crate::report::ReportSender;
 use crate::report::apply::Event;
@@ -122,7 +123,7 @@ impl Worker {
             }
 
             match self.run_task(task, bound, mode) {
-                Ok(result) => {
+                Ok(ApplyOutcome::Applied(result)) => {
                     let changed = result.changed();
                     sender.send(Event::TaskSuccess {
                         host_id: self.plan.id.clone(),
@@ -130,6 +131,10 @@ impl Worker {
                         result,
                     })?;
                     outcomes.insert(task.id.clone(), TaskOutcome::Succeeded { changed });
+                }
+                Ok(ApplyOutcome::Skipped(reason)) => {
+                    self.report_task_skip(&sender, task, reason.clone())?;
+                    outcomes.insert(task.id.clone(), TaskOutcome::Skipped(reason));
                 }
                 Err(error) => {
                     let message = error.to_string();
@@ -232,13 +237,13 @@ impl Worker {
         })
     }
 
-    fn run_task(&self, task: &TaskInstance, backend: Backend, mode: ExecutionMode) -> crate::Result<ExecutionResult> {
+    fn run_task(&self, task: &TaskInstance, backend: Backend, mode: ExecutionMode) -> crate::Result<ApplyOutcome> {
         let resolved = crate::manifest::modules::resolve_task_module(&self.plan.modules, &task.module)?;
         let lua = self.task_runtime(resolved.include_path.as_deref())?;
         let module = lua.module_load_by_name_as(&resolved.local_name, task.module.clone())?;
         module.check_requires(&backend)?;
 
-        let mut result = ExecutionResult::unchanged();
+        let mut outcome = ApplyOutcome::Applied(ExecutionResult::unchanged());
         for &step in mode.task_steps() {
             let args = module.normalize_args(lua.lua(), &task.args)?;
             match step {
@@ -264,12 +269,12 @@ impl Worker {
                         &self.plan.base_path,
                         crate::lua::api::TaskCtxPhase::Apply,
                     )?;
-                    result = module.apply(lua.lua(), ctx, args, &backend)?;
+                    outcome = module.apply(lua.lua(), ctx, args, &backend)?;
                 }
             }
         }
 
-        Ok(result)
+        Ok(outcome)
     }
 
     fn skip_reason(&self, task: &TaskInstance, backend: &Backend) -> crate::Result<Option<String>> {

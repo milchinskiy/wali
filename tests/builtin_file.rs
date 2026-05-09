@@ -16,7 +16,7 @@ return {{
     tasks = {{
         {{
             id = {},
-            module = "wali.builtin.copy_file",
+            module = "wali.builtin.copy",
             args = {{ src = {}, dest = {}{} }},
         }},
     }},
@@ -51,8 +51,8 @@ return {{
     tasks = {{
         {{
             id = "write locked file",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "locked\n", mode = "0" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "locked\n", mode = "0" }},
         }},
     }},
 }}
@@ -86,18 +86,18 @@ return {{
     tasks = {{
         {{
             id = "create root",
-            module = "wali.builtin.dir",
-            args = {{ path = {}, state = "present", parents = true, mode = "0755" }},
+            module = "wali.builtin.mkdir",
+            args = {{ path = {} }},
         }},
         {{
             id = "write source",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "hello from wali\n", create_parents = true, mode = "0644" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "hello from wali\n", parents = true, mode = "0644" }},
         }},
         {{
             id = "touch marker",
             module = "wali.builtin.touch",
-            args = {{ path = {}, create_parents = true, mode = "0644" }},
+            args = {{ path = {}, parents = true, mode = "0644" }},
         }},
         {{
             id = "source permissions",
@@ -107,11 +107,11 @@ return {{
         {{
             id = "link source",
             module = "wali.builtin.link",
-            args = {{ path = {}, target = {}, replace = true }},
+            args = {{ dest = {}, src = {}, replace = true }},
         }},
         {{
             id = "copy source",
-            module = "wali.builtin.copy_file",
+            module = "wali.builtin.copy",
             args = {{ src = {}, dest = {}, replace = true, preserve_mode = true }},
         }},
         {{
@@ -175,10 +175,10 @@ return {{
         "link source",
         "copy source",
         "remove stale",
-        "guarded command",
     ] {
         assert_task_unchanged(&second, task);
     }
+    assert_task_skipped_contains(&second, "guarded command", "creates guard already exists");
 }
 
 #[test]
@@ -225,8 +225,8 @@ return {{
     tasks = {{
         {{
             id = "write symlink path",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "managed content\n", replace = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "managed content\n", replace = true }},
         }},
     }},
 }}
@@ -259,8 +259,8 @@ return {{
     tasks = {{
         {{
             id = "preserve symlink path",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "wanted content\n", replace = false }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "wanted content\n", replace = false }},
         }},
     }},
 }}
@@ -269,7 +269,7 @@ return {{
     ));
 
     let report = run_apply(&manifest);
-    assert_task_unchanged(&report, "preserve symlink path");
+    assert_task_skipped_contains(&report, "preserve symlink path", "replace is false");
     assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "existing target\n");
 }
@@ -291,8 +291,8 @@ return {{
     tasks = {{
         {{
             id = "replace broken symlink",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "managed content\n", replace = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "managed content\n", replace = true }},
         }},
     }},
 }}
@@ -324,8 +324,8 @@ return {{
     tasks = {{
         {{
             id = "write directory symlink",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "managed content\n", replace = true }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "managed content\n", replace = true }},
         }},
     }},
 }}
@@ -358,7 +358,7 @@ return {{
     tasks = {{
         {{
             id = "copy to directory symlink",
-            module = "wali.builtin.copy_file",
+            module = "wali.builtin.copy",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -393,9 +393,9 @@ fn builtin_copy_file_replace_false_identical_destination_updates_explicit_mode()
     );
 
     let report = run_apply(&manifest);
-    assert_task_changed(&report, "copy identical with explicit mode");
+    assert_task_skipped_contains(&report, "copy identical with explicit mode", "replace is false");
     assert_eq!(std::fs::read_to_string(&dest).unwrap(), "same content\n");
-    assert_eq!(file_mode(&dest), 0o644);
+    assert_eq!(file_mode(&dest), 0o600);
 }
 
 #[test]
@@ -418,9 +418,9 @@ fn builtin_copy_file_replace_false_identical_destination_preserves_source_mode()
     );
 
     let report = run_apply(&manifest);
-    assert_task_changed(&report, "copy identical preserving source mode");
+    assert_task_skipped_contains(&report, "copy identical preserving source mode", "replace is false");
     assert_eq!(std::fs::read_to_string(&dest).unwrap(), "same content\n");
-    assert_eq!(file_mode(&dest), 0o640);
+    assert_eq!(file_mode(&dest), 0o600);
 }
 
 #[test]
@@ -440,9 +440,9 @@ fn builtin_copy_file_same_path_updates_explicit_mode() {
     );
 
     let report = run_apply(&manifest);
-    assert_task_changed(&report, "copy same path with explicit mode");
+    assert_task_skipped_contains(&report, "copy same path with explicit mode", "replace is false");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "content\n");
-    assert_eq!(file_mode(&path), 0o644);
+    assert_eq!(file_mode(&path), 0o600);
 }
 
 #[test]

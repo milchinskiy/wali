@@ -27,11 +27,11 @@ return {{
     tasks = {{
         {{
             id = "push file",
-            module = "wali.builtin.push_file",
+            module = "wali.builtin.push",
             args = {{
                 src = "input.txt",
                 dest = {},
-                create_parents = true,
+                parents = true,
                 replace = true,
                 mode = "0640",
             }},
@@ -39,11 +39,11 @@ return {{
         {{
             id = "pull file",
             depends_on = {{ "push file" }},
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{
                 src = {},
                 dest = "pulled/output.txt",
-                create_parents = true,
+                parents = true,
                 replace = true,
                 mode = "0600",
             }},
@@ -89,8 +89,8 @@ return {{
     tasks = {{
         {{
             id = "push default base",
-            module = "wali.builtin.push_file",
-            args = {{ src = "input.txt", dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = "input.txt", dest = {}, parents = true }},
         }},
     }},
 }}
@@ -128,8 +128,8 @@ return {{
     tasks = {{
         {{
             id = "push relative base",
-            module = "wali.builtin.push_file",
-            args = {{ src = "input.txt", dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = "input.txt", dest = {}, parents = true }},
         }},
     }},
 }}
@@ -215,13 +215,13 @@ return {{
     tasks = {{
         {{
             id = "push absolute",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
         {{
             id = "pull absolute",
             depends_on = {{ "push absolute" }},
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -257,7 +257,7 @@ return {{
     tasks = {{
         {{
             id = "pull preserve",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = false }},
         }},
     }},
@@ -268,7 +268,7 @@ return {{
     ));
 
     let report = run_apply(&manifest);
-    assert_task_unchanged(&report, "pull preserve");
+    assert_task_skipped_contains(&report, "pull preserve", "replace is false");
     assert_eq!(std::fs::read_to_string(&local_dest).unwrap(), "local content\n");
 }
 
@@ -289,8 +289,8 @@ return {{
     tasks = {{
         {{
             id = "check push source",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
     }},
 }}
@@ -319,8 +319,8 @@ return {{
     tasks = {{
         {{
             id = "missing push source",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
     }},
 }}
@@ -330,7 +330,7 @@ return {{
     ));
 
     let report = run_wali_failure_json(&["--json", "check", manifest.to_str().expect("non-utf8 manifest path")]);
-    assert_task_failed_contains(&report, "missing push source", "transfer source does not exist");
+    assert_task_failed_contains(&report, "missing push source", "push source does not exist");
     assert!(!host_dest.exists(), "wali check must not create destination for invalid push source");
 }
 
@@ -349,8 +349,8 @@ return {{
     tasks = {{
         {{
             id = "push directory",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
     }},
 }}
@@ -360,7 +360,7 @@ return {{
     ));
 
     let report = run_wali_failure_json(&["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")]);
-    assert_task_failed_contains(&report, "push directory", "transfer source must be a regular file");
+    assert_task_failed_contains(&report, "push directory", "push source must be a regular file");
     assert!(!host_dest.exists());
 }
 
@@ -384,7 +384,7 @@ return {{
     tasks = {{
         {{
             id = "pull replace symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -421,7 +421,7 @@ return {{
     tasks = {{
         {{
             id = "pull preserve symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = false }},
         }},
     }},
@@ -432,7 +432,7 @@ return {{
     ));
 
     let report = run_apply(&manifest);
-    assert_task_unchanged(&report, "pull preserve symlink");
+    assert_task_skipped_contains(&report, "pull preserve symlink", "replace is false");
     assert!(std::fs::symlink_metadata(&local_dest).unwrap().file_type().is_symlink());
     assert_eq!(std::fs::read_to_string(&symlink_target).unwrap(), "local content\n");
 }
@@ -456,7 +456,7 @@ return {{
     tasks = {{
         {{
             id = "pull replace broken symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -492,7 +492,7 @@ return {{
     tasks = {{
         {{
             id = "pull directory symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -532,11 +532,12 @@ return {{
     tasks = {{
         {{
             id = "push tree",
-            module = "wali.builtin.push_tree",
+            module = "wali.builtin.push",
             args = {{
                 src = "assets",
                 dest = {},
                 replace = true,
+                recursive = true,
                 preserve_mode = false,
                 symlinks = "preserve",
                 dir_mode = "0755",
@@ -546,11 +547,12 @@ return {{
         {{
             id = "pull tree",
             depends_on = {{ "push tree" }},
-            module = "wali.builtin.pull_tree",
+            module = "wali.builtin.pull",
             args = {{
                 src = {},
                 dest = "pulled-tree",
                 replace = true,
+                recursive = true,
                 preserve_mode = false,
                 symlinks = "preserve",
                 dir_mode = "0755",
@@ -625,8 +627,8 @@ return {{
     tasks = {{
         {{
             id = "check push tree",
-            module = "wali.builtin.push_tree",
-            args = {{ src = "assets", dest = {} }},
+            module = "wali.builtin.push",
+            args = {{ src = "assets", dest = {}, recursive = true }},
         }},
     }},
 }}
@@ -656,8 +658,8 @@ return {{
     tasks = {{
         {{
             id = "missing push tree source",
-            module = "wali.builtin.push_tree",
-            args = {{ src = "missing-assets", dest = {} }},
+            module = "wali.builtin.push",
+            args = {{ src = "missing-assets", dest = {}, recursive = true }},
         }},
     }},
 }}
@@ -666,7 +668,7 @@ return {{
         lua_string(&host_dest),
     ));
 
-    assert_check_failure_contains(&manifest, "transfer source does not exist");
+    assert_check_failure_contains(&manifest, "push source does not exist");
 }
 
 #[test]
@@ -690,14 +692,14 @@ return {{
     tasks = {{
         {{
             id = "push tree",
-            module = "wali.builtin.push_tree",
-            args = {{ src = "assets", dest = {} }},
+            module = "wali.builtin.push",
+            args = {{ src = "assets", dest = {}, recursive = true }},
         }},
         {{
             id = "pull generated tree",
             depends_on = {{ "push tree" }},
-            module = "wali.builtin.pull_tree",
-            args = {{ src = {}, dest = "pulled-tree" }},
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = "pulled-tree", recursive = true }},
         }},
     }},
 }}
@@ -731,8 +733,8 @@ return {{
     tasks = {{
         {{
             id = "pull tree preserve",
-            module = "wali.builtin.pull_tree",
-            args = {{ src = {}, dest = {}, replace = false }},
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = {}, recursive = true, replace = false }},
         }},
     }},
 }}
@@ -742,6 +744,6 @@ return {{
     ));
 
     let report = run_apply(&manifest);
-    assert_task_unchanged(&report, "pull tree preserve");
+    assert_task_skipped_contains(&report, "pull tree preserve", "replace is false");
     assert_eq!(std::fs::read_to_string(local_dest.join("file.txt")).unwrap(), "local content\n");
 }

@@ -12,7 +12,7 @@ manifest.host = {}
 
 ---@class WaliManifestDefinition
 ---@field name? string Optional display name. Defaults to the manifest file path when omitted or empty.
----@field base_path? string Controller-side base directory for controller file APIs and transfer/template sources.
+---@field base_path? string Controller-side base directory for controller file APIs, write sources, and transfer sources.
 ---@field vars? table<string, WaliJsonValue> Manifest variables merged before host and task variables.
 ---@field hosts? WaliManifestHost[] Target hosts. A useful manifest normally has at least one host.
 ---@field modules? WaliManifestModuleSource[] Custom module sources.
@@ -214,25 +214,20 @@ function manifest.host.ssh(id, opts) end
 
 ---@class WaliManifestTask: WaliManifestTaskOpts
 ---@field id string Unique task id.
----@field module WaliBuiltinModuleName|string Dotted module name, for example 'wali.builtin.file'.
+---@field module WaliBuiltinModuleName|string Dotted module name, for example 'wali.builtin.write'.
 ---@field args WaliBuiltinModuleArgs|WaliJsonValue|table Module argument value. The helper defaults this to `{}` when omitted.
 
 ---@alias WaliManifestTaskFactory
----| fun(module: 'wali.builtin.dir', args?: WaliBuiltinDirArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.file', args?: WaliBuiltinFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.copy_file', args?: WaliBuiltinCopyFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.push_file', args?: WaliBuiltinPushFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.push_tree', args?: WaliBuiltinPushTreeArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.pull_file', args?: WaliBuiltinPullFileArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.pull_tree', args?: WaliBuiltinPullTreeArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.link', args?: WaliBuiltinLinkArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.remove', args?: WaliBuiltinRemoveArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.touch', args?: WaliBuiltinTouchArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.link_tree', args?: WaliBuiltinLinkTreeArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.copy_tree', args?: WaliBuiltinCopyTreeArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.mkdir', args?: WaliBuiltinMkdirArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.write', args?: WaliBuiltinWriteArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.link', args?: WaliBuiltinLinkArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.copy', args?: WaliBuiltinCopyArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.push', args?: WaliBuiltinPushArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.pull', args?: WaliBuiltinPullArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
+---| fun(module: 'wali.builtin.remove', args?: WaliBuiltinRemoveArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.permissions', args?: WaliBuiltinPermissionsArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: 'wali.builtin.command', args?: WaliBuiltinCommandArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
----| fun(module: 'wali.builtin.template', args?: WaliBuiltinTemplateArgs, opts?: WaliManifestTaskOpts): WaliManifestTask
 ---| fun(module: string, args?: WaliJsonValue|table, opts?: WaliManifestTaskOpts): WaliManifestTask
 
 ---@param id string

@@ -58,16 +58,15 @@ return {
     },
 
     tasks = {
-        m.task("create demo dir")("wali.builtin.dir", {
+        m.task("create demo dir")("wali.builtin.mkdir", {
             path = "/tmp/wali-demo",
-            state = "present",
             parents = true,
             mode = "0755",
         }),
-        m.task("write message")("wali.builtin.file", {
-            path = "/tmp/wali-demo/message.txt",
+        m.task("write message")("wali.builtin.write", {
+            dest = "/tmp/wali-demo/message.txt",
             content = "managed by wali\n",
-            create_parents = true,
+            parents = true,
             mode = "0644",
         }, {
             depends_on = { "create demo dir" },
@@ -97,34 +96,34 @@ pull operations are not removed by host cleanup.
 Builtin task modules live under the reserved `wali.builtin.*` namespace:
 
 ```text
-wali.builtin.command
-wali.builtin.copy_file
-wali.builtin.copy_tree
-wali.builtin.dir
-wali.builtin.file
-wali.builtin.link
-wali.builtin.link_tree
-wali.builtin.permissions
-wali.builtin.pull_file
-wali.builtin.pull_tree
-wali.builtin.push_file
-wali.builtin.push_tree
-wali.builtin.remove
-wali.builtin.template
 wali.builtin.touch
+wali.builtin.mkdir
+wali.builtin.write
+wali.builtin.link
+wali.builtin.copy
+wali.builtin.push
+wali.builtin.pull
+wali.builtin.remove
+wali.builtin.permissions
+wali.builtin.command
 ```
 
+Builtin modules are imperative verbs. They do not expose declarative `state`
+fields: creation, writing, linking, copying, transferring, removal, permission
+changes, and command execution are separate operations. The common option
+`parents` creates missing parent directories where applicable. When `replace =
+false`, an occupied destination is reported as a skipped task rather
+than as a failure.
+
 Target-host filesystem paths are absolute unless a module documents otherwise.
-Controller-side paths used by transfer and template modules may be absolute or
-relative to manifest `base_path`. Tree transfer is split by namespace:
-`push_tree` reads a controller-side tree and writes a target-host tree, while
-`pull_tree` reads a target-host tree and writes a controller-side tree.
+Controller-side paths used by `write`, `push`, and `pull` may be absolute or
+relative to manifest `base_path`.
 
 For localhost manifests that intentionally need an absolute path next to the
 manifest file, use `require("manifest").here(...)`. For example, dotfile
-manifests can pass `src = m.here("home")` to `link_tree`; the resulting path is
-absolute on the controller and is valid for `link_tree` only when the target
-host sees the same filesystem, normally `localhost`.
+manifests can pass `src = m.here("home")` to `wali.builtin.link` with
+`recursive = true`; the resulting path is valid when the target host sees the
+same filesystem, normally `localhost`.
 
 ## External modules
 

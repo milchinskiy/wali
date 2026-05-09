@@ -22,7 +22,6 @@ null = nil
 ---@alias WaliPtyMode 'never'|'auto'|'require'
 ---@alias WaliChangeKind 'unchanged'|'created'|'updated'|'removed'
 ---@alias WaliChangeSubject 'fs_entry'|'controller_fs_entry'|'command'
----@alias WaliCommandChangedPolicy 'on_run'|'always'|'never'
 ---@alias WaliTreeSymlinkPolicy 'preserve'|'skip'|'error'
 ---@alias WaliPermissionsExpect 'any'|'file'|'dir'
 ---@alias WaliRunAsVia 'sudo'|'doas'|'su'
@@ -42,13 +41,13 @@ null = nil
 ---@field order? WaliWalkOrder Traversal order. Defaults to 'pre'.
 
 ---@class WaliWriteOpts
----@field create_parents? boolean Create missing parent directories.
+---@field parents? boolean Create missing parent directories.
 ---@field mode? integer POSIX mode bits as an integer, normally from `lib.mode_bits()`.
 ---@field owner? WaliOwner
 ---@field replace? boolean Replace existing regular file content. Defaults to true.
 
 ---@class WaliCopyFileOpts
----@field create_parents? boolean Create missing parent directories.
+---@field parents? boolean Create missing parent directories.
 ---@field mode? integer POSIX mode bits as an integer, normally from `lib.mode_bits()`.
 ---@field owner? WaliOwner
 ---@field replace? boolean Replace existing regular file content. Defaults to true.
@@ -71,10 +70,9 @@ null = nil
 ---@field prefix? string Filename prefix.
 
 ---@class WaliPullFileOpts
----@field create_parents? boolean Create missing controller-side parent directories.
+---@field parents? boolean Create missing controller-side parent directories.
 ---@field mode? integer POSIX mode bits for the controller-side destination where supported.
 ---@field replace? boolean Replace existing destination. Defaults to true.
-
 
 ---@class WaliPushTreeOpts
 ---@field replace? boolean Replace existing target-host file/symlink destinations. Defaults to true.
@@ -335,7 +333,7 @@ null = nil
 ---@field requires? WaliRequirement
 ---@field schema? WaliSchema
 ---@field validate? fun(ctx: WaliValidateCtx, args: TArgs): WaliValidationResult?
----@field apply fun(ctx: WaliApplyCtx, args: TArgs): WaliExecutionResult?
+---@field apply fun(ctx: WaliApplyCtx, args: TArgs): WaliExecutionResult|WaliApplySkipResult?
 
 ---@alias WaliRequirement
 ---| WaliRequirementCommand
