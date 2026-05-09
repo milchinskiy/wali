@@ -138,10 +138,9 @@ function lib.skip(reason) end
 
 ---@param ctx WaliApplyCtx
 ---@param path string
----@param replace boolean
----@param label? string
----@return WaliApplySkipResult?
-function lib.skip_if_replace_false_and_exists(ctx, path, replace, label) end
+---@param expected string
+---@return boolean
+function lib.host_file_content_matches(ctx, path, expected) end
 
 ---@param metadata? WaliMetadata
 ---@return string

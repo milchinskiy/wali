@@ -861,8 +861,8 @@ or `removes`, like `wali.builtin.command` does.
 Good idempotence rules:
 
 - inspect existing state before mutating;
-- skip writes when content already matches;
-- skip chmod/chown when metadata already matches;
+- report writes as unchanged when content already matches;
+- report chmod/chown as unchanged when metadata already matches;
 - compare existing symlink target before replacing it;
 - preflight predictable tree conflicts before the first mutation.
 
@@ -875,7 +875,7 @@ Messages should identify the field or path involved:
 
 ```lua
 return api.result.validation():fail("path must be absolute"):build()
-error("destination already exists and replace is false: " .. args.dest)
+return require("wali.api").result.skip("destination already exists and replace is false: " .. args.dest)
 ```
 
 Do not hide host operation errors. Let executor errors propagate unless the

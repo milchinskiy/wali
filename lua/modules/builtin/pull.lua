@@ -16,6 +16,11 @@ local function controller_exists(ctx, path)
 	return metadata_or_error ~= nil, metadata_or_error
 end
 
+local function controller_file_content_matches(ctx, path, expected)
+	local ok, actual = pcall(ctx.controller.fs.read, path)
+	return ok and actual == expected
+end
+
 local function validate_destination(ctx, dest)
 	if dest == "" then
 		return lib.validation_error("dest must not be empty")
@@ -42,39 +47,6 @@ local function validate_modes(args)
 		if err ~= nil then
 			return err
 		end
-	end
-	return nil
-end
-
-local function check_recursive_dest(ctx, args, entry)
-	local path = ctx.controller.path.join(args.dest, entry.relative_path)
-	local exists, metadata = controller_exists(ctx, path)
-	if entry.kind == "dir" then
-		if not exists or metadata.kind == "dir" then
-			return nil
-		end
-		if not args.replace then
-			return "destination already exists and replace is false: " .. resolved_controller_path(ctx, path)
-		end
-		error(
-			"tree destination path must be a directory: "
-				.. resolved_controller_path(ctx, path)
-				.. " is "
-				.. metadata.kind
-		)
-	end
-
-	if entry.kind == "symlink" and args.symlinks ~= "preserve" then
-		return nil
-	end
-	if entry.kind ~= "file" and entry.kind ~= "symlink" then
-		return nil
-	end
-	if exists and not args.replace then
-		return "destination already exists and replace is false: " .. resolved_controller_path(ctx, path)
-	end
-	if exists and metadata.kind == "dir" then
-		error("refusing to replace directory during pull: " .. resolved_controller_path(ctx, path))
 	end
 	return nil
 end
@@ -134,11 +106,27 @@ return {
 			if source.kind ~= "file" then
 				error("pull source must be a regular file unless recursive=true: " .. args.src)
 			end
-			local exists = controller_exists(ctx, args.dest)
+			local exists, dest_metadata = controller_exists(ctx, args.dest)
 			if exists and not args.replace then
-				return lib.skip(
-					"destination already exists and replace is false: " .. resolved_controller_path(ctx, args.dest)
-				)
+				if dest_metadata.kind == "file" then
+					local source_bytes = ctx.host.fs.read(args.src)
+					if not controller_file_content_matches(ctx, args.dest, source_bytes) then
+						return lib.skip(
+							"destination already exists and replace is false: "
+								.. resolved_controller_path(ctx, args.dest)
+						)
+					end
+				elseif dest_metadata.kind == "symlink" then
+					return lib.skip(
+						"destination already exists and replace is false: " .. resolved_controller_path(ctx, args.dest)
+					)
+				elseif dest_metadata.kind == "dir" then
+					error("pull destination is a directory: " .. resolved_controller_path(ctx, args.dest))
+				else
+					error(
+						"pull destination is a special filesystem entry: " .. resolved_controller_path(ctx, args.dest)
+					)
+				end
 			end
 			return ctx.transfer.pull_file(args.src, args.dest, lib.pull_file_opts(args))
 		end
@@ -163,18 +151,6 @@ return {
 					.. " is "
 					.. root.kind
 			)
-		end
-
-		local entries = ctx.host.fs.walk(args.src, {
-			include_root = false,
-			order = "pre",
-			max_depth = args.max_depth,
-		})
-		for _, entry in ipairs(entries) do
-			local reason = check_recursive_dest(ctx, args, entry)
-			if reason ~= nil then
-				return lib.skip(reason)
-			end
 		end
 
 		return ctx.transfer.pull_tree(args.src, args.dest, lib.pull_tree_opts(args))

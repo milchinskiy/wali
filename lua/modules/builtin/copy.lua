@@ -7,64 +7,118 @@ local function count_entry(counts, kind)
 	counts[kind] = counts[kind] + 1
 end
 
-local function preflight_file(ctx, args, path)
+local function add_skipped(counts, result, path, reason)
+	counts.skipped = counts.skipped + 1
+	result:unchanged(path, reason)
+end
+
+local function should_skip_relative(relative_path, skipped_dirs)
+	for _, prefix in ipairs(skipped_dirs) do
+		if relative_path == prefix or relative_path:sub(1, #prefix + 1) == prefix .. "/" then
+			return true
+		end
+	end
+	return false
+end
+
+local function source_and_dest_match(ctx, src, dest)
+	local ok_source, source = pcall(ctx.host.fs.read, src)
+	if not ok_source then
+		error(source)
+	end
+	return lib.host_file_content_matches(ctx, dest, source)
+end
+
+local function replace_false_file_skip(ctx, src, path, skip_structural_conflicts)
 	local current = ctx.host.fs.lstat(path)
 	if current == nil then
 		return nil
 	end
-	if not args.replace then
-		return "destination already exists and replace is false: " .. path
-	end
-	lib.assert_tree_destination(ctx, path, { expect = "file" })
-	return nil
-end
-
-local function preflight_dir(ctx, args, path)
-	local current = ctx.host.fs.lstat(path)
-	if current == nil or current.kind == "dir" then
-		return nil
-	end
-	if not args.replace then
-		return "destination already exists and replace is false: " .. path
-	end
-	error("tree destination path must be a directory: " .. path .. " is " .. current.kind)
-end
-
-local function preflight_symlink(ctx, args, path, target)
-	local current = ctx.host.fs.lstat(path)
-	if current == nil then
-		return nil
-	end
-	if not args.replace then
-		return "destination already exists and replace is false: " .. path
-	end
-	if current.kind == "symlink" and ctx.host.fs.read_link(path) == target then
-		return nil
-	end
-	lib.assert_tree_destination(ctx, path, { expect = "symlink", target = target, replace = true })
-	return nil
-end
-
-local function preflight_entry(ctx, args, dest, entry)
-	local path = lib.tree_destination(ctx, dest, entry.relative_path)
-	if entry.kind == "dir" then
-		return preflight_dir(ctx, args, path)
-	elseif entry.kind == "file" then
-		return preflight_file(ctx, args, path)
-	elseif entry.kind == "symlink" then
-		if args.symlinks == "preserve" then
-			if entry.link_target == nil then
-				error("source symlink has no target in walk output: " .. entry.path)
-			end
-			return preflight_symlink(ctx, args, path, entry.link_target)
-		elseif args.symlinks == "skip" then
+	if current.kind == "file" then
+		if source_and_dest_match(ctx, src, path) then
 			return nil
 		end
-		error("refusing to copy source symlink: " .. entry.path)
-	elseif args.skip_special then
-		return nil
+		return "destination already exists and replace is false: " .. path
 	end
-	error("refusing to copy special filesystem entry without skip_special=true: " .. entry.path)
+	if current.kind == "symlink" then
+		return "destination already exists and replace is false: " .. path
+	end
+	if current.kind == "dir" then
+		if skip_structural_conflicts then
+			return "destination is a directory where a file is expected and replace is false: " .. path
+		end
+		error("copy destination is a directory: " .. path)
+	end
+	if skip_structural_conflicts then
+		return "destination is a special filesystem entry where a file is expected and replace is false: " .. path
+	end
+	error("copy destination is a special filesystem entry: " .. path)
+end
+
+local function handle_dir(ctx, args, result, counts, skipped_dirs, path, entry)
+	local current = ctx.host.fs.lstat(path)
+	if current ~= nil and current.kind ~= "dir" then
+		if not args.replace then
+			count_entry(counts, "dir")
+			add_skipped(counts, result, path, "destination already exists and replace is false: " .. path)
+			table.insert(skipped_dirs, entry.relative_path)
+			return
+		end
+		error("tree destination path must be a directory: " .. path .. " is " .. current.kind)
+	end
+	count_entry(counts, "dir")
+	lib.ensure_dir(ctx, result, path, lib.tree_dir_opts(args, entry.metadata))
+end
+
+local function handle_file(ctx, args, result, counts, path, entry)
+	if not args.replace then
+		local reason = replace_false_file_skip(ctx, entry.path, path, true)
+		if reason ~= nil then
+			add_skipped(counts, result, path, reason)
+			return
+		end
+	end
+	count_entry(counts, "file")
+	result:merge(ctx.host.fs.copy_file(entry.path, path, lib.tree_copy_file_opts(args, entry.metadata)))
+end
+
+local function handle_symlink(ctx, args, result, counts, path, entry)
+	if args.symlinks == "preserve" then
+		if entry.link_target == nil then
+			error("source symlink has no target in walk output: " .. entry.path)
+		end
+		local ok, reason = lib.ensure_symlink(ctx, result, path, entry.link_target, args.replace)
+		if ok then
+			count_entry(counts, "symlink")
+		else
+			add_skipped(counts, result, path, reason)
+		end
+	elseif args.symlinks == "skip" then
+		add_skipped(counts, result, path, "skipped source symlink")
+	else
+		error("refusing to copy source symlink: " .. entry.path)
+	end
+end
+
+local function preflight_replace_true_destinations(ctx, args, dest, entries)
+	if not args.replace then
+		return
+	end
+
+	for _, entry in ipairs(entries) do
+		local path = lib.tree_destination(ctx, dest, entry.relative_path)
+		if entry.kind == "dir" then
+			lib.assert_tree_destination(ctx, path, { expect = "dir" })
+		elseif entry.kind == "file" then
+			lib.assert_tree_destination(ctx, path, { expect = "file" })
+		elseif entry.kind == "symlink" and args.symlinks == "preserve" then
+			lib.assert_tree_destination(ctx, path, {
+				expect = "symlink",
+				target = entry.link_target,
+				replace = true,
+			})
+		end
+	end
 end
 
 local function validate_metadata(args)
@@ -148,9 +202,11 @@ return {
 			if source.kind ~= "file" then
 				error("copy source must be a regular file unless recursive=true: " .. src)
 			end
-			local skipped = lib.skip_if_replace_false_and_exists(ctx, dest, args.replace, "destination")
-			if skipped ~= nil then
-				return skipped
+			if not args.replace then
+				local skip_reason = replace_false_file_skip(ctx, src, dest, false)
+				if skip_reason ~= nil then
+					return lib.skip(skip_reason)
+				end
 			end
 			return ctx.host.fs.copy_file(src, dest, lib.copy_file_opts(args))
 		end
@@ -159,55 +215,48 @@ return {
 			error("copy recursive source must be a directory: " .. src)
 		end
 
+		local root_current = ctx.host.fs.lstat(dest)
+		if root_current ~= nil and root_current.kind ~= "dir" then
+			if not args.replace then
+				return lib.skip("destination already exists and replace is false: " .. dest)
+			end
+			error("copy destination root must be a directory: " .. dest .. " is " .. root_current.kind)
+		end
+
 		local entries = ctx.host.fs.walk(src, {
 			include_root = false,
 			order = "pre",
 			max_depth = args.max_depth,
 		})
-		local result = lib.result.apply()
-		local counts = { dir = 0, file = 0, symlink = 0, other = 0, skipped = 0 }
-
-		local root_reason = preflight_dir(ctx, args, dest)
-		if root_reason ~= nil then
-			return lib.skip(root_reason)
-		end
 		for _, entry in ipairs(entries) do
-			local reason = preflight_entry(ctx, args, dest, entry)
-			if reason ~= nil then
-				return lib.skip(reason)
+			if entry.kind == "symlink" and args.symlinks == "error" then
+				error("refusing to copy source symlink: " .. entry.path)
+			end
+			if entry.kind ~= "dir" and entry.kind ~= "file" and entry.kind ~= "symlink" and not args.skip_special then
+				error("refusing to copy special filesystem entry without skip_special=true: " .. entry.path)
 			end
 		end
+		preflight_replace_true_destinations(ctx, args, dest, entries)
+
+		local result = lib.result.apply()
+		local counts = { dir = 0, file = 0, symlink = 0, other = 0, skipped = 0 }
+		local skipped_dirs = {}
 
 		lib.ensure_dir(ctx, result, dest, lib.tree_dir_opts(args, source))
 		for _, entry in ipairs(entries) do
 			local path = lib.tree_destination(ctx, dest, entry.relative_path)
-			if entry.kind == "dir" then
-				count_entry(counts, "dir")
-				lib.ensure_dir(ctx, result, path, lib.tree_dir_opts(args, entry.metadata))
+			if should_skip_relative(entry.relative_path, skipped_dirs) then
+				add_skipped(counts, result, path, "skipped because parent destination is blocked")
+			elseif entry.kind == "dir" then
+				handle_dir(ctx, args, result, counts, skipped_dirs, path, entry)
 			elseif entry.kind == "file" then
-				count_entry(counts, "file")
-				result:merge(ctx.host.fs.copy_file(entry.path, path, lib.tree_copy_file_opts(args, entry.metadata)))
+				handle_file(ctx, args, result, counts, path, entry)
 			elseif entry.kind == "symlink" then
-				if args.symlinks == "preserve" then
-					if entry.link_target == nil then
-						error("source symlink has no target in walk output: " .. entry.path)
-					end
-					count_entry(counts, "symlink")
-					local ok, reason = lib.ensure_symlink(ctx, result, path, entry.link_target, args.replace)
-					if not ok then
-						return lib.skip(reason)
-					end
-				elseif args.symlinks == "skip" then
-					counts.skipped = counts.skipped + 1
-					result:unchanged(path, "skipped source symlink")
-				else
-					error("refusing to copy source symlink: " .. entry.path)
-				end
+				handle_symlink(ctx, args, result, counts, path, entry)
 			else
 				count_entry(counts, "other")
 				if args.skip_special then
-					counts.skipped = counts.skipped + 1
-					result:unchanged(path, "skipped special source entry")
+					add_skipped(counts, result, path, "skipped special source entry")
 				else
 					error("refusing to copy special filesystem entry without skip_special=true: " .. entry.path)
 				end

@@ -24,7 +24,9 @@ Common option names are reused across modules:
 - `src`: source path or symlink target.
 - `dest`: destination path.
 - `parents`: create missing parent directories where applicable.
-- `replace`: when false, an occupied destination skips the task.
+- `replace`: when false, matching destinations report unchanged, conflicting
+  single-path destinations skip the task, and conflicting recursive leaves are
+  skipped while remaining entries continue.
 - `recursive`: operate on a directory tree.
 - `max_depth`: recursive traversal limit; ignored when `recursive` is false.
 - `symlinks`: recursive symlink policy: `preserve`, `skip`, or `error`.
@@ -242,8 +244,10 @@ m.task("rebuild cache")("wali.builtin.command", {
 
 Exactly one of `program` or `script` is required. `creates` and `removes` may be
 a string or list of strings. `creates` skips when all listed paths exist;
-`removes` skips when all listed paths are absent. `changed = false` reports a
-successful command run as unchanged.
+`removes` skips when all listed paths are absent. When the command runs, only
+newly created `creates` paths are recorded as created, so cleanup does not claim
+pre-existing guard files. `changed = false` reports a successful command run as
+unchanged.
 
 Options: `program`, `args`, `script`, `cwd`, `env`, `stdin`, `timeout`, `pty`,
 `creates`, `removes`, `changed`.

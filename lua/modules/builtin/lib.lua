@@ -363,14 +363,9 @@ function lib.skip(reason)
 	return api.result.skip(reason)
 end
 
-function lib.skip_if_replace_false_and_exists(ctx, path, replace, label)
-	if replace then
-		return nil
-	end
-	if ctx.host.fs.lstat(path) ~= nil then
-		return lib.skip((label or "destination") .. " already exists and replace is false: " .. path)
-	end
-	return nil
+function lib.host_file_content_matches(ctx, path, expected)
+	local ok, actual = pcall(ctx.host.fs.read, path)
+	return ok and actual == expected
 end
 
 function lib.path_kind_text(metadata)
@@ -635,16 +630,16 @@ function lib.ensure_symlink(ctx, result, link_path, target_path, replace)
 		return true
 	end
 
-	if not replace then
-		return false, "destination already exists and replace is false: " .. link_path
-	end
-
 	if current.kind == "symlink" then
 		local current_target = ctx.host.fs.read_link(link_path)
 		if current_target == target_path then
 			result:unchanged(link_path, "symlink already points to target")
 			return true
 		end
+	end
+
+	if not replace then
+		return false, "destination already exists and replace is false: " .. link_path
 	end
 	if current.kind == "dir" then
 		error("refusing to replace directory with symlink: " .. link_path)

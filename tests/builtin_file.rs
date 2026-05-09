@@ -208,6 +208,68 @@ return {
 }
 
 #[test]
+fn builtin_write_replace_false_same_content_can_update_metadata() {
+    let sandbox = Sandbox::new("builtin-write-replace-false-same");
+    let path = sandbox.path("managed.txt");
+
+    std::fs::write(&path, "managed content\n").expect("failed to write existing destination");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).expect("failed to chmod destination");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "write same content",
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "managed content\n", replace = false, mode = "0644" }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&path),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "write same content");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "managed content\n");
+    assert_eq!(file_mode(&path), 0o644);
+}
+
+#[test]
+fn builtin_write_replace_false_different_content_skips() {
+    let sandbox = Sandbox::new("builtin-write-replace-false-different");
+    let path = sandbox.path("managed.txt");
+
+    std::fs::write(&path, "existing content\n").expect("failed to write existing destination");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "write different content",
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "wanted content\n", replace = false }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&path),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_skipped_contains(&report, "write different content", "replace is false");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "existing content\n");
+}
+
+#[test]
 fn builtin_file_replace_true_replaces_existing_target_symlink_even_when_content_matches() {
     let sandbox = Sandbox::new("builtin-file-symlink-identical");
     let target = sandbox.path("target.txt");
@@ -393,9 +455,9 @@ fn builtin_copy_file_replace_false_identical_destination_updates_explicit_mode()
     );
 
     let report = run_apply(&manifest);
-    assert_task_skipped_contains(&report, "copy identical with explicit mode", "replace is false");
+    assert_task_changed(&report, "copy identical with explicit mode");
     assert_eq!(std::fs::read_to_string(&dest).unwrap(), "same content\n");
-    assert_eq!(file_mode(&dest), 0o600);
+    assert_eq!(file_mode(&dest), 0o644);
 }
 
 #[test]
@@ -418,9 +480,9 @@ fn builtin_copy_file_replace_false_identical_destination_preserves_source_mode()
     );
 
     let report = run_apply(&manifest);
-    assert_task_skipped_contains(&report, "copy identical preserving source mode", "replace is false");
+    assert_task_changed(&report, "copy identical preserving source mode");
     assert_eq!(std::fs::read_to_string(&dest).unwrap(), "same content\n");
-    assert_eq!(file_mode(&dest), 0o600);
+    assert_eq!(file_mode(&dest), 0o640);
 }
 
 #[test]
@@ -440,9 +502,9 @@ fn builtin_copy_file_same_path_updates_explicit_mode() {
     );
 
     let report = run_apply(&manifest);
-    assert_task_skipped_contains(&report, "copy same path with explicit mode", "replace is false");
+    assert_task_changed(&report, "copy same path with explicit mode");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "content\n");
-    assert_eq!(file_mode(&path), 0o600);
+    assert_eq!(file_mode(&path), 0o644);
 }
 
 #[test]

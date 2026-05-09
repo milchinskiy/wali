@@ -26,7 +26,7 @@
 ---@field dest string Target-host destination file.
 ---@field vars? table<string, WaliJsonValue> Template variables merged over task vars.
 ---@field parents? boolean Create missing parent directories.
----@field replace? boolean Skip when the destination exists and this is false.
+---@field replace? boolean Prevent destructive replacement; matching destinations remain unchanged, conflicts are skipped.
 ---@field mode? string Octal mode string.
 ---@field owner? WaliOwner
 
@@ -34,7 +34,7 @@
 ---@field src string Symlink target text, or target-host source directory when recursive=true.
 ---@field dest string Target-host symlink path or recursive destination directory.
 ---@field parents? boolean Create the single-link parent directory.
----@field replace? boolean Skip occupied destinations when false.
+---@field replace? boolean Prevent destructive replacement; matching destinations remain unchanged, conflicts are skipped.
 ---@field recursive? boolean Mirror a source directory as directories and symlinks.
 ---@field skip_special? boolean Skip special entries during recursive linking.
 ---@field max_depth? integer Recursive traversal limit.
@@ -45,7 +45,7 @@
 ---@field src string Target-host source file, or source directory when recursive=true.
 ---@field dest string Target-host destination file or directory.
 ---@field parents? boolean Create missing parent directories for single-file copy.
----@field replace? boolean Skip occupied destinations when false.
+---@field replace? boolean Prevent destructive replacement; matching destinations remain unchanged, conflicts are skipped.
 ---@field recursive? boolean Copy a directory tree.
 ---@field preserve_mode? boolean Preserve source modes where applicable.
 ---@field preserve_owner? boolean Preserve source owner where applicable.
@@ -63,7 +63,7 @@
 ---@field src string Controller-side source file, or source directory when recursive=true.
 ---@field dest string Target-host destination file or directory.
 ---@field parents? boolean Create missing parent directories for single-file push.
----@field replace? boolean Skip occupied destinations when false.
+---@field replace? boolean Prevent destructive replacement; matching destinations remain unchanged, conflicts are skipped.
 ---@field recursive? boolean Transfer a directory tree.
 ---@field preserve_mode? boolean Preserve source modes where applicable.
 ---@field symlinks? WaliTreeSymlinkPolicy Recursive symlink handling.
@@ -80,7 +80,7 @@
 ---@field src string Target-host source file, or source directory when recursive=true.
 ---@field dest string Controller-side destination file or directory.
 ---@field parents? boolean Create missing parent directories for single-file pull.
----@field replace? boolean Skip occupied destinations when false.
+---@field replace? boolean Prevent destructive replacement; matching destinations remain unchanged, conflicts are skipped.
 ---@field recursive? boolean Transfer a directory tree.
 ---@field preserve_mode? boolean Preserve source modes where applicable.
 ---@field symlinks? WaliTreeSymlinkPolicy Recursive symlink handling.
@@ -118,7 +118,7 @@
 ---@field stdin? string
 ---@field timeout? string Human duration such as '10s' or '2m'.
 ---@field pty? WaliPtyMode
----@field creates? string|string[] Skip command when all listed absolute paths already exist.
+---@field creates? string|string[] Skip command when all listed absolute paths already exist; only newly-created paths are reported as created.
 ---@field removes? string|string[] Skip command when all listed absolute paths are already absent.
 ---@field changed? boolean Report a successful run as changed. Defaults to true.
 

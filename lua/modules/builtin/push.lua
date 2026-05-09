@@ -55,42 +55,6 @@ local function validate_recursive_roots(ctx, args)
 	return nil
 end
 
-local function check_recursive_dest(ctx, args, entry)
-	local path = lib.tree_destination(ctx, args.dest, entry.relative_path)
-	if entry.kind == "dir" then
-		local current = ctx.host.fs.lstat(path)
-		if current == nil or current.kind == "dir" then
-			return nil
-		end
-		if not args.replace then
-			return "destination already exists and replace is false: " .. path
-		end
-		error("tree destination path must be a directory: " .. path .. " is " .. current.kind)
-	end
-
-	if entry.kind == "symlink" and args.symlinks ~= "preserve" then
-		return nil
-	end
-	if entry.kind ~= "file" and entry.kind ~= "symlink" then
-		return nil
-	end
-
-	local current = ctx.host.fs.lstat(path)
-	if current == nil then
-		return nil
-	end
-	if not args.replace then
-		return "destination already exists and replace is false: " .. path
-	end
-	if current.kind == "dir" then
-		error("refusing to replace directory during push: " .. path)
-	end
-	if current.kind ~= "file" and current.kind ~= "symlink" then
-		error("refusing to replace special filesystem entry during push: " .. path)
-	end
-	return nil
-end
-
 return {
 	name = "builtin push",
 	description = "Transfer a file or directory tree from the controller to the target host.",
@@ -175,9 +139,22 @@ return {
 						.. resolved_controller_path(ctx, args.src)
 				)
 			end
-			local skipped = lib.skip_if_replace_false_and_exists(ctx, args.dest, args.replace, "destination")
-			if skipped ~= nil then
-				return skipped
+			if not args.replace then
+				local current = ctx.host.fs.lstat(args.dest)
+				if current ~= nil then
+					if current.kind == "file" then
+						local source_bytes = ctx.controller.fs.read(args.src)
+						if not lib.host_file_content_matches(ctx, args.dest, source_bytes) then
+							return lib.skip("destination already exists and replace is false: " .. args.dest)
+						end
+					elseif current.kind == "symlink" then
+						return lib.skip("destination already exists and replace is false: " .. args.dest)
+					elseif current.kind == "dir" then
+						error("push destination is a directory: " .. args.dest)
+					else
+						error("push destination is a special filesystem entry: " .. args.dest)
+					end
+				end
 			end
 			return ctx.transfer.push_file(args.src, args.dest, lib.write_file_opts(args))
 		end
@@ -191,18 +168,6 @@ return {
 				return lib.skip("destination already exists and replace is false: " .. args.dest)
 			end
 			error("push destination root must be a directory: " .. args.dest .. " is " .. root.kind)
-		end
-
-		local entries = ctx.controller.fs.walk(args.src, {
-			include_root = false,
-			order = "pre",
-			max_depth = args.max_depth,
-		})
-		for _, entry in ipairs(entries) do
-			local reason = check_recursive_dest(ctx, args, entry)
-			if reason ~= nil then
-				return lib.skip(reason)
-			end
 		end
 
 		return ctx.transfer.push_tree(args.src, args.dest, lib.push_tree_opts(args))

@@ -90,3 +90,32 @@ return {{
     assert_task_changed(&report, "stdin command");
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "hello stdin\n");
 }
+
+#[test]
+fn builtin_command_rejects_non_list_guard_tables() {
+    let sandbox = Sandbox::new("builtin-command-guard-shape");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = {
+        { id = "localhost", transport = "local" },
+    },
+    tasks = {
+        {
+            id = "bad creates guard",
+            module = "wali.builtin.command",
+            args = {
+                script = "true",
+                creates = { marker = "/tmp/wali-marker" },
+            },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
+        "creates must be a string or list of strings",
+    );
+}

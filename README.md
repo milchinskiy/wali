@@ -7,7 +7,7 @@ that a previous successful apply recorded as created.
 
 ## Status
 
-The current release line is `0.1.x`. The manifest format, module contract, and
+The current release line is `0.2.x`. The manifest format, module contract, and
 state-file format are ready to use, but they are not a 1.0 compatibility promise
 yet. Release-visible changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -23,13 +23,13 @@ cargo install --path .
 Install the latest release binary on Linux or macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/install.sh | WALI_INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
 Useful installer overrides:
 
 ```sh
-WALI_VERSION=v0.1.2 sh scripts/install.sh
+WALI_VERSION=v0.2.0 sh scripts/install.sh
 WALI_INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
 WALI_PACKAGE=./wali-linux-x86_64.tar.gz sh scripts/install.sh
 WALI_DATA_DIR="$HOME/.local/share/wali" sh scripts/install.sh
@@ -87,9 +87,9 @@ wali cleanup --state-file apply-state.json manifest.lua
 `plan` compiles the manifest without connecting to hosts. `check` connects,
 prepares modules, evaluates host predicates, normalizes arguments, and validates
 module input without mutating hosts. `apply` performs the checked changes.
-`cleanup` removes only target-host filesystem entries recorded as `created` in
-a previous successful apply state file. Controller-side artifacts reported by
-pull operations are not removed by host cleanup.
+`cleanup` removes only target-host filesystem entries recorded as `created` in a
+previous successful apply state file. Controller-side artifacts reported by pull
+operations are not removed by host cleanup.
 
 ## Builtin modules
 
@@ -111,9 +111,10 @@ wali.builtin.command
 Builtin modules are imperative verbs. They do not expose declarative `state`
 fields: creation, writing, linking, copying, transferring, removal, permission
 changes, and command execution are separate operations. The common option
-`parents` creates missing parent directories where applicable. When `replace =
-false`, an occupied destination is reported as a skipped task rather
-than as a failure.
+`parents` creates missing parent directories where applicable. When
+`replace = false`, matching destinations report unchanged, conflicting
+single-path destinations skip the task, and conflicting recursive leaves are
+left in place while the remaining entries continue.
 
 Target-host filesystem paths are absolute unless a module documents otherwise.
 Controller-side paths used by `write`, `push`, and `pull` may be absolute or

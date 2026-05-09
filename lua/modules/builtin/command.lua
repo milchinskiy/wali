@@ -10,8 +10,23 @@ local function path_list(value, field)
 	if type(value) ~= "table" then
 		error(field .. " must be a string or list of strings")
 	end
+
+	local max = 0
+	for key, _ in pairs(value) do
+		if type(key) ~= "number" or key % 1 ~= 0 or key < 1 then
+			error(field .. " must be a string or list of strings")
+		end
+		if key > max then
+			max = key
+		end
+	end
+
 	local out = {}
-	for idx, item in ipairs(value) do
+	for idx = 1, max do
+		local item = value[idx]
+		if item == nil then
+			error(field .. " must not contain gaps")
+		end
 		if type(item) ~= "string" then
 			error(field .. "[" .. tostring(idx) .. "] must be a string")
 		end
@@ -34,24 +49,20 @@ local function validate_path_list(ctx, value, field)
 	return nil
 end
 
-local function all_exist(ctx, paths)
-	if #paths == 0 then
-		return false
-	end
+local function path_exists_map(ctx, paths)
+	local out = {}
 	for _, path in ipairs(paths) do
-		if not ctx.host.fs.exists(path) then
-			return false
-		end
+		out[path] = ctx.host.fs.exists(path)
 	end
-	return true
+	return out
 end
 
-local function all_absent(ctx, paths)
+local function all_had_state(paths, before, wanted)
 	if #paths == 0 then
 		return false
 	end
 	for _, path in ipairs(paths) do
-		if ctx.host.fs.exists(path) then
+		if before[path] ~= wanted then
 			return false
 		end
 	end
@@ -108,10 +119,12 @@ return {
 	apply = function(ctx, args)
 		local creates = path_list(args.creates, "creates")
 		local removes = path_list(args.removes, "removes")
-		if all_exist(ctx, creates) then
+		local creates_before = path_exists_map(ctx, creates)
+		local removes_before = path_exists_map(ctx, removes)
+		if all_had_state(creates, creates_before, true) then
 			return lib.skip("creates guard already exists: " .. table.concat(creates, ", "))
 		end
-		if all_absent(ctx, removes) then
+		if all_had_state(removes, removes_before, false) then
 			return lib.skip("removes guard is already absent: " .. table.concat(removes, ", "))
 		end
 
@@ -140,12 +153,12 @@ return {
 
 		local result = lib.result.apply()
 		for _, path in ipairs(creates) do
-			if ctx.host.fs.exists(path) then
+			if not creates_before[path] and ctx.host.fs.exists(path) then
 				result:created(path, "creates guard was created")
 			end
 		end
 		for _, path in ipairs(removes) do
-			if not ctx.host.fs.exists(path) then
+			if removes_before[path] and not ctx.host.fs.exists(path) then
 				result:removed(path, "removes guard was removed")
 			end
 		end

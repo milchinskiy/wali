@@ -75,6 +75,27 @@ local function render_if_needed(ctx, source, args)
 	return ctx.template.render(source, vars)
 end
 
+local function replace_false_skip(ctx, dest, content)
+	local current = ctx.host.fs.lstat(dest)
+	if current == nil then
+		return nil
+	end
+	if current.kind == "file" then
+		local ok, actual = pcall(ctx.host.fs.read, dest)
+		if ok and actual == content then
+			return nil
+		end
+		return "destination already exists and replace is false: " .. dest
+	end
+	if current.kind == "symlink" then
+		return "destination already exists and replace is false: " .. dest
+	end
+	if current.kind == "dir" then
+		error("target path is a directory: " .. dest)
+	end
+	error("target path is a special filesystem entry: " .. dest)
+end
+
 return {
 	name = "builtin write",
 	description = "Write text to a regular file on the target host.",
@@ -125,16 +146,19 @@ return {
 	end,
 
 	apply = function(ctx, args)
-		local skipped = lib.skip_if_replace_false_and_exists(ctx, args.dest, args.replace, "destination")
-		if skipped ~= nil then
-			return skipped
-		end
-
 		local source, err = source_text(ctx, args)
 		if err ~= nil then
 			error(err)
 		end
 		local content = render_if_needed(ctx, source, args)
+
+		if not args.replace then
+			local skip_reason = replace_false_skip(ctx, args.dest, content)
+			if skip_reason ~= nil then
+				return lib.skip(skip_reason)
+			end
+		end
+
 		return ctx.host.fs.write(args.dest, content, lib.write_file_opts(args))
 	end,
 }
