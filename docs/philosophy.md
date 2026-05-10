@@ -65,8 +65,9 @@ primitive in Rust and exposing it to Lua through `ctx`.
 
 ## Builtins
 
-Builtin modules should stay primitive and unsurprising. A builtin may create a
-file, manage a symlink, copy a tree, run a command, or render a template. It
+Builtin modules should stay primitive and unsurprising. A builtin may touch a
+file, create a directory, write rendered text, manage a symlink, copy or
+transfer a path, remove a path, reconcile permissions, or run a command. It
 should not silently encode high-level product policy.
 
 Good builtin behavior is:
@@ -85,9 +86,9 @@ outside the core.
 ## Filesystem rules
 
 Target-host filesystem modules require absolute host paths unless a module
-explicitly documents otherwise. Controller-side transfer and template paths may
-be absolute or relative to manifest `base_path`. Tree transfer modules keep
-these namespaces explicit: `push_tree` is controller-to-host, and `pull_tree` is
+explicitly documents otherwise. Controller-side `write`, `push`, and `pull`
+paths may be absolute or relative to manifest `base_path`. The direction stays
+explicit in the verb: `push` is controller-to-host, and `pull` is
 host-to-controller. `manifest.here(...)` exists only to let a manifest name an
 absolute controller path next to itself; it does not change a target-host module
 into a controller-side module.

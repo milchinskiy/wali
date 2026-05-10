@@ -1,5 +1,74 @@
 local lib = require("wali.builtin.lib")
 
+local function path_list(value, field)
+	if value == nil then
+		return {}
+	end
+	if type(value) == "string" then
+		return { value }
+	end
+	if type(value) ~= "table" then
+		error(field .. " must be a string or list of strings")
+	end
+
+	local max = 0
+	for key, _ in pairs(value) do
+		if type(key) ~= "number" or key % 1 ~= 0 or key < 1 then
+			error(field .. " must be a string or list of strings")
+		end
+		if key > max then
+			max = key
+		end
+	end
+
+	local out = {}
+	for idx = 1, max do
+		local item = value[idx]
+		if item == nil then
+			error(field .. " must not contain gaps")
+		end
+		if type(item) ~= "string" then
+			error(field .. "[" .. tostring(idx) .. "] must be a string")
+		end
+		table.insert(out, item)
+	end
+	return out
+end
+
+local function validate_path_list(ctx, value, field)
+	local ok, paths_or_error = pcall(path_list, value, field)
+	if not ok then
+		return lib.validation_error(paths_or_error)
+	end
+	for _, path in ipairs(paths_or_error) do
+		local path_error = lib.validate_absolute_path(ctx, path, field)
+		if path_error ~= nil then
+			return path_error
+		end
+	end
+	return nil
+end
+
+local function path_exists_map(ctx, paths)
+	local out = {}
+	for _, path in ipairs(paths) do
+		out[path] = ctx.host.fs.exists(path)
+	end
+	return out
+end
+
+local function all_had_state(paths, before, wanted)
+	if #paths == 0 then
+		return false
+	end
+	for _, path in ipairs(paths) do
+		if before[path] ~= wanted then
+			return false
+		end
+	end
+	return true
+end
+
 return {
 	name = "builtin command",
 	description = "Run a guarded command or shell script on the target host.",
@@ -16,9 +85,9 @@ return {
 			stdin = { type = "string" },
 			timeout = { type = "string" },
 			pty = { type = "enum", values = { "never", "auto", "require" }, default = "auto" },
-			creates = { type = "string" },
-			removes = { type = "string" },
-			changed = { type = "enum", values = { "on_run", "always", "never" }, default = "on_run" },
+			creates = { type = "any" },
+			removes = { type = "any" },
+			changed = { type = "boolean", default = true },
 		},
 	},
 
@@ -36,22 +105,27 @@ return {
 			return lib.validation_error("script must not be empty")
 		end
 
-		for _, field in ipairs({ "cwd", "creates", "removes" }) do
-			local path_error = lib.validate_optional_absolute_path(ctx, args[field], field)
-			if path_error ~= nil then
-				return path_error
-			end
+		local cwd_error = lib.validate_optional_absolute_path(ctx, args.cwd, "cwd")
+		if cwd_error ~= nil then
+			return cwd_error
 		end
-
-		return nil
+		local creates_error = validate_path_list(ctx, args.creates, "creates")
+		if creates_error ~= nil then
+			return creates_error
+		end
+		return validate_path_list(ctx, args.removes, "removes")
 	end,
 
 	apply = function(ctx, args)
-		if args.creates ~= nil and ctx.host.fs.exists(args.creates) then
-			return lib.result.apply():unchanged(args.creates, "creates guard already exists"):build()
+		local creates = path_list(args.creates, "creates")
+		local removes = path_list(args.removes, "removes")
+		local creates_before = path_exists_map(ctx, creates)
+		local removes_before = path_exists_map(ctx, removes)
+		if all_had_state(creates, creates_before, true) then
+			return lib.skip("creates guard already exists: " .. table.concat(creates, ", "))
 		end
-		if args.removes ~= nil and not ctx.host.fs.exists(args.removes) then
-			return lib.result.apply():unchanged(args.removes, "removes guard is already absent"):build()
+		if all_had_state(removes, removes_before, false) then
+			return lib.skip("removes guard is already absent: " .. table.concat(removes, ", "))
 		end
 
 		local req = {
@@ -78,16 +152,20 @@ return {
 		lib.assert_command_ok(output, detail)
 
 		local result = lib.result.apply()
-		if args.creates ~= nil and ctx.host.fs.exists(args.creates) then
-			result:created(args.creates, "creates guard was created")
+		for _, path in ipairs(creates) do
+			if not creates_before[path] and ctx.host.fs.exists(path) then
+				result:created(path, "creates guard was created")
+			end
 		end
-		if args.removes ~= nil and not ctx.host.fs.exists(args.removes) then
-			result:removed(args.removes, "removes guard was removed")
+		for _, path in ipairs(removes) do
+			if removes_before[path] and not ctx.host.fs.exists(path) then
+				result:removed(path, "removes guard was removed")
+			end
 		end
-		if args.changed == "never" then
-			result:command("unchanged", detail)
-		else
+		if args.changed then
 			result:command("updated", detail)
+		else
+			result:command("unchanged", detail)
 		end
 		return result:build()
 	end,

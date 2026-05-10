@@ -211,37 +211,99 @@ fn push_tree(
     )?;
 
     preflight_target_tree_root(backend, &dest, "push_tree destination root")?;
-    for entry in &entries {
-        preflight_push_entry(backend, &dest, entry, &opts)?;
-    }
+    preflight_tree_source_entries(&entries, opts.symlinks, opts.skip_special, "push")?;
+    preflight_target_tree_destinations(backend, &dest, &entries, opts.replace, opts.symlinks)?;
 
     let mut result = ExecutionResult::default();
     let mut counts = TreeCounts::default();
+    let mut skipped_dirs = Vec::<String>::new();
 
     result.merge(backend.create_dir(&dest, push_dir_opts(&opts, &source_root))?);
 
     for entry in &entries {
         let path = target_child(backend, &dest, &entry.relative_path)?;
+        if is_beneath_skipped_dir(&entry.relative_path, &skipped_dirs) {
+            counts.skipped += 1;
+            result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, path));
+            continue;
+        }
+
         match entry.kind {
             FsPathKind::Dir => {
+                if let Some(current) = backend.lstat(&path)?
+                    && current.kind != FsPathKind::Dir
+                {
+                    if !opts.replace {
+                        counts.dirs += 1;
+                        counts.skipped += 1;
+                        result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, path));
+                        skipped_dirs.push(entry.relative_path.clone());
+                        continue;
+                    }
+                    return Err(crate::Error::CommandExec(format!(
+                        "tree destination path must be a directory: {path} is {}",
+                        kind_text(current.kind)
+                    )));
+                }
                 counts.dirs += 1;
                 result.merge(backend.create_dir(&path, push_dir_opts(&opts, &entry.metadata))?);
             }
             FsPathKind::File => {
-                counts.files += 1;
                 let bytes = crate::lua::controller::read(Path::new(entry.path.as_str()))?;
+                if let Some(current) = backend.lstat(&path)? {
+                    match current.kind {
+                        FsPathKind::Dir if !opts.replace => {
+                            counts.skipped += 1;
+                            result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, path));
+                            continue;
+                        }
+                        FsPathKind::Dir => {
+                            return Err(crate::Error::CommandExec(format!(
+                                "tree destination path is a directory where a file is expected: {path}"
+                            )));
+                        }
+                        FsPathKind::Other if !opts.replace => {
+                            counts.skipped += 1;
+                            result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, path));
+                            continue;
+                        }
+                        FsPathKind::Other => {
+                            return Err(crate::Error::CommandExec(format!(
+                                "tree destination path is a special filesystem entry where a file is expected: {path}"
+                            )));
+                        }
+                        FsPathKind::Symlink if !opts.replace => {
+                            counts.skipped += 1;
+                            result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, path));
+                            continue;
+                        }
+                        FsPathKind::File if !opts.replace => {
+                            if !target_file_content_matches(backend, &path, &bytes)? {
+                                counts.skipped += 1;
+                                result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, path));
+                                continue;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                counts.files += 1;
                 result.merge(backend.write(&path, &bytes, push_file_opts(&opts, &entry.metadata))?);
             }
             FsPathKind::Symlink => match opts.symlinks {
                 TreeSymlinkPolicy::Preserve => {
-                    counts.symlinks += 1;
                     let target = entry.link_target.as_ref().ok_or_else(|| {
                         crate::Error::CommandExec(format!(
                             "source symlink has no target in walk output: {}",
                             entry.path
                         ))
                     })?;
-                    ensure_target_symlink(backend, &mut result, &path, target, opts.replace)?;
+                    if ensure_target_symlink(backend, &mut result, &path, target, opts.replace)? {
+                        counts.symlinks += 1;
+                    } else {
+                        counts.skipped += 1;
+                        result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, path));
+                    }
                 }
                 TreeSymlinkPolicy::Skip => {
                     counts.skipped += 1;
@@ -317,25 +379,101 @@ fn pull_tree(
     )?;
 
     preflight_local_tree_root(&dest, "pull_tree destination root")?;
-    for entry in &entries {
-        preflight_pull_entry(&dest, entry, &opts)?;
-    }
+    preflight_tree_source_entries(&entries, opts.symlinks, opts.skip_special, "pull")?;
+    preflight_local_tree_destinations(&dest, &entries, opts.replace, opts.symlinks)?;
 
     let mut result = ExecutionResult::default();
     let mut counts = TreeCounts::default();
+    let mut skipped_dirs = Vec::<String>::new();
 
     ensure_local_dir(&mut result, &dest, pull_dir_mode(&opts, &source_root))?;
 
     for entry in &entries {
         let path = local_child(&dest, &entry.relative_path)?;
+        if is_beneath_skipped_dir(&entry.relative_path, &skipped_dirs) {
+            counts.skipped += 1;
+            result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Unchanged, local_report_path(&path)));
+            continue;
+        }
+
         match entry.kind {
             FsPathKind::Dir => {
+                if let Some(kind) = local_lstat_kind(&path)?
+                    && kind != FsPathKind::Dir
+                {
+                    if !opts.replace {
+                        counts.dirs += 1;
+                        counts.skipped += 1;
+                        result.merge(ExecutionResult::controller_fs_entry(
+                            ChangeKind::Unchanged,
+                            local_report_path(&path),
+                        ));
+                        skipped_dirs.push(entry.relative_path.clone());
+                        continue;
+                    }
+                    return Err(crate::Error::CommandExec(format!(
+                        "tree destination path must be a directory: {} is {}",
+                        path.display(),
+                        kind_text(kind)
+                    )));
+                }
                 counts.dirs += 1;
                 ensure_local_dir(&mut result, &path, pull_dir_mode(&opts, &entry.metadata))?;
             }
             FsPathKind::File => {
-                counts.files += 1;
                 let bytes = backend.read(&entry.path)?;
+                if let Some(kind) = local_lstat_kind(&path)? {
+                    match kind {
+                        FsPathKind::Dir if !opts.replace => {
+                            counts.skipped += 1;
+                            result.merge(ExecutionResult::controller_fs_entry(
+                                ChangeKind::Unchanged,
+                                local_report_path(&path),
+                            ));
+                            continue;
+                        }
+                        FsPathKind::Dir => {
+                            return Err(crate::Error::CommandExec(format!(
+                                "tree destination path is a directory where a file is expected: {}",
+                                path.display()
+                            )));
+                        }
+                        FsPathKind::Other if !opts.replace => {
+                            counts.skipped += 1;
+                            result.merge(ExecutionResult::controller_fs_entry(
+                                ChangeKind::Unchanged,
+                                local_report_path(&path),
+                            ));
+                            continue;
+                        }
+                        FsPathKind::Other => {
+                            return Err(crate::Error::CommandExec(format!(
+                                "tree destination path is a special filesystem entry where a file is expected: {}",
+                                path.display()
+                            )));
+                        }
+                        FsPathKind::Symlink if !opts.replace => {
+                            counts.skipped += 1;
+                            result.merge(ExecutionResult::controller_fs_entry(
+                                ChangeKind::Unchanged,
+                                local_report_path(&path),
+                            ));
+                            continue;
+                        }
+                        FsPathKind::File if !opts.replace => {
+                            if !local_file_content_matches(&path, &bytes) {
+                                counts.skipped += 1;
+                                result.merge(ExecutionResult::controller_fs_entry(
+                                    ChangeKind::Unchanged,
+                                    local_report_path(&path),
+                                ));
+                                continue;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                counts.files += 1;
                 let file_opts = PullFileOpts {
                     create_parents: true,
                     mode: pull_file_mode(&opts, &entry.metadata),
@@ -345,14 +483,21 @@ fn pull_tree(
             }
             FsPathKind::Symlink => match opts.symlinks {
                 TreeSymlinkPolicy::Preserve => {
-                    counts.symlinks += 1;
                     let target = entry.link_target.as_ref().ok_or_else(|| {
                         crate::Error::CommandExec(format!(
                             "source symlink has no target in walk output: {}",
                             entry.path
                         ))
                     })?;
-                    ensure_local_symlink(&mut result, &path, target, opts.replace)?;
+                    if ensure_local_symlink(&mut result, &path, target, opts.replace)? {
+                        counts.symlinks += 1;
+                    } else {
+                        counts.skipped += 1;
+                        result.merge(ExecutionResult::controller_fs_entry(
+                            ChangeKind::Unchanged,
+                            local_report_path(&path),
+                        ));
+                    }
                 }
                 TreeSymlinkPolicy::Skip => {
                     counts.skipped += 1;
@@ -552,6 +697,32 @@ fn same_or_child(base: &Path, path: &Path) -> bool {
     base == path || path.starts_with(base)
 }
 
+fn preflight_tree_source_entries(
+    entries: &[WalkEntry],
+    symlinks: TreeSymlinkPolicy,
+    skip_special: bool,
+    direction: &str,
+) -> crate::Result<()> {
+    for entry in entries {
+        match entry.kind {
+            FsPathKind::Symlink if symlinks == TreeSymlinkPolicy::Error => {
+                return Err(crate::Error::CommandExec(format!(
+                    "refusing to {direction} source symlink: {}",
+                    entry.path
+                )));
+            }
+            FsPathKind::Other if !skip_special => {
+                return Err(crate::Error::CommandExec(format!(
+                    "refusing to {direction} special filesystem entry without skip_special=true: {}",
+                    entry.path
+                )));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 fn preflight_target_tree_root(backend: &Backend, path: &TargetPath, label: &str) -> crate::Result<()> {
     if let Some(current) = backend.lstat(path)?
         && current.kind != FsPathKind::Dir
@@ -561,103 +732,98 @@ fn preflight_target_tree_root(backend: &Backend, path: &TargetPath, label: &str)
     Ok(())
 }
 
-fn preflight_push_entry(
+fn preflight_target_tree_destinations(
     backend: &Backend,
-    dest_root: &TargetPath,
-    entry: &WalkEntry,
-    opts: &PushTreeOpts,
+    dest: &TargetPath,
+    entries: &[WalkEntry],
+    replace: bool,
+    symlinks: TreeSymlinkPolicy,
 ) -> crate::Result<()> {
-    let path = target_child(backend, dest_root, &entry.relative_path)?;
-    match entry.kind {
-        FsPathKind::Dir => assert_target_dir_destination(backend, &path, "tree destination path"),
-        FsPathKind::File => assert_target_file_destination(backend, &path, "tree destination path"),
-        FsPathKind::Symlink => match opts.symlinks {
-            TreeSymlinkPolicy::Preserve => {
+    if !replace {
+        return Ok(());
+    }
+
+    for entry in entries {
+        let path = target_child(backend, dest, &entry.relative_path)?;
+        match entry.kind {
+            FsPathKind::Dir => preflight_target_expected_dir(backend, &path)?,
+            FsPathKind::File => preflight_target_expected_file(backend, &path)?,
+            FsPathKind::Symlink if symlinks == TreeSymlinkPolicy::Preserve => {
                 let target = entry.link_target.as_ref().ok_or_else(|| {
                     crate::Error::CommandExec(format!("source symlink has no target in walk output: {}", entry.path))
                 })?;
-                assert_target_symlink_destination(backend, &path, target, opts.replace, "tree destination path")
+                preflight_target_expected_symlink(backend, &path, target)?;
             }
-            TreeSymlinkPolicy::Skip => Ok(()),
-            TreeSymlinkPolicy::Error => {
-                Err(crate::Error::CommandExec(format!("refusing to push source symlink: {}", entry.path)))
-            }
-        },
-        FsPathKind::Other => {
-            if opts.skip_special {
-                Ok(())
-            } else {
-                Err(crate::Error::CommandExec(format!(
-                    "refusing to push special filesystem entry without skip_special=true: {}",
-                    entry.path
-                )))
-            }
+            _ => {}
         }
     }
+
+    Ok(())
 }
 
-fn assert_target_dir_destination(backend: &Backend, path: &TargetPath, label: &str) -> crate::Result<()> {
+fn preflight_target_expected_dir(backend: &Backend, path: &TargetPath) -> crate::Result<()> {
     if let Some(current) = backend.lstat(path)?
         && current.kind != FsPathKind::Dir
     {
-        return Err(crate::Error::CommandExec(format!("{label} must be a directory: {path}")));
+        return Err(crate::Error::CommandExec(format!(
+            "tree destination path must be a directory: {path} is {}",
+            kind_text(current.kind)
+        )));
     }
     Ok(())
 }
 
-fn assert_target_file_destination(backend: &Backend, path: &TargetPath, label: &str) -> crate::Result<()> {
+fn preflight_target_expected_file(backend: &Backend, path: &TargetPath) -> crate::Result<()> {
     let Some(current) = backend.lstat(path)? else {
         return Ok(());
     };
 
     match current.kind {
-        FsPathKind::Dir => {
-            Err(crate::Error::CommandExec(format!("{label} is a directory where a file is expected: {path}")))
-        }
+        FsPathKind::File => Ok(()),
+        FsPathKind::Dir => Err(crate::Error::CommandExec(format!(
+            "tree destination path is a directory where a file is expected: {path}"
+        ))),
         FsPathKind::Symlink => match backend.stat(path)? {
-            None => Ok(()),
-            Some(target) if target.kind == FsPathKind::File => Ok(()),
-            Some(target) if target.kind == FsPathKind::Dir => Err(crate::Error::CommandExec(format!(
-                "{label} is a symlink to a directory where a file is expected: {path}"
+            None
+            | Some(Metadata {
+                kind: FsPathKind::File, ..
+            }) => Ok(()),
+            Some(Metadata {
+                kind: FsPathKind::Dir, ..
+            }) => Err(crate::Error::CommandExec(format!(
+                "tree destination path is a symlink to a directory where a file is expected: {path}"
             ))),
             Some(_) => Err(crate::Error::CommandExec(format!(
-                "{label} is a symlink to a special filesystem entry where a file is expected: {path}"
+                "tree destination path is a symlink to a special filesystem entry where a file is expected: {path}"
             ))),
         },
-        FsPathKind::File => Ok(()),
         FsPathKind::Other => Err(crate::Error::CommandExec(format!(
-            "{label} is a special filesystem entry where a file is expected: {path}"
+            "tree destination path is a special filesystem entry where a file is expected: {path}"
         ))),
     }
 }
 
-fn assert_target_symlink_destination(
-    backend: &Backend,
-    path: &TargetPath,
-    target: &TargetPath,
-    replace: bool,
-    label: &str,
-) -> crate::Result<()> {
+fn preflight_target_expected_symlink(backend: &Backend, path: &TargetPath, target: &TargetPath) -> crate::Result<()> {
     let Some(current) = backend.lstat(path)? else {
         return Ok(());
     };
 
-    if current.kind == FsPathKind::Symlink && backend.read_link(path).is_ok_and(|current| current == *target) {
+    if current.kind == FsPathKind::Symlink
+        && backend
+            .read_link(path)
+            .is_ok_and(|current_target| current_target == *target)
+    {
         return Ok(());
     }
-
-    if !replace {
-        return Err(crate::Error::CommandExec(format!("{label} already exists and replace is false: {path}")));
+    if current.kind == FsPathKind::Dir {
+        return Err(crate::Error::CommandExec(format!("refusing to replace directory with symlink: {path}")));
     }
-    match current.kind {
-        FsPathKind::Dir => Err(crate::Error::CommandExec(format!(
-            "refusing to replace directory with symlink during tree operation: {path}"
-        ))),
-        FsPathKind::File | FsPathKind::Symlink => Ok(()),
-        FsPathKind::Other => Err(crate::Error::CommandExec(format!(
-            "refusing to replace special filesystem entry with symlink during tree operation: {path}"
-        ))),
+    if current.kind != FsPathKind::File && current.kind != FsPathKind::Symlink {
+        return Err(crate::Error::CommandExec(format!(
+            "refusing to replace special filesystem entry with symlink: {path}"
+        )));
     }
+    Ok(())
 }
 
 fn ensure_target_symlink(
@@ -666,10 +832,10 @@ fn ensure_target_symlink(
     link_path: &TargetPath,
     target_path: &TargetPath,
     replace: bool,
-) -> crate::Result<()> {
+) -> crate::Result<bool> {
     let Some(current) = backend.lstat(link_path)? else {
         result.merge(backend.symlink(target_path, link_path)?);
-        return Ok(());
+        return Ok(true);
     };
 
     if current.kind == FsPathKind::Symlink
@@ -678,11 +844,11 @@ fn ensure_target_symlink(
             .is_ok_and(|current| current == *target_path)
     {
         result.merge(ExecutionResult::fs_entry(ChangeKind::Unchanged, link_path.clone()));
-        return Ok(());
+        return Ok(true);
     }
 
     if !replace {
-        return Err(crate::Error::CommandExec(format!("path already exists and replace is false: {link_path}")));
+        return Ok(false);
     }
     if current.kind == FsPathKind::Dir {
         return Err(crate::Error::CommandExec(format!("refusing to replace directory with symlink: {link_path}")));
@@ -695,7 +861,7 @@ fn ensure_target_symlink(
 
     result.merge(backend.remove_file(link_path)?);
     result.merge(backend.symlink(target_path, link_path)?);
-    Ok(())
+    Ok(true)
 }
 
 fn preflight_local_tree_root(path: &Path, label: &str) -> crate::Result<()> {
@@ -707,74 +873,77 @@ fn preflight_local_tree_root(path: &Path, label: &str) -> crate::Result<()> {
     Ok(())
 }
 
-fn preflight_pull_entry(dest_root: &Path, entry: &WalkEntry, opts: &PullTreeOpts) -> crate::Result<()> {
-    let path = local_child(dest_root, &entry.relative_path)?;
-    match entry.kind {
-        FsPathKind::Dir => assert_local_dir_destination(&path, "tree destination path"),
-        FsPathKind::File => assert_local_file_destination(&path, "tree destination path"),
-        FsPathKind::Symlink => match opts.symlinks {
-            TreeSymlinkPolicy::Preserve => {
+fn preflight_local_tree_destinations(
+    dest: &Path,
+    entries: &[WalkEntry],
+    replace: bool,
+    symlinks: TreeSymlinkPolicy,
+) -> crate::Result<()> {
+    if !replace {
+        return Ok(());
+    }
+
+    for entry in entries {
+        let path = local_child(dest, &entry.relative_path)?;
+        match entry.kind {
+            FsPathKind::Dir => preflight_local_expected_dir(&path)?,
+            FsPathKind::File => preflight_local_expected_file(&path)?,
+            FsPathKind::Symlink if symlinks == TreeSymlinkPolicy::Preserve => {
                 let target = entry.link_target.as_ref().ok_or_else(|| {
                     crate::Error::CommandExec(format!("source symlink has no target in walk output: {}", entry.path))
                 })?;
-                assert_local_symlink_destination(&path, target, opts.replace, "tree destination path")
+                preflight_local_expected_symlink(&path, target)?;
             }
-            TreeSymlinkPolicy::Skip => Ok(()),
-            TreeSymlinkPolicy::Error => {
-                Err(crate::Error::CommandExec(format!("refusing to pull source symlink: {}", entry.path)))
-            }
-        },
-        FsPathKind::Other => {
-            if opts.skip_special {
-                Ok(())
-            } else {
-                Err(crate::Error::CommandExec(format!(
-                    "refusing to pull special filesystem entry without skip_special=true: {}",
-                    entry.path
-                )))
-            }
+            _ => {}
         }
     }
+
+    Ok(())
 }
 
-fn assert_local_dir_destination(path: &Path, label: &str) -> crate::Result<()> {
+fn preflight_local_expected_dir(path: &Path) -> crate::Result<()> {
     if let Some(kind) = local_lstat_kind(path)?
         && kind != FsPathKind::Dir
     {
-        return Err(crate::Error::CommandExec(format!("{label} must be a directory: {}", path.display())));
+        return Err(crate::Error::CommandExec(format!(
+            "tree destination path must be a directory: {} is {}",
+            path.display(),
+            kind_text(kind)
+        )));
     }
     Ok(())
 }
 
-fn assert_local_file_destination(path: &Path, label: &str) -> crate::Result<()> {
+fn preflight_local_expected_file(path: &Path) -> crate::Result<()> {
     let Some(kind) = local_lstat_kind(path)? else {
         return Ok(());
     };
 
     match kind {
+        FsPathKind::File => Ok(()),
         FsPathKind::Dir => Err(crate::Error::CommandExec(format!(
-            "{label} is a directory where a file is expected: {}",
+            "tree destination path is a directory where a file is expected: {}",
             path.display()
         ))),
-        FsPathKind::Symlink => {
-            if local_symlink_points_to_directory(path)? {
-                Err(crate::Error::CommandExec(format!(
-                    "{label} is a symlink to a directory where a file is expected: {}",
-                    path.display()
-                )))
-            } else {
-                Ok(())
-            }
-        }
-        FsPathKind::File => Ok(()),
+        FsPathKind::Symlink => match local_stat_kind(path)? {
+            None | Some(FsPathKind::File) => Ok(()),
+            Some(FsPathKind::Dir) => Err(crate::Error::CommandExec(format!(
+                "tree destination path is a symlink to a directory where a file is expected: {}",
+                path.display()
+            ))),
+            Some(FsPathKind::Other) | Some(FsPathKind::Symlink) => Err(crate::Error::CommandExec(format!(
+                "tree destination path is a symlink to a special filesystem entry where a file is expected: {}",
+                path.display()
+            ))),
+        },
         FsPathKind::Other => Err(crate::Error::CommandExec(format!(
-            "{label} is a special filesystem entry where a file is expected: {}",
+            "tree destination path is a special filesystem entry where a file is expected: {}",
             path.display()
         ))),
     }
 }
 
-fn assert_local_symlink_destination(path: &Path, target: &TargetPath, replace: bool, label: &str) -> crate::Result<()> {
+fn preflight_local_expected_symlink(path: &Path, target: &TargetPath) -> crate::Result<()> {
     let Some(kind) = local_lstat_kind(path)? else {
         return Ok(());
     };
@@ -784,24 +953,19 @@ fn assert_local_symlink_destination(path: &Path, target: &TargetPath, replace: b
     {
         return Ok(());
     }
-
-    if !replace {
+    if kind == FsPathKind::Dir {
         return Err(crate::Error::CommandExec(format!(
-            "{label} already exists and replace is false: {}",
+            "refusing to replace directory with symlink: {}",
             path.display()
         )));
     }
-    match kind {
-        FsPathKind::Dir => Err(crate::Error::CommandExec(format!(
-            "refusing to replace directory with symlink during tree operation: {}",
+    if kind != FsPathKind::File && kind != FsPathKind::Symlink {
+        return Err(crate::Error::CommandExec(format!(
+            "refusing to replace special filesystem entry with symlink: {}",
             path.display()
-        ))),
-        FsPathKind::File | FsPathKind::Symlink => Ok(()),
-        FsPathKind::Other => Err(crate::Error::CommandExec(format!(
-            "refusing to replace special filesystem entry with symlink during tree operation: {}",
-            path.display()
-        ))),
+        )));
     }
+    Ok(())
 }
 
 fn ensure_local_dir(result: &mut ExecutionResult, path: &Path, mode: Option<FileMode>) -> crate::Result<()> {
@@ -838,25 +1002,22 @@ fn ensure_local_symlink(
     link_path: &Path,
     target_path: &TargetPath,
     replace: bool,
-) -> crate::Result<()> {
+) -> crate::Result<bool> {
     let Some(kind) = local_lstat_kind(link_path)? else {
         create_local_symlink(target_path.as_str(), link_path)?;
         result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Created, local_report_path(link_path)));
-        return Ok(());
+        return Ok(true);
     };
 
     if kind == FsPathKind::Symlink
         && std::fs::read_link(link_path).is_ok_and(|current| current == Path::new(target_path.as_str()))
     {
         result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Unchanged, local_report_path(link_path)));
-        return Ok(());
+        return Ok(true);
     }
 
     if !replace {
-        return Err(crate::Error::CommandExec(format!(
-            "path already exists and replace is false: {}",
-            link_path.display()
-        )));
+        return Ok(false);
     }
     if kind == FsPathKind::Dir {
         return Err(crate::Error::CommandExec(format!(
@@ -875,7 +1036,29 @@ fn ensure_local_symlink(
     result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Removed, local_report_path(link_path)));
     create_local_symlink(target_path.as_str(), link_path)?;
     result.merge(ExecutionResult::controller_fs_entry(ChangeKind::Created, local_report_path(link_path)));
-    Ok(())
+    Ok(true)
+}
+
+fn is_beneath_skipped_dir(relative_path: &str, skipped_dirs: &[String]) -> bool {
+    skipped_dirs.iter().any(|prefix| {
+        relative_path == prefix
+            || relative_path
+                .strip_prefix(prefix.as_str())
+                .is_some_and(|rest| rest.starts_with('/'))
+    })
+}
+
+fn target_file_content_matches(backend: &Backend, path: &TargetPath, expected: &[u8]) -> crate::Result<bool> {
+    backend.read(path).map(|actual| actual == expected)
+}
+
+fn kind_text(kind: FsPathKind) -> &'static str {
+    match kind {
+        FsPathKind::Dir => "dir",
+        FsPathKind::File => "file",
+        FsPathKind::Symlink => "symlink",
+        FsPathKind::Other => "other",
+    }
 }
 
 fn local_lstat_kind(path: &Path) -> crate::Result<Option<FsPathKind>> {
@@ -885,6 +1068,23 @@ fn local_lstat_kind(path: &Path) -> crate::Result<Option<FsPathKind>> {
             let kind = if file_type.is_symlink() {
                 FsPathKind::Symlink
             } else if metadata.is_file() {
+                FsPathKind::File
+            } else if metadata.is_dir() {
+                FsPathKind::Dir
+            } else {
+                FsPathKind::Other
+            };
+            Ok(Some(kind))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn local_stat_kind(path: &Path) -> crate::Result<Option<FsPathKind>> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => {
+            let kind = if metadata.is_file() {
                 FsPathKind::File
             } else if metadata.is_dir() {
                 FsPathKind::Dir

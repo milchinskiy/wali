@@ -24,13 +24,13 @@ return {{
         {{
             id = "dependent file",
             depends_on = {{ "fail root" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written\n" }},
         }},
         {{
             id = "independent file",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "independent still runs\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "independent still runs\n" }},
         }},
     }},
 }}
@@ -66,19 +66,19 @@ return {{
         {{
             id = "skipped root",
             when = {{ env_set = "__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written\n" }},
         }},
         {{
             id = "dependent file",
             depends_on = {{ "skipped root" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written\n" }},
         }},
         {{
             id = "independent file",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "independent still runs\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "independent still runs\n" }},
         }},
     }},
 }}
@@ -140,13 +140,13 @@ return {{
         {{
             id = "dependent check",
             depends_on = {{ "fail validation" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written\n" }},
         }},
         {{
             id = "independent check",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "check must not write\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "check must not write\n" }},
         }},
     }},
 }}
@@ -202,13 +202,13 @@ return {{
         {{
             id = "dependent file",
             depends_on = {{ "missing requirement" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written\n" }},
         }},
         {{
             id = "independent file",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "independent still runs\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "independent still runs\n" }},
         }},
     }},
 }}
@@ -404,8 +404,8 @@ return {{
         {{
             id = "dependent",
             depends_on = {{ "skip z", "fail a" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written\n" }},
         }},
     }},
 }}

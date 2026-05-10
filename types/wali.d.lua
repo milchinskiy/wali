@@ -10,6 +10,14 @@
 ---@type WaliJsonNull
 null = nil
 
+---@class WaliVersionInfo
+---@field major integer
+---@field minor integer
+---@field patch integer
+---@field prerelease? string
+---@field build? string
+---@field text string
+
 ---@alias WaliJsonScalar WaliJsonNull|string|number|boolean
 ---@alias WaliJsonValue WaliJsonScalar|WaliJsonObject|WaliJsonArray
 ---@alias WaliJsonObject table<string, WaliJsonValue>
@@ -22,7 +30,6 @@ null = nil
 ---@alias WaliPtyMode 'never'|'auto'|'require'
 ---@alias WaliChangeKind 'unchanged'|'created'|'updated'|'removed'
 ---@alias WaliChangeSubject 'fs_entry'|'controller_fs_entry'|'command'
----@alias WaliCommandChangedPolicy 'on_run'|'always'|'never'
 ---@alias WaliTreeSymlinkPolicy 'preserve'|'skip'|'error'
 ---@alias WaliPermissionsExpect 'any'|'file'|'dir'
 ---@alias WaliRunAsVia 'sudo'|'doas'|'su'
@@ -74,7 +81,6 @@ null = nil
 ---@field create_parents? boolean Create missing controller-side parent directories.
 ---@field mode? integer POSIX mode bits for the controller-side destination where supported.
 ---@field replace? boolean Replace existing destination. Defaults to true.
-
 
 ---@class WaliPushTreeOpts
 ---@field replace? boolean Replace existing target-host file/symlink destinations. Defaults to true.
@@ -335,7 +341,7 @@ null = nil
 ---@field requires? WaliRequirement
 ---@field schema? WaliSchema
 ---@field validate? fun(ctx: WaliValidateCtx, args: TArgs): WaliValidationResult?
----@field apply fun(ctx: WaliApplyCtx, args: TArgs): WaliExecutionResult?
+---@field apply fun(ctx: WaliApplyCtx, args: TArgs): WaliExecutionResult|WaliApplySkipResult?
 
 ---@alias WaliRequirement
 ---| WaliRequirementCommand

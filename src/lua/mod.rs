@@ -97,8 +97,15 @@ impl LuaRuntime {
         N: AsRef<str>,
         C: AsRef<str>,
     {
-        let module: mlua::Table = self.eval(&name, content.as_ref())?;
-        self.lua.register_module(name.as_ref(), module)
+        let name = name.as_ref();
+        let module: mlua::Table = self.eval(name, content.as_ref())?;
+        if name == "wali" {
+            module
+                .get::<mlua::Function>("_set_version")?
+                .call::<()>(env!("CARGO_PKG_VERSION"))?;
+            module.set("_set_version", mlua::Value::Nil)?;
+        }
+        self.lua.register_module(name, module)
     }
 
     pub fn eval<R, N, C>(&self, name: N, chunk: C) -> mlua::Result<R>

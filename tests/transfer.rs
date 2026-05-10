@@ -27,11 +27,11 @@ return {{
     tasks = {{
         {{
             id = "push file",
-            module = "wali.builtin.push_file",
+            module = "wali.builtin.push",
             args = {{
                 src = "input.txt",
                 dest = {},
-                create_parents = true,
+                parents = true,
                 replace = true,
                 mode = "0640",
             }},
@@ -39,11 +39,11 @@ return {{
         {{
             id = "pull file",
             depends_on = {{ "push file" }},
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{
                 src = {},
                 dest = "pulled/output.txt",
-                create_parents = true,
+                parents = true,
                 replace = true,
                 mode = "0600",
             }},
@@ -89,8 +89,8 @@ return {{
     tasks = {{
         {{
             id = "push default base",
-            module = "wali.builtin.push_file",
-            args = {{ src = "input.txt", dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = "input.txt", dest = {}, parents = true }},
         }},
     }},
 }}
@@ -128,8 +128,8 @@ return {{
     tasks = {{
         {{
             id = "push relative base",
-            module = "wali.builtin.push_file",
-            args = {{ src = "input.txt", dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = "input.txt", dest = {}, parents = true }},
         }},
     }},
 }}
@@ -215,13 +215,13 @@ return {{
     tasks = {{
         {{
             id = "push absolute",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
         {{
             id = "pull absolute",
             depends_on = {{ "push absolute" }},
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -257,7 +257,7 @@ return {{
     tasks = {{
         {{
             id = "pull preserve",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = false }},
         }},
     }},
@@ -268,7 +268,7 @@ return {{
     ));
 
     let report = run_apply(&manifest);
-    assert_task_unchanged(&report, "pull preserve");
+    assert_task_skipped_contains(&report, "pull preserve", "replace is false");
     assert_eq!(std::fs::read_to_string(&local_dest).unwrap(), "local content\n");
 }
 
@@ -289,8 +289,8 @@ return {{
     tasks = {{
         {{
             id = "check push source",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
     }},
 }}
@@ -319,8 +319,8 @@ return {{
     tasks = {{
         {{
             id = "missing push source",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
     }},
 }}
@@ -330,7 +330,7 @@ return {{
     ));
 
     let report = run_wali_failure_json(&["--json", "check", manifest.to_str().expect("non-utf8 manifest path")]);
-    assert_task_failed_contains(&report, "missing push source", "transfer source does not exist");
+    assert_task_failed_contains(&report, "missing push source", "push source does not exist");
     assert!(!host_dest.exists(), "wali check must not create destination for invalid push source");
 }
 
@@ -349,8 +349,8 @@ return {{
     tasks = {{
         {{
             id = "push directory",
-            module = "wali.builtin.push_file",
-            args = {{ src = {}, dest = {}, create_parents = true }},
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, parents = true }},
         }},
     }},
 }}
@@ -360,7 +360,7 @@ return {{
     ));
 
     let report = run_wali_failure_json(&["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")]);
-    assert_task_failed_contains(&report, "push directory", "transfer source must be a regular file");
+    assert_task_failed_contains(&report, "push directory", "push source must be a regular file");
     assert!(!host_dest.exists());
 }
 
@@ -384,7 +384,7 @@ return {{
     tasks = {{
         {{
             id = "pull replace symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -421,7 +421,7 @@ return {{
     tasks = {{
         {{
             id = "pull preserve symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = false }},
         }},
     }},
@@ -432,7 +432,7 @@ return {{
     ));
 
     let report = run_apply(&manifest);
-    assert_task_unchanged(&report, "pull preserve symlink");
+    assert_task_skipped_contains(&report, "pull preserve symlink", "replace is false");
     assert!(std::fs::symlink_metadata(&local_dest).unwrap().file_type().is_symlink());
     assert_eq!(std::fs::read_to_string(&symlink_target).unwrap(), "local content\n");
 }
@@ -456,7 +456,7 @@ return {{
     tasks = {{
         {{
             id = "pull replace broken symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -492,7 +492,7 @@ return {{
     tasks = {{
         {{
             id = "pull directory symlink",
-            module = "wali.builtin.pull_file",
+            module = "wali.builtin.pull",
             args = {{ src = {}, dest = {}, replace = true }},
         }},
     }},
@@ -532,11 +532,12 @@ return {{
     tasks = {{
         {{
             id = "push tree",
-            module = "wali.builtin.push_tree",
+            module = "wali.builtin.push",
             args = {{
                 src = "assets",
                 dest = {},
                 replace = true,
+                recursive = true,
                 preserve_mode = false,
                 symlinks = "preserve",
                 dir_mode = "0755",
@@ -546,11 +547,12 @@ return {{
         {{
             id = "pull tree",
             depends_on = {{ "push tree" }},
-            module = "wali.builtin.pull_tree",
+            module = "wali.builtin.pull",
             args = {{
                 src = {},
                 dest = "pulled-tree",
                 replace = true,
+                recursive = true,
                 preserve_mode = false,
                 symlinks = "preserve",
                 dir_mode = "0755",
@@ -625,8 +627,8 @@ return {{
     tasks = {{
         {{
             id = "check push tree",
-            module = "wali.builtin.push_tree",
-            args = {{ src = "assets", dest = {} }},
+            module = "wali.builtin.push",
+            args = {{ src = "assets", dest = {}, recursive = true }},
         }},
     }},
 }}
@@ -656,8 +658,8 @@ return {{
     tasks = {{
         {{
             id = "missing push tree source",
-            module = "wali.builtin.push_tree",
-            args = {{ src = "missing-assets", dest = {} }},
+            module = "wali.builtin.push",
+            args = {{ src = "missing-assets", dest = {}, recursive = true }},
         }},
     }},
 }}
@@ -666,7 +668,7 @@ return {{
         lua_string(&host_dest),
     ));
 
-    assert_check_failure_contains(&manifest, "transfer source does not exist");
+    assert_check_failure_contains(&manifest, "push source does not exist");
 }
 
 #[test]
@@ -690,14 +692,14 @@ return {{
     tasks = {{
         {{
             id = "push tree",
-            module = "wali.builtin.push_tree",
-            args = {{ src = "assets", dest = {} }},
+            module = "wali.builtin.push",
+            args = {{ src = "assets", dest = {}, recursive = true }},
         }},
         {{
             id = "pull generated tree",
             depends_on = {{ "push tree" }},
-            module = "wali.builtin.pull_tree",
-            args = {{ src = {}, dest = "pulled-tree" }},
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = "pulled-tree", recursive = true }},
         }},
     }},
 }}
@@ -715,11 +717,12 @@ return {{
 }
 
 #[test]
-fn pull_tree_replace_false_preserves_existing_controller_file() {
+fn pull_tree_replace_false_preserves_conflicting_leaf_and_continues() {
     let sandbox = Sandbox::new("transfer-tree-pull-replace-false");
     let remote_src = sandbox.mkdir("remote-tree");
     let local_dest = sandbox.mkdir("local-tree");
     std::fs::write(remote_src.join("file.txt"), "remote content\n").expect("failed to write remote source");
+    std::fs::write(remote_src.join("new.txt"), "new content\n").expect("failed to write second remote source");
     std::fs::write(local_dest.join("file.txt"), "local content\n").expect("failed to write local destination");
 
     let manifest = sandbox.write_manifest(&format!(
@@ -731,8 +734,8 @@ return {{
     tasks = {{
         {{
             id = "pull tree preserve",
-            module = "wali.builtin.pull_tree",
-            args = {{ src = {}, dest = {}, replace = false }},
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = {}, recursive = true, replace = false }},
         }},
     }},
 }}
@@ -742,6 +745,164 @@ return {{
     ));
 
     let report = run_apply(&manifest);
-    assert_task_unchanged(&report, "pull tree preserve");
+    assert_task_changed(&report, "pull tree preserve");
     assert_eq!(std::fs::read_to_string(local_dest.join("file.txt")).unwrap(), "local content\n");
+    assert_eq!(std::fs::read_to_string(local_dest.join("new.txt")).unwrap(), "new content\n");
+    let result = task_result(&report, "pull tree preserve");
+    assert_eq!(
+        result
+            .pointer("/data/counts/skipped")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+}
+
+#[test]
+fn push_tree_replace_false_preserves_directory_leaf_conflict_and_continues() {
+    let sandbox = Sandbox::new("transfer-tree-push-replace-false-dir-leaf");
+    let local_src = sandbox.mkdir("source-tree");
+    let host_dest = sandbox.mkdir("host-tree");
+    std::fs::write(local_src.join("conflict"), "source content\n").expect("failed to write source conflict file");
+    std::fs::write(local_src.join("new.txt"), "new content\n").expect("failed to write source new file");
+    std::fs::create_dir_all(host_dest.join("conflict")).expect("failed to create destination conflict dir");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "push tree guarded",
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, recursive = true, replace = false }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&local_src),
+        lua_string(&host_dest),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "push tree guarded");
+    assert!(host_dest.join("conflict").is_dir(), "conflicting directory leaf must be preserved");
+    assert_eq!(std::fs::read_to_string(host_dest.join("new.txt")).unwrap(), "new content\n");
+    let result = task_result(&report, "push tree guarded");
+    assert_eq!(
+        result
+            .pointer("/data/counts/skipped")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+}
+
+#[test]
+fn pull_tree_replace_false_preserves_directory_leaf_conflict_and_continues() {
+    let sandbox = Sandbox::new("transfer-tree-pull-replace-false-dir-leaf");
+    let remote_src = sandbox.mkdir("remote-tree");
+    let local_dest = sandbox.mkdir("local-tree");
+    std::fs::write(remote_src.join("conflict"), "remote content\n").expect("failed to write remote conflict file");
+    std::fs::write(remote_src.join("new.txt"), "new content\n").expect("failed to write remote new file");
+    std::fs::create_dir_all(local_dest.join("conflict")).expect("failed to create destination conflict dir");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "pull tree guarded",
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = {}, recursive = true, replace = false }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&remote_src),
+        lua_string(&local_dest),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "pull tree guarded");
+    assert!(local_dest.join("conflict").is_dir(), "conflicting directory leaf must be preserved");
+    assert_eq!(std::fs::read_to_string(local_dest.join("new.txt")).unwrap(), "new content\n");
+    let result = task_result(&report, "pull tree guarded");
+    assert_eq!(
+        result
+            .pointer("/data/counts/skipped")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+}
+
+#[test]
+fn push_tree_preflight_rejects_conflicts_before_mutation() {
+    let sandbox = Sandbox::new("transfer-tree-push-preflight-conflict");
+    let local_src = sandbox.mkdir("source-tree");
+    let host_dest = sandbox.mkdir("host-tree");
+    std::fs::write(local_src.join("conflict"), "source content\n").expect("failed to write source conflict file");
+    std::fs::write(local_src.join("later.txt"), "later content\n").expect("failed to write later source file");
+    std::fs::create_dir_all(host_dest.join("conflict")).expect("failed to create destination conflict dir");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "push tree",
+            module = "wali.builtin.push",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&local_src),
+        lua_string(&host_dest),
+    ));
+
+    let report = run_wali_failure_json(&["--json", "apply", manifest_path(&manifest)]);
+    assert_task_failed_contains(&report, "push tree", "where a file is expected");
+    assert!(host_dest.join("conflict").is_dir(), "preflight must not replace existing conflict directory");
+    assert!(!host_dest.join("later.txt").exists(), "preflight should fail before pushing unrelated later entries");
+}
+
+#[test]
+fn pull_tree_preflight_rejects_conflicts_before_mutation() {
+    let sandbox = Sandbox::new("transfer-tree-pull-preflight-conflict");
+    let remote_src = sandbox.mkdir("remote-tree");
+    let local_dest = sandbox.mkdir("local-tree");
+    std::fs::write(remote_src.join("conflict"), "remote content\n").expect("failed to write remote conflict file");
+    std::fs::write(remote_src.join("later.txt"), "later content\n").expect("failed to write later remote file");
+    std::fs::create_dir_all(local_dest.join("conflict")).expect("failed to create destination conflict dir");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "pull tree",
+            module = "wali.builtin.pull",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&remote_src),
+        lua_string(&local_dest),
+    ));
+
+    let report = run_wali_failure_json(&["--json", "apply", manifest_path(&manifest)]);
+    assert_task_failed_contains(&report, "pull tree", "where a file is expected");
+    assert!(local_dest.join("conflict").is_dir(), "preflight must not replace existing conflict directory");
+    assert!(!local_dest.join("later.txt").exists(), "preflight should fail before pulling unrelated later entries");
 }

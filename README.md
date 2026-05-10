@@ -7,7 +7,7 @@ that a previous successful apply recorded as created.
 
 ## Status
 
-The current release line is `0.1.x`. The manifest format, module contract, and
+The current release line is `0.2.x`. The manifest format, module contract, and
 state-file format are ready to use, but they are not a 1.0 compatibility promise
 yet. Release-visible changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -23,13 +23,13 @@ cargo install --path .
 Install the latest release binary on Linux or macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/install.sh | WALI_INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
 Useful installer overrides:
 
 ```sh
-WALI_VERSION=v0.1.2 sh scripts/install.sh
+WALI_VERSION=v0.2.0 sh scripts/install.sh
 WALI_INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
 WALI_PACKAGE=./wali-linux-x86_64.tar.gz sh scripts/install.sh
 WALI_DATA_DIR="$HOME/.local/share/wali" sh scripts/install.sh
@@ -58,16 +58,15 @@ return {
     },
 
     tasks = {
-        m.task("create demo dir")("wali.builtin.dir", {
+        m.task("create demo dir")("wali.builtin.mkdir", {
             path = "/tmp/wali-demo",
-            state = "present",
             parents = true,
             mode = "0755",
         }),
-        m.task("write message")("wali.builtin.file", {
-            path = "/tmp/wali-demo/message.txt",
+        m.task("write message")("wali.builtin.write", {
+            dest = "/tmp/wali-demo/message.txt",
             content = "managed by wali\n",
-            create_parents = true,
+            parents = true,
             mode = "0644",
         }, {
             depends_on = { "create demo dir" },
@@ -88,43 +87,44 @@ wali cleanup --state-file apply-state.json manifest.lua
 `plan` compiles the manifest without connecting to hosts. `check` connects,
 prepares modules, evaluates host predicates, normalizes arguments, and validates
 module input without mutating hosts. `apply` performs the checked changes.
-`cleanup` removes only target-host filesystem entries recorded as `created` in
-a previous successful apply state file. Controller-side artifacts reported by
-pull operations are not removed by host cleanup.
+`cleanup` removes only target-host filesystem entries recorded as `created` in a
+previous successful apply state file. Controller-side artifacts reported by pull
+operations are not removed by host cleanup.
 
 ## Builtin modules
 
 Builtin task modules live under the reserved `wali.builtin.*` namespace:
 
 ```text
-wali.builtin.command
-wali.builtin.copy_file
-wali.builtin.copy_tree
-wali.builtin.dir
-wali.builtin.file
-wali.builtin.link
-wali.builtin.link_tree
-wali.builtin.permissions
-wali.builtin.pull_file
-wali.builtin.pull_tree
-wali.builtin.push_file
-wali.builtin.push_tree
-wali.builtin.remove
-wali.builtin.template
 wali.builtin.touch
+wali.builtin.mkdir
+wali.builtin.write
+wali.builtin.link
+wali.builtin.copy
+wali.builtin.push
+wali.builtin.pull
+wali.builtin.remove
+wali.builtin.permissions
+wali.builtin.command
 ```
 
+Builtin modules are imperative verbs. They do not expose declarative `state`
+fields: creation, writing, linking, copying, transferring, removal, permission
+changes, and command execution are separate operations. The common option
+`parents` creates missing parent directories where applicable. When
+`replace = false`, matching destinations report unchanged, conflicting
+single-path destinations skip the task, and conflicting recursive leaves are
+left in place while the remaining entries continue.
+
 Target-host filesystem paths are absolute unless a module documents otherwise.
-Controller-side paths used by transfer and template modules may be absolute or
-relative to manifest `base_path`. Tree transfer is split by namespace:
-`push_tree` reads a controller-side tree and writes a target-host tree, while
-`pull_tree` reads a target-host tree and writes a controller-side tree.
+Controller-side paths used by `write`, `push`, and `pull` may be absolute or
+relative to manifest `base_path`.
 
 For localhost manifests that intentionally need an absolute path next to the
 manifest file, use `require("manifest").here(...)`. For example, dotfile
-manifests can pass `src = m.here("home")` to `link_tree`; the resulting path is
-absolute on the controller and is valid for `link_tree` only when the target
-host sees the same filesystem, normally `localhost`.
+manifests can pass `src = m.here("home")` to `wali.builtin.link` with
+`recursive = true`; the resulting path is valid when the target host sees the
+same filesystem, normally `localhost`.
 
 ## External modules
 
@@ -149,7 +149,7 @@ return {
             namespace = "ops",
             git = {
                 url = "https://github.com/milchinskiy/wali-ops.git",
-                ref = "v0.1.0",
+                ref = "v0.2.0",
                 path = "modules",
                 depth = 1,
             },
@@ -195,11 +195,11 @@ See the `wali-ops` README for the full external module reference.
 
 Wali ships LuaLS definition files under [`types/`](types/). Add that directory
 to LuaLS `workspace.library` for completion and diagnostics for raw manifest
-tables, the `require("manifest")` helper, custom modules, `ctx`, `wali.api`, and
-`wali.builtin.lib`. The release installer copies these stubs to
-`${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Set
-`WALI_TYPES_DIR` to install them elsewhere, or set `WALI_INSTALL_TYPES=0` to
-skip editor stub installation. The repository includes
+tables, the `require("manifest")` helper, custom modules, `ctx`,
+`require("wali")`, `wali.api`, and `wali.builtin.lib`. The release installer
+copies these stubs to `${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by
+default. Set `WALI_TYPES_DIR` to install them elsewhere, or set
+`WALI_INSTALL_TYPES=0` to skip editor stub installation. The repository includes
 [`.luarc.example.json`](.luarc.example.json) as a starting point.
 
 ## Documentation

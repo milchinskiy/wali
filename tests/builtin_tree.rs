@@ -58,13 +58,13 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, replace = true, preserve_mode = true, symlinks = "preserve" }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true, preserve_mode = true, symlinks = "preserve" }},
         }},
         {{
             id = "link tree",
-            module = "wali.builtin.link_tree",
-            args = {{ src = {}, dest = {}, replace = true }},
+            module = "wali.builtin.link",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
         }},
         {{
             id = "probe copied",
@@ -143,9 +143,10 @@ return {{
         m.host.localhost("localhost"),
     }},
     tasks = {{
-        m.task("link dotfiles")("wali.builtin.link_tree", {{
+        m.task("link dotfiles")("wali.builtin.link", {{
             src = m.here("home"),
             dest = {},
+            recursive = true,
             replace = true,
         }}),
     }},
@@ -180,8 +181,8 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, symlinks = "skip" }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, symlinks = "skip" }},
         }},
     }},
 }}
@@ -222,6 +223,48 @@ return {{
         ),
         "skipped symlink must remain absent after idempotent apply"
     );
+}
+
+#[test]
+fn copy_tree_replace_false_preserves_conflicting_leaf_and_continues() {
+    let sandbox = Sandbox::new("copy-tree-replace-false-leaf");
+    let src = sandbox.path("src");
+    let dest = sandbox.path("dest");
+    std::fs::create_dir_all(&src).expect("failed to create source tree");
+    std::fs::create_dir_all(&dest).expect("failed to create destination tree");
+    std::fs::write(src.join("existing.txt"), "source content\n").expect("failed to write source conflict file");
+    std::fs::write(src.join("new.txt"), "new content\n").expect("failed to write new source file");
+    std::fs::write(dest.join("existing.txt"), "destination content\n")
+        .expect("failed to write destination conflict file");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "copy tree guarded",
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, replace = false }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&src),
+        lua_string(&dest),
+    ));
+
+    let report = run_apply(&manifest);
+    assert_task_changed(&report, "copy tree guarded");
+    assert_eq!(std::fs::read_to_string(dest.join("existing.txt")).unwrap(), "destination content\n");
+    assert_eq!(std::fs::read_to_string(dest.join("new.txt")).unwrap(), "new content\n");
+    let result = task_result(&report, "copy tree guarded");
+    assert_eq!(result.pointer("/data/counts/skipped").and_then(Value::as_u64), Some(1));
+
+    let second = run_apply(&manifest);
+    assert_task_unchanged(&second, "copy tree guarded");
 }
 
 #[test]
@@ -294,8 +337,8 @@ return {{
     tasks = {{
         {{
             id = "nested tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {} }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true }},
         }},
     }},
 }}
@@ -312,23 +355,31 @@ return {{
 }
 
 #[test]
-fn tree_modules_reject_invalid_max_depth_during_check() {
-    let sandbox = Sandbox::new("tree-max-depth-contract");
+fn modules_reject_invalid_max_depth_during_check() {
+    let sandbox = Sandbox::new("max-depth-contract");
     let src = lua_string(&sandbox.path("src"));
     let dest = lua_string(&sandbox.path("dest"));
+    let path = lua_string(&sandbox.path("path"));
 
-    for (module, task_prefix) in [
-        ("wali.builtin.copy_tree", "copy tree"),
-        ("wali.builtin.link_tree", "link tree"),
-        ("wali.builtin.push_tree", "push tree"),
-        ("wali.builtin.pull_tree", "pull tree"),
+    for (module, task_prefix, args_template) in [
+        ("wali.builtin.copy", "copy", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        ("wali.builtin.link", "link", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        ("wali.builtin.push", "push", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        ("wali.builtin.pull", "pull", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        (
+            "wali.builtin.permissions",
+            "permissions",
+            format!("path = {path}, mode = \"0644\", recursive = %s, max_depth = %s"),
+        ),
     ] {
-        for (max_depth, needle) in [
-            ("-1", "max_depth must be zero or greater"),
-            ("4294967296", "max_depth must not be greater than 4294967295"),
-        ] {
-            let manifest = sandbox.write_manifest(&format!(
-                r#"
+        for recursive in ["false", "true"] {
+            for (max_depth, needle) in [
+                ("-1", "max_depth must be zero or greater"),
+                ("4294967296", "max_depth must not be greater than 4294967295"),
+            ] {
+                let args = args_template.replacen("%s", recursive, 1).replacen("%s", max_depth, 1);
+                let manifest = sandbox.write_manifest(&format!(
+                    r#"
 return {{
     hosts = {{
         {{ id = "localhost", transport = "local" }},
@@ -337,21 +388,58 @@ return {{
         {{
             id = {},
             module = {},
-            args = {{ src = {}, dest = {}, max_depth = {} }},
+            args = {{ {} }},
         }},
     }},
 }}
 "#,
-                lua_quote(&format!("{task_prefix} invalid max_depth {max_depth}")),
-                lua_quote(module),
-                src,
-                dest,
-                max_depth,
-            ));
+                    lua_quote(&format!("{task_prefix} recursive={recursive} invalid max_depth {max_depth}")),
+                    lua_quote(module),
+                    args,
+                ));
 
-            assert_check_failure_contains(&manifest, needle);
+                assert_check_failure_contains(&manifest, needle);
+            }
         }
     }
+}
+
+#[test]
+fn link_tree_preflight_rejects_conflicts_before_mutation() {
+    let sandbox = Sandbox::new("link-preflight");
+    let src = sandbox.path("src");
+    let dest = sandbox.path("dest");
+    std::fs::create_dir_all(&src).expect("failed to create source root");
+    std::fs::create_dir_all(&dest).expect("failed to create destination root");
+    std::fs::write(src.join("conflict"), "source conflict\n").expect("failed to write source conflict file");
+    std::fs::write(src.join("later"), "source later\n").expect("failed to write later source file");
+    std::fs::create_dir_all(dest.join("conflict")).expect("failed to create destination conflict directory");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "link tree",
+            module = "wali.builtin.link",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&src),
+        lua_string(&dest),
+    ));
+
+    assert_wali_failure_contains(
+        &["--json", "apply", manifest.to_str().expect("non-utf8 manifest path")],
+        "refusing to replace directory with symlink",
+    );
+    assert!(dest.join("conflict").is_dir(), "preflight must not replace existing conflict directory");
+    assert!(!dest.join("later").exists(), "preflight should fail before linking unrelated later entries");
 }
 
 #[test]
@@ -373,8 +461,8 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, replace = true }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
         }},
     }},
 }}
@@ -413,8 +501,8 @@ return {{
     tasks = {{
         {{
             id = "copy tree",
-            module = "wali.builtin.copy_tree",
-            args = {{ src = {}, dest = {}, replace = true }},
+            module = "wali.builtin.copy",
+            args = {{ src = {}, dest = {}, recursive = true, replace = true }},
         }},
     }},
 }}

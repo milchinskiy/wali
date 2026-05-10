@@ -76,14 +76,13 @@ return {
         m.host.localhost("localhost"),
     },
     tasks = {
-        m.task("create workspace")("wali.builtin.dir", {
+        m.task("create workspace")("wali.builtin.mkdir", {
             path = root,
-            state = "present",
             parents = true,
             mode = "0755",
         }),
-        m.task("write source file")("wali.builtin.file", {
-            path = p("source.txt"),
+        m.task("write source file")("wali.builtin.write", {
+            dest = p("source.txt"),
             content = "hello from wali\\n",
             mode = "0644",
         }, {
@@ -102,7 +101,7 @@ return {
         }, {
             depends_on = { "write source file" },
         }),
-        m.task("copy source file")("wali.builtin.copy_file", {
+        m.task("copy source file")("wali.builtin.copy", {
             src = p("source.txt"),
             dest = p("copy.txt"),
             replace = true,
@@ -111,57 +110,59 @@ return {
             depends_on = { "write source file" },
         }),
         m.task("link source file")("wali.builtin.link", {
-            path = p("source.link"),
-            target = p("source.txt"),
+            dest = p("source.link"),
+            src = p("source.txt"),
             replace = true,
         }, {
             depends_on = { "write source file" },
         }),
-        m.task("create tree root")("wali.builtin.dir", {
+        m.task("create tree root")("wali.builtin.mkdir", {
             path = p("tree"),
-            state = "present",
         }, {
             depends_on = { "create workspace" },
         }),
-        m.task("create tree directory")("wali.builtin.dir", {
+        m.task("create tree directory")("wali.builtin.mkdir", {
             path = p("tree/sub"),
-            state = "present",
         }, {
             depends_on = { "create tree root" },
         }),
-        m.task("write tree file")("wali.builtin.file", {
-            path = p("tree/sub/item.txt"),
+        m.task("write tree file")("wali.builtin.write", {
+            dest = p("tree/sub/item.txt"),
             content = "tree item\n",
         }, {
             depends_on = { "create tree directory" },
         }),
-        m.task("copy tree")("wali.builtin.copy_tree", {
+        m.task("copy tree")("wali.builtin.copy", {
             src = p("tree"),
             dest = p("tree-copy"),
+            recursive = true,
             replace = true,
             preserve_mode = true,
             symlinks = "preserve",
         }, {
             depends_on = { "write tree file" },
         }),
-        m.task("link tree")("wali.builtin.link_tree", {
+        m.task("link tree")("wali.builtin.link", {
             src = p("tree"),
             dest = p("tree-link"),
+            recursive = true,
             replace = true,
         }, {
             depends_on = { "write tree file" },
         }),
-        m.task("push controller tree")("wali.builtin.push_tree", {
+        m.task("push controller tree")("wali.builtin.push", {
             src = "controller-tree",
             dest = p("pushed-tree"),
+            recursive = true,
             replace = true,
             preserve_mode = true,
         }, {
             depends_on = { "create workspace" },
         }),
-        m.task("pull pushed tree")("wali.builtin.pull_tree", {
+        m.task("pull pushed tree")("wali.builtin.pull", {
             src = p("pushed-tree"),
             dest = "pulled-tree",
+            recursive = true,
             replace = true,
             preserve_mode = true,
         }, {

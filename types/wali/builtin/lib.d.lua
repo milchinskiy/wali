@@ -131,6 +131,21 @@ function lib.tree_copy_file_opts(args, metadata) end
 ---@return WaliDirOpts
 function lib.link_tree_dir_opts(args) end
 
+
+---@param reason? string
+---@return WaliApplySkipResult
+function lib.skip(reason) end
+
+---@param ctx WaliApplyCtx
+---@param path string
+---@param expected string
+---@return boolean
+function lib.host_file_content_matches(ctx, path, expected) end
+
+---@param metadata? WaliMetadata
+---@return string
+function lib.path_kind_text(metadata) end
+
 ---@param output? WaliCommandOutput
 ---@return string?
 function lib.output_text(output) end
@@ -229,6 +244,8 @@ function lib.ensure_dir(ctx, result, path, opts) end
 ---@param link_path string
 ---@param target_path string
 ---@param replace? boolean
+---@return boolean ok
+---@return string? reason
 function lib.ensure_symlink(ctx, result, link_path, target_path, replace) end
 
 return lib

@@ -106,20 +106,20 @@ return {{
     tasks = {{
         {{
             id = "prepare",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "prepare\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "prepare\n" }},
         }},
         {{
             id = "deploy",
             depends_on = {{ "prepare" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "deploy\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "deploy\n" }},
         }},
         {{
             id = "restart",
             depends_on = {{ "deploy" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "restart\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "restart\n" }},
         }},
     }},
 }}
@@ -166,7 +166,7 @@ return {{
         }},
     }},
     tasks = {{
-        {{ id = "write", module = "wali.builtin.file", args = {{ path = {}, content = "selected\n" }} }},
+        {{ id = "write", module = "wali.builtin.write", args = {{ dest = {}, content = "selected\n" }} }},
     }},
 }}
 "#,
@@ -203,8 +203,8 @@ return {{
     tasks = {{
         {{
             id = "selected",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "selected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "selected\n" }},
         }},
         {{
             id = "unselected missing module",
@@ -555,10 +555,10 @@ return {{
         {{ id = "localhost", transport = "local" }},
     }},
     tasks = {{
-        {{ id = "prepare", tags = {{ "setup" }}, module = "wali.builtin.file", args = {{ path = {}, content = "prepare\n" }} }},
-        {{ id = "deploy", tags = {{ "deploy" }}, depends_on = {{ "prepare" }}, module = "wali.builtin.file", args = {{ path = {}, content = "deploy\n" }} }},
-        {{ id = "restart", tags = {{ "service" }}, depends_on = {{ "deploy" }}, module = "wali.builtin.file", args = {{ path = {}, content = "restart\n" }} }},
-        {{ id = "audit", tags = {{ "audit" }}, module = "wali.builtin.file", args = {{ path = {}, content = "audit\n" }} }},
+        {{ id = "prepare", tags = {{ "setup" }}, module = "wali.builtin.write", args = {{ dest = {}, content = "prepare\n" }} }},
+        {{ id = "deploy", tags = {{ "deploy" }}, depends_on = {{ "prepare" }}, module = "wali.builtin.write", args = {{ dest = {}, content = "deploy\n" }} }},
+        {{ id = "restart", tags = {{ "service" }}, depends_on = {{ "deploy" }}, module = "wali.builtin.write", args = {{ dest = {}, content = "restart\n" }} }},
+        {{ id = "audit", tags = {{ "audit" }}, module = "wali.builtin.write", args = {{ dest = {}, content = "audit\n" }} }},
     }},
 }}
 "#,

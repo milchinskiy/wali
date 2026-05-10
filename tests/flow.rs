@@ -165,12 +165,12 @@ return {{
         {{
             id = "second",
             depends_on = {{ "first" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written by plan\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written by plan\n" }},
         }},
         {{
             id = "first",
-            module = "wali.builtin.dir",
+            module = "wali.builtin.mkdir",
             args = {{ path = {} }},
         }},
         {{
@@ -295,8 +295,8 @@ return {{
         {{
             id = "skipped task",
             when = {{ env_set = "__WALI_INTEGRATION_TEST_SHOULD_NOT_EXIST__" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "should not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "should not be written\n" }},
         }},
     }},
 }}

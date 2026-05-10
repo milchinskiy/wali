@@ -13,6 +13,13 @@ function api.result.apply() end
 ---@return WaliValidationResultBuilder
 function api.result.validation() end
 
+---@param reason? string
+---@return WaliApplySkipResult
+function api.result.skip(reason) end
+
+---@class WaliApplySkipResult
+---@field skipped string
+
 ---@class WaliValidationResultBuilder
 local validation_builder = {}
 

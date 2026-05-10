@@ -247,3 +247,36 @@ fn nil_apply_result_remains_valid_unchanged_result() {
     let report = run_apply(&manifest);
     assert_task_unchanged(&report, "result contract");
 }
+
+#[test]
+fn apply_skip_result_is_accepted() {
+    let sandbox = Sandbox::new("result-contract-skip");
+    let modules = sandbox.mkdir("modules");
+    write_module(
+        &modules,
+        "skip_result",
+        r#"
+        return require("wali.api").result.skip("nothing to do")
+"#,
+    );
+    let manifest = manifest_for_module(&sandbox, &modules, "skip_result");
+
+    let report = run_apply(&manifest);
+    assert_task_skipped_contains(&report, "result contract", "nothing to do");
+}
+
+#[test]
+fn apply_skip_result_rejects_empty_reason() {
+    let sandbox = Sandbox::new("result-contract-empty-skip");
+    let modules = sandbox.mkdir("modules");
+    write_module(
+        &modules,
+        "empty_skip_result",
+        r#"
+        return { skipped = "   " }
+"#,
+    );
+    let manifest = manifest_for_module(&sandbox, &modules, "empty_skip_result");
+
+    assert_apply_failure_contains(&manifest, "skipped reason must not be empty");
+}

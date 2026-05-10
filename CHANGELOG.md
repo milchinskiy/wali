@@ -3,8 +3,54 @@
 All notable user-facing changes should be recorded here.
 
 This project uses pre-1.0 semantic versioning. Patch releases should remain
-compatible within the documented 0.1 contract where practical, but manifest,
-module, and state-file contracts may still evolve before 1.0.
+compatible within the current pre-1.0 release line where practical, but
+manifest, module, and state-file contracts may still evolve before 1.0.
+
+## 0.2.0
+
+### Changed
+
+- Reworked builtin task modules around imperative verbs instead of declarative
+  resource-style modules. The public builtin surface is now `touch`, `mkdir`,
+  `write`, `link`, `copy`, `push`, `pull`, `remove`, `permissions`, and
+  `command`.
+- Collapsed file and tree variants into flexible verb modules: `link`, `copy`,
+  `push`, `pull`, and `permissions` can now operate on either one path or a
+  recursive tree where that operation supports recursion.
+- Replaced public `create_parents` builtin options with the shorter, consistent
+  `parents` option. Lower-level custom-module APIs still use their existing
+  option names.
+- `replace = false` in builtin destination-writing modules now prevents
+  destructive replacement without hiding satisfied work: matching destinations
+  report unchanged, conflicting single-path destinations skip the task, and
+  conflicting recursive leaves are skipped while the module continues with
+  remaining entries.
+- Recursive-only options such as `max_depth` are now ignored when
+  `recursive = false`, while their value types and ranges are still validated.
+- `wali.builtin.write` now handles both inline text and controller-side source
+  files, and renders through MiniJinja automatically when effective variables
+  are present.
+- `wali.builtin.command` now uses boolean `changed`, and `creates` / `removes`
+  may be either a single absolute path or a proper list of absolute paths. Guard
+  hits are reported as skipped tasks; map-shaped guard tables are rejected.
+- Module apply results may now explicitly skip a task with
+  `require("wali.api").result.skip(reason)`.
+- Custom modules can now inspect and enforce runtime compatibility with
+  `require("wali")`, including `wali.version`, `wali.compatible(requirement)`,
+  and `wali.require_version(requirement, label)`.
+- LuaLS stubs, examples, builtin docs, manifest docs, module contract docs, and
+  the release smoke test were updated for the new builtin contract.
+- Recursive `link`, `copy`, `push`, and `pull` now preflight destination kind
+  conflicts before mutating when `replace = true`, preserving all-or-error
+  behavior for structural conflicts.
+
+### Removed
+
+- Removed the old public builtin modules `dir`, `file`, `template`, `copy_file`,
+  `copy_tree`, `link_tree`, `push_file`, `push_tree`, `pull_file`, and
+  `pull_tree`.
+- Removed declarative builtin `state` options from the public builtin API. Use
+  operation-specific modules and `wali.builtin.remove` for deletion.
 
 ## 0.1.2
 
@@ -14,14 +60,14 @@ module, and state-file contracts may still evolve before 1.0.
   a target-host directory. Relative controller `src` paths resolve against
   manifest `base_path`; `dest` remains an absolute target-host path.
 - `wali.builtin.pull_tree` for transferring a target-host directory tree to a
-  controller-side directory. `src` remains an absolute target-host path; relative
-  controller `dest` paths resolve against manifest `base_path`.
+  controller-side directory. `src` remains an absolute target-host path;
+  relative controller `dest` paths resolve against manifest `base_path`.
 - Apply-phase `ctx.transfer.push_tree(...)` and `ctx.transfer.pull_tree(...)`
   helpers for custom modules.
 - LuaLS stubs for the new tree transfer modules and transfer helper option
   tables.
-- `manifest.here(...)` helper for building absolute controller paths relative
-  to the manifest directory, useful for localhost-only manifests that need an
+- `manifest.here(...)` helper for building absolute controller paths relative to
+  the manifest directory, useful for localhost-only manifests that need an
   absolute target-host path such as `link_tree.src`.
 
 ### Changed

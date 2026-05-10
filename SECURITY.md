@@ -6,8 +6,8 @@ wali is pre-1.0. Security fixes are provided for the latest released version onl
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | Yes       |
-| < 0.1   | No        |
+| 0.2.x   | Yes       |
+| < 0.2   | No        |
 
 ## Reporting a Vulnerability
 

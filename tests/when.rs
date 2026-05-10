@@ -41,8 +41,8 @@ return {{
                     }} }},
                 }},
             }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "matched\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "matched\n" }},
         }},
     }},
 }}
@@ -83,8 +83,8 @@ return {{
                     {{ ["not"] = {{ env_set = "WALI_WHEN_SKIP_MARKER" }} }},
                 }},
             }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "must not be written\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "must not be written\n" }},
         }},
     }},
 }}

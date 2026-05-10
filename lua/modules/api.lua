@@ -120,9 +120,14 @@ local apply = function()
 	return obj
 end
 
+local skip = function(reason)
+	return { skipped = tostring(reason or "task skipped") }
+end
+
 api.result = {
 	apply = apply,
 	validation = validation,
+	skip = skip,
 }
 
 return api

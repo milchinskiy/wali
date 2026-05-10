@@ -4,6 +4,10 @@ local function template_vars(ctx, extra)
 	return lib.shallow_merge(ctx.vars or {}, extra or {})
 end
 
+local function table_is_empty(value)
+	return value == nil or next(value) == nil
+end
+
 local function render_validation_error(err)
 	local message = tostring(err or "template render failed")
 	if message:find("undefined", 1, true) ~= nil and message:find("missing", 1, true) == nil then
@@ -36,17 +40,17 @@ local function resolved_path(ctx, path)
 	return path
 end
 
-local function read_template_source(ctx, src)
-	local ok, metadata_or_error = pcall(ctx.controller.fs.metadata, src)
+local function read_source(ctx, src)
+	local ok, metadata_or_error = pcall(ctx.controller.fs.metadata, src, { follow = true })
 	if not ok then
 		return nil, metadata_or_error
 	end
 	local metadata = metadata_or_error
 	if metadata == nil then
-		return nil, "template source does not exist: " .. resolved_path(ctx, src)
+		return nil, "write source does not exist: " .. resolved_path(ctx, src)
 	end
 	if metadata.kind ~= "file" then
-		return nil, "template source must be a regular file: " .. resolved_path(ctx, src)
+		return nil, "write source must be a regular file: " .. resolved_path(ctx, src)
 	end
 
 	local content_ok, content_or_error = pcall(ctx.controller.fs.read_text, src)
@@ -56,9 +60,45 @@ local function read_template_source(ctx, src)
 	return content_or_error, nil
 end
 
+local function source_text(ctx, args)
+	if args.content ~= nil then
+		return args.content, nil
+	end
+	return read_source(ctx, args.src)
+end
+
+local function render_if_needed(ctx, source, args)
+	local vars = template_vars(ctx, args.vars)
+	if table_is_empty(vars) then
+		return source
+	end
+	return ctx.template.render(source, vars)
+end
+
+local function replace_false_skip(ctx, dest, content)
+	local current = ctx.host.fs.lstat(dest)
+	if current == nil then
+		return nil
+	end
+	if current.kind == "file" then
+		local ok, actual = pcall(ctx.host.fs.read, dest)
+		if ok and actual == content then
+			return nil
+		end
+		return "destination already exists and replace is false: " .. dest
+	end
+	if current.kind == "symlink" then
+		return "destination already exists and replace is false: " .. dest
+	end
+	if current.kind == "dir" then
+		error("target path is a directory: " .. dest)
+	end
+	error("target path is a special filesystem entry: " .. dest)
+end
+
 return {
-	name = "builtin template",
-	description = "Render a MiniJinja template and write it to the target host.",
+	name = "builtin write",
+	description = "Write text to a regular file on the target host.",
 
 	schema = {
 		type = "object",
@@ -68,7 +108,7 @@ return {
 			content = { type = "string" },
 			dest = { type = "string", required = true },
 			vars = { type = "map", value = { type = "any" } },
-			create_parents = { type = "boolean", default = false },
+			parents = { type = "boolean", default = false },
 			replace = { type = "boolean", default = true },
 			mode = lib.schema.mode(),
 			owner = lib.schema.owner(),
@@ -90,33 +130,35 @@ return {
 			return metadata_error
 		end
 
-		local source = args.content
-		if args.src ~= nil then
-			local err
-			source, err = read_template_source(ctx, args.src)
-			if err ~= nil then
-				return lib.validation_error(err)
-			end
+		local source, err = source_text(ctx, args)
+		if err ~= nil then
+			return lib.validation_error(err)
 		end
 
-		local ok, err = pcall(ctx.template.render, source, template_vars(ctx, args.vars))
-		if not ok then
-			return lib.validation_error(render_validation_error(err))
+		if not table_is_empty(template_vars(ctx, args.vars)) then
+			local ok, render_err = pcall(ctx.template.render, source, template_vars(ctx, args.vars))
+			if not ok then
+				return lib.validation_error(render_validation_error(render_err))
+			end
 		end
 
 		return nil
 	end,
 
 	apply = function(ctx, args)
-		local source = args.content
-		if args.src ~= nil then
-			local err
-			source, err = read_template_source(ctx, args.src)
-			if err ~= nil then
-				error(err)
+		local source, err = source_text(ctx, args)
+		if err ~= nil then
+			error(err)
+		end
+		local content = render_if_needed(ctx, source, args)
+
+		if not args.replace then
+			local skip_reason = replace_false_skip(ctx, args.dest, content)
+			if skip_reason ~= nil then
+				return lib.skip(skip_reason)
 			end
 		end
-		local content = ctx.template.render(source, template_vars(ctx, args.vars))
+
 		return ctx.host.fs.write(args.dest, content, lib.write_file_opts(args))
 	end,
 }

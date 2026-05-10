@@ -45,7 +45,7 @@ return {{
     tasks = {{
         {{
             id = "render config",
-            module = "wali.builtin.template",
+            module = "wali.builtin.write",
             vars = {{ port = 8080 }},
             args = {{
                 src = "service.conf.j2",
@@ -57,7 +57,7 @@ return {{
                         {{ name = "beta", value = 2 }},
                     }},
                 }},
-                create_parents = true,
+                parents = true,
                 mode = "0640",
             }},
         }},
@@ -93,7 +93,7 @@ return {{
     tasks = {{
         {{
             id = "render missing",
-            module = "wali.builtin.template",
+            module = "wali.builtin.write",
             args = {{ src = "missing.conf.j2", dest = {} }},
         }},
     }},
@@ -105,7 +105,7 @@ return {{
 
     assert_wali_failure_contains(
         &["--json", "check", manifest.to_str().expect("non-utf8 manifest path")],
-        "template source does not exist",
+        "write source does not exist",
     );
 }
 
@@ -125,8 +125,8 @@ return {{
     tasks = {{
         {{
             id = "render bad",
-            module = "wali.builtin.template",
-            args = {{ src = "bad.conf.j2", dest = {} }},
+            module = "wali.builtin.write",
+            args = {{ src = "bad.conf.j2", dest = {}, vars = {{ present = true }} }},
         }},
     }},
 }}
@@ -150,13 +150,13 @@ return {{
     tasks = {{
         {{
             id = "render inline",
-            module = "wali.builtin.template",
+            module = "wali.builtin.write",
             vars = {{ port = 8080 }},
             args = {{
                 content = "app={{{{ app }}}}\nrole={{{{ role }}}}\nport={{{{ port }}}}\nenv={{{{ env }}}}\n",
                 dest = {},
                 vars = {{ env = "prod" }},
-                create_parents = true,
+                parents = true,
             }},
         }},
     }},
@@ -192,7 +192,7 @@ return {{
     tasks = {{
         {{
             id = "render ambiguous",
-            module = "wali.builtin.template",
+            module = "wali.builtin.write",
             args = {{ src = "app.conf.j2", content = "inline=true\n", dest = {} }},
         }},
     }},
@@ -219,7 +219,7 @@ return {{
     tasks = {{
         {{
             id = "render without source",
-            module = "wali.builtin.template",
+            module = "wali.builtin.write",
             args = {{ dest = {} }},
         }},
     }},

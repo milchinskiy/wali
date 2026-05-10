@@ -252,6 +252,7 @@ jobs:
             tar -tzf "$package" | grep -qx './types/wali.d.lua'
             tar -tzf "$package" | grep -qx './types/manifest.d.lua'
             tar -tzf "$package" | grep -qx './types/wali/api.d.lua'
+            tar -tzf "$package" | grep -qx './types/wali/init.d.lua'
             tar -tzf "$package" | grep -qx './types/wali/builtin/lib.d.lua'
             tar -tzf "$package" | grep -qx './types/wali/builtin-modules.d.lua'
             tar -tzf "$package" | grep -qx './.luarc.example.json'
@@ -270,6 +271,7 @@ jobs:
           test -f "$data_dir/types/wali.d.lua"
           test -f "$data_dir/types/manifest.d.lua"
           test -f "$data_dir/types/wali/api.d.lua"
+          test -f "$data_dir/types/wali/init.d.lua"
           test -f "$data_dir/types/wali/builtin/lib.d.lua"
           test -f "$data_dir/types/wali/builtin-modules.d.lua"
           test -f "$data_dir/.luarc.example.json"

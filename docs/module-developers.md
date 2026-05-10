@@ -104,9 +104,9 @@ return {
 Wali ships LuaLS definition files under `types/`. They are editor stubs only;
 Wali does not load them at runtime. Add the directory to LuaLS
 `workspace.library` to get completion and diagnostics for raw manifests
-(`WaliManifestDefinition`), `ctx`, `require("manifest")`, `require("wali.api")`,
-and `require("wali.builtin.lib")`. Release packages include the same stubs, and
-`scripts/install.sh` installs them to
+(`WaliManifestDefinition`), `ctx`, `require("manifest")`, `require("wali")`,
+`require("wali.api")`, and `require("wali.builtin.lib")`. Release packages
+include the same stubs, and `scripts/install.sh` installs them to
 `${XDG_DATA_HOME:-$HOME/.local/share}/wali/types` by default. Use
 `WALI_TYPES_DIR` for a custom location, or `WALI_INSTALL_TYPES=0` to skip
 installing editor support files. The repository also includes
@@ -160,8 +160,8 @@ LuaLS flag accidental use of apply-only APIs such as `ctx.host.cmd.*`,
 `ctx.host.fs.write`, `ctx.transfer.push_file`, `ctx.rand.*`, or `ctx.sleep_ms`
 inside validation code.
 
-Builtin module argument table types are available as `WaliBuiltinFileArgs`,
-`WaliBuiltinCommandArgs`, `WaliBuiltinTemplateArgs`, and similar classes in
+Builtin module argument table types are available as `WaliBuiltinWriteArgs`,
+`WaliBuiltinCommandArgs`, `WaliBuiltinPushArgs`, and similar classes in
 `types/wali/builtin-modules.d.lua`. External module repositories should ship
 their own `types/*.d.lua` files for their public task modules.
 
@@ -245,19 +245,17 @@ end
 
 Supported schema kinds are:
 
-```text
-any
-null
-string
-number
-integer
-boolean
-list
-tuple
-enum
-object
-map
-```
+- any
+- null
+- string
+- number
+- integer
+- boolean
+- list
+- tuple
+- enum
+- object
+- map
 
 Use schemas to catch wrong argument types early and to apply simple defaults:
 
@@ -267,7 +265,7 @@ schema = {
     required = true,
     props = {
         path = { type = "string", required = true },
-        state = { type = "enum", values = { "present", "absent" }, default = "present" },
+        parents = { type = "boolean", default = true },
         tags = { type = "list", items = { type = "string" }, default = {} },
         owner = {
             type = "object",
@@ -329,6 +327,31 @@ for example `requires.all[1].any[1].command must not be empty`.
 
 Use `requires` for host capability checks. Do not use `validate` to run commands
 just to find out whether a command exists.
+
+## Runtime compatibility
+
+External module libraries can check the running Wali version through
+`require("wali")`. Use this near the top of a module or shared helper when a
+module depends on a specific runtime contract:
+
+```lua
+local wali = require("wali")
+wali.require_version(">=0.2.0 <0.3.0", "my-module-library")
+```
+
+The runtime module exposes:
+
+```lua
+local wali = require("wali")
+
+wali.version          -- e.g. "0.2.0"
+wali.version_info     -- { major = 0, minor = 2, patch = 0, text = "0.2.0" }
+wali.compatible(">=0.2.0 <0.3.0")
+wali.require_version(">=0.2.0 <0.3.0", "my module")
+```
+
+Version requirements are whitespace-separated comparators combined with logical
+AND. Supported comparators are `>`, `>=`, `<`, `<=`, `=`, `==`, `!=`, and `~=`.
 
 ## Validate
 
@@ -428,7 +451,10 @@ local api = require("wali.api")
 apply = function(ctx, args)
     local result = api.result.apply()
     result:merge(ctx.host.fs.create_dir(args.dir, { recursive = true }))
-    result:merge(ctx.host.fs.write(args.file, args.content, { create_parents = true }))
+    result:merge(ctx.host.fs.write(
+        args.file, args.content,
+        { create_parents = true }
+    ))
     return result:build()
 end
 ```
@@ -562,9 +588,9 @@ imposed. wali assumes the manifest author controls which controller files may be
 read.
 
 The controller filesystem API is intentionally read-only. Controller-side writes
-currently happen only through `wali.builtin.pull_file`,
-`wali.builtin.pull_tree`, `ctx.transfer.pull_file`, or `ctx.transfer.pull_tree`,
-where the transfer operation itself owns the write semantics.
+currently happen only through `wali.builtin.pull`, `ctx.transfer.pull_file`, or
+`ctx.transfer.pull_tree`, where the transfer operation itself owns the write
+semantics.
 
 `metadata` follows symlinks by default, matching `stat`. Use `lstat` or
 `metadata(path, { follow = false })` when the module owns the path itself.
@@ -687,8 +713,8 @@ may be read or written.
 `require("manifest").here(...)` is a manifest authoring helper, not a module
 runtime resolver. It returns an absolute controller path relative to the
 manifest directory and is useful only when the receiving module expects an
-absolute path in the same filesystem namespace, such as `link_tree.src` in a
-localhost-only dotfiles manifest.
+absolute path in the same filesystem namespace, such as recursive
+`wali.builtin.link` `src` in a localhost-only dotfiles manifest.
 
 `push_file` accepts the same write options as `ctx.host.fs.write(...)`:
 
@@ -782,7 +808,10 @@ the host default.
 Command output uses split streams by default:
 
 ```lua
-local out = ctx.host.cmd.exec({ program = "sh", args = { "-c", "printf out; printf err >&2" } })
+local out = ctx.host.cmd.exec({
+    program = "sh",
+    args = { "-c", "printf out; printf err >&2" }
+})
 -- out.stdout == "out"
 -- out.stderr == "err"
 -- out.output == nil
@@ -857,8 +886,8 @@ or `removes`, like `wali.builtin.command` does.
 Good idempotence rules:
 
 - inspect existing state before mutating;
-- skip writes when content already matches;
-- skip chmod/chown when metadata already matches;
+- report writes as unchanged when content already matches;
+- report chmod/chown as unchanged when metadata already matches;
 - compare existing symlink target before replacing it;
 - preflight predictable tree conflicts before the first mutation.
 
@@ -871,7 +900,7 @@ Messages should identify the field or path involved:
 
 ```lua
 return api.result.validation():fail("path must be absolute"):build()
-error("destination already exists and replace is false: " .. args.dest)
+return require("wali.api").result.skip("destination already exists and replace is false: " .. args.dest)
 ```
 
 Do not hide host operation errors. Let executor errors propagate unless the

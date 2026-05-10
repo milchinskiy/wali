@@ -40,7 +40,7 @@ return {
             id = "typo",
             module = "wali.builtin.touch",
             args = { path = "/tmp/wali-should-not-touch" },
-            moduel = "wali.builtin.file",
+            moduel = "wali.builtin.write",
         },
     },
 }

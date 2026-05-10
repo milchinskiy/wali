@@ -38,10 +38,10 @@ return {
     },
 
     tasks = {
-        m.task("write message")("wali.builtin.file", {
-            path = "/tmp/wali-demo/message.txt",
+        m.task("write message")("wali.builtin.write", {
+            dest = "/tmp/wali-demo/message.txt",
             content = "managed by wali\n",
-            create_parents = true,
+            parents = true,
         }),
     },
 }
@@ -63,9 +63,10 @@ return {
     },
 
     tasks = {
-        m.task("link dotfiles")("wali.builtin.link_tree", {
+        m.task("link dotfiles")("wali.builtin.link", {
             src = m.here("home"),
             dest = "/home/alice",
+            recursive = true,
             replace = true,
         }),
     },
@@ -79,7 +80,7 @@ Empty, absolute, and control-character path parts are rejected.
 
 Use `m.here(...)` with target-host modules only when that absolute controller
 path is also meaningful on the target host. This is normally true for
-`localhost` dotfile manifests. For SSH hosts, prefer `push_tree`/`push_file`, or
+`localhost` dotfile manifests. For SSH hosts, prefer `wali.builtin.push`, or
 first transfer files to a known target-host directory and then use target-host
 modules against that directory.
 
@@ -98,9 +99,8 @@ manifest name in compiled plans and state files.
 ### `base_path`
 
 Optional controller-side directory used by modules that read or write
-controller-side files, such as `wali.builtin.push_file`,
-`wali.builtin.push_tree`, `wali.builtin.pull_file`, `wali.builtin.pull_tree`,
-`wali.builtin.template`, and `ctx.controller` helpers.
+controller-side files, such as `wali.builtin.write`, `wali.builtin.push`,
+`wali.builtin.pull`, and `ctx.controller` helpers.
 
 Rules:
 
@@ -253,9 +253,9 @@ Host key policies:
 ```lua
 host_key_policy = "ignore"
 host_key_policy = { allow_add = {} }
-host_key_policy = { allow_add = { path = "/home/me/.ssh/known_hosts" } }
+host_key_policy = { allow_add = { dest = "/home/me/.ssh/known_hosts" } }
 host_key_policy = { strict = {} }
-host_key_policy = { strict = { path = "/home/me/.ssh/known_hosts" } }
+host_key_policy = { strict = { dest = "/home/me/.ssh/known_hosts" } }
 ```
 
 The default policy is strict checking against the user's default known-hosts
@@ -308,9 +308,9 @@ A task selects a module and passes module arguments:
 ```lua
 {
     id = "write message",
-    module = "wali.builtin.file",
+    module = "wali.builtin.write",
     args = {
-        path = "/tmp/wali-demo/message.txt",
+        dest = "/tmp/wali-demo/message.txt",
         content = "managed by wali\n",
     },
 }
@@ -319,8 +319,8 @@ A task selects a module and passes module arguments:
 Helper form:
 
 ```lua
-m.task("write message")("wali.builtin.file", {
-    path = "/tmp/wali-demo/message.txt",
+m.task("write message")("wali.builtin.write", {
+    dest = "/tmp/wali-demo/message.txt",
     content = "managed by wali\n",
 }, {
     tags = { "demo" },
@@ -381,7 +381,7 @@ validates the gated task because no apply-time change result exists yet.
 ```lua
 {
     id = "render nginx config",
-    module = "wali.builtin.template",
+    module = "wali.builtin.write",
     args = { src = "nginx.conf.j2", dest = "/etc/nginx/nginx.conf" },
 }
 
@@ -414,8 +414,8 @@ and before module `requires`, schema normalization, `validate`, or `apply`.
             { ["not"] = { env_set = "SKIP_THIS_TASK" } },
         },
     },
-    module = "wali.builtin.file",
-    args = { path = "/tmp/wali-demo/message.txt", content = "managed\n" },
+    module = "wali.builtin.write",
+    args = { dest = "/tmp/wali-demo/message.txt", content = "managed\n" },
 }
 ```
 
@@ -575,17 +575,17 @@ Name rules:
 
 ## Template variables
 
-`wali.builtin.template` renders either a controller-side MiniJinja template file
-or inline template content and writes the result to the target host:
+`wali.builtin.write` renders either a controller-side MiniJinja template file or
+inline template content and writes the result to the target host:
 
 ```lua
 {
     id = "write app config",
-    module = "wali.builtin.template",
+    module = "wali.builtin.write",
     args = {
         src = "templates/app.conf.j2",
         dest = "/etc/demo/app.conf",
-        create_parents = true,
+        parents = true,
         mode = "0644",
     },
 }

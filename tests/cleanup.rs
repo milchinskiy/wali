@@ -21,13 +21,13 @@ return {{
     tasks = {{
         {{
             id = "keep",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "keep\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "keep\n" }},
         }},
         {{
             id = "obsolete",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "obsolete\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "obsolete\n" }},
         }},
     }},
 }}
@@ -81,13 +81,13 @@ return {{
     tasks = {{
         {{
             id = "selected",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "selected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "selected\n" }},
         }},
         {{
             id = "unselected",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "unselected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "unselected\n" }},
         }},
     }},
 }}
@@ -144,8 +144,8 @@ return {{
     tasks = {{
         {{
             id = "update-existing",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "after\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "after\n" }},
         }},
     }},
 }}
@@ -223,6 +223,60 @@ return {{
 }
 
 #[test]
+fn cleanup_preserves_preexisting_command_creates_list_entries() {
+    let sandbox = Sandbox::new("cleanup-command-partial-creates");
+    let state_file = sandbox.path("apply-state.json");
+    let preexisting = sandbox.path("preexisting.txt");
+    let created = sandbox.path("created.txt");
+
+    std::fs::write(&preexisting, "preexisting\n").expect("failed to seed pre-existing creates guard");
+    let script = format!("printf created > {}", shell_quote_path(&created));
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    hosts = {{
+        {{ id = "localhost", transport = "local" }},
+    }},
+    tasks = {{
+        {{
+            id = "run-command",
+            module = "wali.builtin.command",
+            args = {{ script = {}, creates = {{ {}, {} }} }},
+        }},
+    }},
+}}
+"#,
+        lua_quote(&script),
+        lua_string(&preexisting),
+        lua_string(&created),
+    ));
+
+    let apply_report = run_wali_json(&[
+        "--json",
+        "apply",
+        "--state-file",
+        state_file.to_str().expect("non-utf8 state path"),
+        manifest.to_str().expect("non-utf8 manifest path"),
+    ]);
+    assert_task_changed(&apply_report, "run-command");
+    assert_eq!(std::fs::read_to_string(&preexisting).unwrap(), "preexisting\n");
+    assert_eq!(std::fs::read_to_string(&created).unwrap(), "created");
+
+    let report = run_wali_json(&[
+        "--json",
+        "cleanup",
+        "--state-file",
+        state_file.to_str().expect("non-utf8 state path"),
+        manifest.to_str().expect("non-utf8 manifest path"),
+    ]);
+
+    assert_eq!(report.get("mode").and_then(Value::as_str), Some("cleanup"));
+    assert!(preexisting.exists(), "cleanup must not remove pre-existing command guard paths");
+    assert!(!created.exists(), "cleanup should remove command guard paths created by apply");
+}
+
+#[test]
 fn text_cleanup_reports_no_work() {
     let sandbox = Sandbox::new("cleanup-no-work-text");
     let state_file = sandbox.path("apply-state.json");
@@ -238,8 +292,8 @@ return {{
     tasks = {{
         {{
             id = "update-existing",
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "after\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "after\n" }},
         }},
     }},
 }}
@@ -296,14 +350,14 @@ return {{
         {{
             id = "selected",
             tags = {{ "demo" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "selected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "selected\n" }},
         }},
         {{
             id = "unselected",
             tags = {{ "other" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "unselected\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "unselected\n" }},
         }},
     }},
 }}
@@ -362,14 +416,14 @@ return {{
         {{
             id = "write-web",
             host = {{ id = "web" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "web\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "web\n" }},
         }},
         {{
             id = "write-db",
             host = {{ id = "db" }},
-            module = "wali.builtin.file",
-            args = {{ path = {}, content = "db\n" }},
+            module = "wali.builtin.write",
+            args = {{ dest = {}, content = "db\n" }},
         }},
     }},
 }}
