@@ -28,7 +28,8 @@ Common option names are reused across modules:
   single-path destinations skip the task, and conflicting recursive leaves are
   skipped while remaining entries continue.
 - `recursive`: operate on a directory tree.
-- `max_depth`: recursive traversal limit; ignored when `recursive` is false.
+- `max_depth`: recursive traversal limit. It must be a valid integer when set;
+  valid values are ignored when `recursive` is false.
 - `symlinks`: recursive symlink policy: `preserve`, `skip`, or `error`.
 - `skip_special`: skip sockets, devices, FIFOs, and other special entries.
 - `mode` / `owner`: metadata for one path or as recursive defaults.

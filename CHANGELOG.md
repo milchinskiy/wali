@@ -3,8 +3,8 @@
 All notable user-facing changes should be recorded here.
 
 This project uses pre-1.0 semantic versioning. Patch releases should remain
-compatible within the documented 0.1 contract where practical, but manifest,
-module, and state-file contracts may still evolve before 1.0.
+compatible within the current pre-1.0 release line where practical, but
+manifest, module, and state-file contracts may still evolve before 1.0.
 
 ## 0.2.0
 
@@ -26,7 +26,7 @@ module, and state-file contracts may still evolve before 1.0.
   conflicting recursive leaves are skipped while the module continues with
   remaining entries.
 - Recursive-only options such as `max_depth` are now ignored when
-  `recursive = false`.
+  `recursive = false`, while their value types and ranges are still validated.
 - `wali.builtin.write` now handles both inline text and controller-side source
   files, and renders through MiniJinja automatically when effective variables
   are present.

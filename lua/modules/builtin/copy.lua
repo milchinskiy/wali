@@ -179,11 +179,12 @@ return {
 			return metadata_error
 		end
 
+		local max_depth_error = lib.validate_max_depth(args.max_depth)
+		if max_depth_error ~= nil then
+			return max_depth_error
+		end
+
 		if args.recursive then
-			local max_depth_error = lib.validate_max_depth(args.max_depth)
-			if max_depth_error ~= nil then
-				return max_depth_error
-			end
 			return lib.validate_tree_roots(ctx, args.src, args.dest)
 		end
 

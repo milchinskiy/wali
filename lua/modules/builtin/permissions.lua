@@ -78,10 +78,7 @@ return {
 		if not has_metadata(args) then
 			return lib.validation_error("mode or owner is required")
 		end
-		if args.recursive then
-			return lib.validate_max_depth(args.max_depth)
-		end
-		return nil
+		return lib.validate_max_depth(args.max_depth)
 	end,
 
 	apply = function(ctx, args)

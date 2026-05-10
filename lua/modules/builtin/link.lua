@@ -108,6 +108,11 @@ return {
 			return dest_error
 		end
 
+		local max_depth_error = lib.validate_max_depth(args.max_depth)
+		if max_depth_error ~= nil then
+			return max_depth_error
+		end
+
 		if not args.recursive then
 			return validate_single(args)
 		end
@@ -115,11 +120,6 @@ return {
 		local metadata_error = lib.validate_mode_owner(args, { mode = "dir_mode", owner = "dir_owner" })
 		if metadata_error ~= nil then
 			return metadata_error
-		end
-
-		local max_depth_error = lib.validate_max_depth(args.max_depth)
-		if max_depth_error ~= nil then
-			return max_depth_error
 		end
 		local root_error = lib.validate_tree_roots(ctx, args.src, args.dest)
 		if root_error ~= nil then

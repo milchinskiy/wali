@@ -355,23 +355,31 @@ return {{
 }
 
 #[test]
-fn tree_modules_reject_invalid_max_depth_during_check() {
-    let sandbox = Sandbox::new("tree-max-depth-contract");
+fn modules_reject_invalid_max_depth_during_check() {
+    let sandbox = Sandbox::new("max-depth-contract");
     let src = lua_string(&sandbox.path("src"));
     let dest = lua_string(&sandbox.path("dest"));
+    let path = lua_string(&sandbox.path("path"));
 
-    for (module, task_prefix) in [
-        ("wali.builtin.copy", "copy tree"),
-        ("wali.builtin.link", "link tree"),
-        ("wali.builtin.push", "push tree"),
-        ("wali.builtin.pull", "pull tree"),
+    for (module, task_prefix, args_template) in [
+        ("wali.builtin.copy", "copy", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        ("wali.builtin.link", "link", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        ("wali.builtin.push", "push", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        ("wali.builtin.pull", "pull", format!("src = {src}, dest = {dest}, recursive = %s, max_depth = %s")),
+        (
+            "wali.builtin.permissions",
+            "permissions",
+            format!("path = {path}, mode = \"0644\", recursive = %s, max_depth = %s"),
+        ),
     ] {
-        for (max_depth, needle) in [
-            ("-1", "max_depth must be zero or greater"),
-            ("4294967296", "max_depth must not be greater than 4294967295"),
-        ] {
-            let manifest = sandbox.write_manifest(&format!(
-                r#"
+        for recursive in ["false", "true"] {
+            for (max_depth, needle) in [
+                ("-1", "max_depth must be zero or greater"),
+                ("4294967296", "max_depth must not be greater than 4294967295"),
+            ] {
+                let args = args_template.replacen("%s", recursive, 1).replacen("%s", max_depth, 1);
+                let manifest = sandbox.write_manifest(&format!(
+                    r#"
 return {{
     hosts = {{
         {{ id = "localhost", transport = "local" }},
@@ -380,19 +388,18 @@ return {{
         {{
             id = {},
             module = {},
-            args = {{ src = {}, dest = {}, recursive = true, max_depth = {} }},
+            args = {{ {} }},
         }},
     }},
 }}
 "#,
-                lua_quote(&format!("{task_prefix} invalid max_depth {max_depth}")),
-                lua_quote(module),
-                src,
-                dest,
-                max_depth,
-            ));
+                    lua_quote(&format!("{task_prefix} recursive={recursive} invalid max_depth {max_depth}")),
+                    lua_quote(module),
+                    args,
+                ));
 
-            assert_check_failure_contains(&manifest, needle);
+                assert_check_failure_contains(&manifest, needle);
+            }
         }
     }
 }

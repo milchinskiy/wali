@@ -87,11 +87,9 @@ return {
 		if mode_error ~= nil then
 			return mode_error
 		end
-		if args.recursive then
-			local max_depth_error = lib.validate_max_depth(args.max_depth)
-			if max_depth_error ~= nil then
-				return max_depth_error
-			end
+		local max_depth_error = lib.validate_max_depth(args.max_depth)
+		if max_depth_error ~= nil then
+			return max_depth_error
 		end
 		return nil
 	end,

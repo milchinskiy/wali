@@ -50,7 +50,8 @@ jobs:
         run: |
           rustup toolchain install "$RUST_VERSION" \
             --profile minimal \
-            --component clippy,rustfmt
+            --component clippy \
+            --component rustfmt
           rustup default "$RUST_VERSION"
           rustc --version
           cargo --version

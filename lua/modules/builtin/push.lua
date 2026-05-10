@@ -92,11 +92,12 @@ return {
 			return metadata_error
 		end
 
+		local max_depth_error = lib.validate_max_depth(args.max_depth)
+		if max_depth_error ~= nil then
+			return max_depth_error
+		end
+
 		if args.recursive then
-			local max_depth_error = lib.validate_max_depth(args.max_depth)
-			if max_depth_error ~= nil then
-				return max_depth_error
-			end
 			local root_error = validate_recursive_roots(ctx, args)
 			if root_error ~= nil then
 				return root_error
