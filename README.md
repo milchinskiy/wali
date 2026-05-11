@@ -3,7 +3,7 @@
 wali is a small agentless automation tool for local and SSH hosts. The engine is
 Rust; manifests and modules are Lua. A normal run is intentionally simple:
 inspect the plan, check real hosts, apply changes, and clean up only resources
-that a previous successful apply recorded as created.
+recorded as created in an apply state file.
 
 ## Status
 
@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/milchinskiy/wali/master/scripts/ins
 Useful installer overrides:
 
 ```sh
-WALI_VERSION=v0.2.0 sh scripts/install.sh
+WALI_VERSION=v0.2.1 sh scripts/install.sh
 WALI_INSTALL_DIR="$HOME/.local/bin" sh scripts/install.sh
 WALI_PACKAGE=./wali-linux-x86_64.tar.gz sh scripts/install.sh
 WALI_DATA_DIR="$HOME/.local/share/wali" sh scripts/install.sh
@@ -87,9 +87,12 @@ wali cleanup --state-file apply-state.json manifest.lua
 `plan` compiles the manifest without connecting to hosts. `check` connects,
 prepares modules, evaluates host predicates, normalizes arguments, and validates
 module input without mutating hosts. `apply` performs the checked changes.
-`cleanup` removes only target-host filesystem entries recorded as `created` in a
-previous successful apply state file. Controller-side artifacts reported by pull
-operations are not removed by host cleanup.
+`cleanup` removes only target-host filesystem entries recorded as `created` in an
+apply state file. `apply --state-file FILE` updates that file after every
+reported apply run, including failed runs; only successful task results add
+cleanup resources, and existing `created` records are preserved across repeated
+applies. Controller-side artifacts reported by pull operations are not removed by
+host cleanup.
 
 ## Builtin modules
 
@@ -149,7 +152,7 @@ return {
             namespace = "ops",
             git = {
                 url = "https://github.com/milchinskiy/wali-ops.git",
-                ref = "v0.2.0",
+                ref = "v0.2.1",
                 path = "modules",
                 depth = 1,
             },

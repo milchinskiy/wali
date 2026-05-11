@@ -18,7 +18,7 @@ pub fn cleanup<'a>() -> ap::CmdSpec<'a, Context> {
             })
             .required(),
         )
-        .help("Cleanup filesystem entries created by a previous successful apply")
+        .help("Cleanup filesystem entries recorded as created in apply state")
 }
 
 fn cleanup_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {

@@ -23,15 +23,22 @@ pub fn apply<'a>() -> ap::CmdSpec<'a, Context> {
 
 fn apply_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
     let execution = super::load_execution_plan(ctx)?;
-    let launcher = wali::launcher::Launcher::prepare(&execution.plan)?;
     let render_kind = super::render_kind(ctx);
 
     if let Some(state_file) = ctx.state_file.as_deref() {
+        wali::state_file::check_apply_state_file_for_update(state_file)?;
+        let launcher = wali::launcher::Launcher::prepare(&execution.plan)?;
         let (layout, capture) = ApplyLayout::with_state_capture(render_kind);
         let report = Reporter::new(layout);
-        launcher.apply_with_options(report, super::run_options(ctx)?)?;
-        wali::state_file::write_apply_state(state_file, &execution.plan, capture.take()?)?;
+        let apply_result = launcher.apply_with_options(report, super::run_options(ctx)?);
+        let state_result = capture
+            .take()
+            .and_then(|captured| wali::state_file::write_apply_state(state_file, &execution.plan, captured));
+
+        state_result?;
+        apply_result?;
     } else {
+        let launcher = wali::launcher::Launcher::prepare(&execution.plan)?;
         let report = Reporter::new(ApplyLayout::new(render_kind));
         launcher.apply_with_options(report, super::run_options(ctx)?)?;
     }

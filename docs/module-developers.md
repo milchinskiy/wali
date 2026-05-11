@@ -344,8 +344,8 @@ The runtime module exposes:
 ```lua
 local wali = require("wali")
 
-wali.version          -- e.g. "0.2.0"
-wali.version_info     -- { major = 0, minor = 2, patch = 0, text = "0.2.0" }
+wali.version          -- e.g. "0.2.1"
+wali.version_info     -- { major = 0, minor = 2, patch = 1, text = "0.2.1" }
 wali.compatible(">=0.2.0 <0.3.0")
 wali.require_version(">=0.2.0 <0.3.0", "my module")
 ```

@@ -69,15 +69,23 @@ wali apply [--jobs N] [--state-file FILE] [selectors] MANIFEST
 `apply` performs the same preparation and validation as `check`, then calls each
 selected module's `apply` function in per-host task order.
 
-Use `--state-file FILE` to write a successful apply snapshot:
+Use `--state-file FILE` to update an apply state file:
 
 ```sh
 wali apply --state-file apply-state.json manifest.lua
 ```
 
-The snapshot contains the selected effective plan, resource records, and the
-final apply report state. It is written atomically after a successful apply.
-Failed applies do not overwrite an existing state file.
+The state file contains the selected effective plan from the latest run, an
+accumulated resource ledger, and the final apply report state. Wali validates an
+existing state file before mutating hosts, then writes the updated document
+atomically after the run has been reported. This update also happens when one or
+more tasks fail: only successful task results contribute resource records, while
+failed or skipped tasks do not.
+
+When `FILE` already exists, it must be a valid Wali apply-state document. Wali
+updates it instead of replacing the cleanup ledger. Existing `created` resource
+records are preserved when a later apply reports the same path as `unchanged` or
+`updated`, so repeated applies do not erase cleanup obligations.
 
 ## `cleanup`
 
@@ -85,11 +93,10 @@ Failed applies do not overwrite an existing state file.
 wali cleanup --state-file FILE [--jobs N] [selectors] MANIFEST
 ```
 
-`cleanup` reads a previous successful apply state file and removes target-host
-filesystem entries recorded as `created` resources inside the current selected
-manifest scope. It uses the current manifest for host connection data.
-Controller-side artifacts reported by pull operations are not removed by host
-cleanup.
+`cleanup` reads an apply state file and removes target-host filesystem entries
+recorded as `created` resources inside the current selected manifest scope. It
+uses the current manifest for host connection data. Controller-side artifacts
+reported by pull operations are not removed by host cleanup.
 
 Cleanup intentionally does less than apply:
 
@@ -98,8 +105,10 @@ Cleanup intentionally does less than apply:
 - it does not rewrite the apply state file;
 - it still respects host and task selectors.
 
-Run `apply --state-file FILE` again after cleanup or after a later successful
-apply when you want a new baseline.
+Run `apply --state-file FILE` whenever you want to extend or refresh the cleanup
+ledger. Reusing the same file is intentional: new `created` resources are added,
+and previous `created` resources remain eligible for cleanup unless cleanup is
+run with selectors that leave them out of scope.
 
 ## Selectors
 

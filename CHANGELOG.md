@@ -6,6 +6,20 @@ This project uses pre-1.0 semantic versioning. Patch releases should remain
 compatible within the current pre-1.0 release line where practical, but
 manifest, module, and state-file contracts may still evolve before 1.0.
 
+## 0.2.1
+
+### Changed
+
+- `apply --state-file FILE` now updates the state file after the apply run is
+  reported even when some tasks fail. Only successful task results contribute
+  cleanup resource records.
+- Existing apply state files are now updated as cleanup ledgers instead of being
+  replaced wholesale. Existing `created` resource records are preserved when a
+  later apply reports the same resource as `unchanged` or `updated`, so repeated
+  applies do not erase future cleanup obligations.
+- Existing state files are validated before apply mutates hosts. Invalid or
+  unsupported state files are rejected instead of being overwritten.
+
 ## 0.2.0
 
 ### Changed

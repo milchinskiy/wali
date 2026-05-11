@@ -116,7 +116,7 @@ fn opt_state_file<'a>() -> ap::OptSpec<'a, Context> {
     })
     .long("state-file")
     .metavar("FILE")
-    .help("Read or write successful apply state FILE")
+    .help("Read or update apply state FILE")
     .validator(validate_state_file_value)
 }
 

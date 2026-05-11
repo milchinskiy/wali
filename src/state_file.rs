@@ -84,8 +84,17 @@ pub struct CleanupItem {
     pub run_as: Option<RunAs>,
 }
 
+pub fn check_apply_state_file_for_update(path: &Path) -> crate::Result {
+    validate_state_file_parent(path)?;
+    read_optional_apply_state_document(path).map(|_| ())
+}
+
 pub fn write_apply_state(path: &Path, plan: &Plan, captured: CapturedApplyState) -> crate::Result {
-    let resources = state_resources(plan, &captured)?;
+    let current_resources = state_resources(plan, &captured)?;
+    let previous_resources = read_optional_apply_state_document(path)?
+        .map(|document| document.resources)
+        .unwrap_or_default();
+    let resources = merge_state_resources(previous_resources, current_resources);
     let document = ApplyStateDocument {
         kind: DOCUMENT_KIND.to_string(),
         format_version: FORMAT_VERSION,
@@ -99,10 +108,32 @@ pub fn write_apply_state(path: &Path, plan: &Plan, captured: CapturedApplyState)
 }
 
 pub fn read_apply_state(path: &Path) -> crate::Result<ApplyState> {
-    let bytes = std::fs::read(path)?;
-    let document: ApplyStateDocument = serde_json::from_slice(&bytes)?;
-    validate_apply_state_document(&document)?;
+    let document = read_apply_state_document(path)?;
     Ok(ApplyState { document })
+}
+
+fn read_optional_apply_state_document(path: &Path) -> crate::Result<Option<ApplyStateDocument>> {
+    match std::fs::read(path) {
+        Ok(bytes) => read_apply_state_document_from_bytes(path, &bytes).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(crate::Error::Io(error)),
+    }
+}
+
+fn read_apply_state_document(path: &Path) -> crate::Result<ApplyStateDocument> {
+    let bytes = std::fs::read(path)?;
+    read_apply_state_document_from_bytes(path, &bytes)
+}
+
+fn read_apply_state_document_from_bytes(path: &Path, bytes: &[u8]) -> crate::Result<ApplyStateDocument> {
+    let document: ApplyStateDocument = serde_json::from_slice(bytes).map_err(|error| {
+        crate::Error::InvalidManifest(format!(
+            "state file '{}' is not a valid Wali apply state: {error}",
+            path.display()
+        ))
+    })?;
+    validate_apply_state_document(&document)?;
+    Ok(document)
 }
 
 pub fn build_cleanup_plan(
@@ -308,6 +339,38 @@ fn state_resource_from_change(
     }
 }
 
+fn merge_state_resources(previous: Vec<StateResource>, current: Vec<StateResource>) -> Vec<StateResource> {
+    let mut merged = previous;
+
+    for resource in current {
+        let Some(existing) = merged
+            .iter_mut()
+            .find(|existing| same_state_resource_identity(existing, &resource))
+        else {
+            merged.push(resource);
+            continue;
+        };
+
+        if existing.kind != ChangeKind::Created || resource.kind == ChangeKind::Created {
+            *existing = resource;
+        }
+    }
+
+    merged
+}
+
+fn same_state_resource_identity(left: &StateResource, right: &StateResource) -> bool {
+    if left.host_id != right.host_id || left.task_id != right.task_id || left.subject != right.subject {
+        return false;
+    }
+
+    match (&left.path, &right.path) {
+        (Some(left_path), Some(right_path)) => left_path == right_path,
+        (None, None) => left.detail == right.detail,
+        _ => false,
+    }
+}
+
 fn current_task_keys(plan: &Plan) -> BTreeSet<(&str, &str)> {
     plan.hosts
         .iter()
@@ -340,16 +403,7 @@ fn write_json_atomic<T>(path: &Path, value: &T) -> crate::Result
 where
     T: serde::Serialize,
 {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    if !parent.is_dir() {
-        return Err(crate::Error::Io(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("state file parent directory does not exist: {}", parent.display()),
-        )));
-    }
+    let parent = validate_state_file_parent(path)?;
 
     let tmp = temp_path(parent, path.file_name().and_then(|name| name.to_str()).unwrap_or("state"));
     let write_result = (|| -> crate::Result {
@@ -368,6 +422,20 @@ where
     }
 
     write_result
+}
+
+fn validate_state_file_parent(path: &Path) -> crate::Result<&Path> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    if !parent.is_dir() {
+        return Err(crate::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("state file parent directory does not exist: {}", parent.display()),
+        )));
+    }
+    Ok(parent)
 }
 
 fn sync_directory(path: &Path) -> crate::Result {
@@ -520,6 +588,48 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("/keep")
         );
+    }
+
+    #[test]
+    fn merge_resources_preserves_existing_created_for_same_path() {
+        let previous = vec![StateResource {
+            host_id: "localhost".to_string(),
+            task_id: "write".to_string(),
+            kind: ChangeKind::Created,
+            subject: ChangeSubject::FsEntry,
+            path: Some(TargetPath::from("/created")),
+            detail: None,
+            run_as: None,
+        }];
+        let current = vec![StateResource {
+            host_id: "localhost".to_string(),
+            task_id: "write".to_string(),
+            kind: ChangeKind::Unchanged,
+            subject: ChangeSubject::FsEntry,
+            path: Some(TargetPath::from("/created")),
+            detail: Some("already correct".to_string()),
+            run_as: None,
+        }];
+
+        let merged = merge_state_resources(previous, current);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].kind, ChangeKind::Created);
+        assert_eq!(merged[0].path.as_ref().map(TargetPath::as_str), Some("/created"));
+    }
+
+    #[test]
+    fn merge_resources_adds_new_created_paths_from_later_runs() {
+        let previous = vec![created_resource("first", "/first")];
+        let current = vec![created_resource("second", "/second")];
+
+        let merged = merge_state_resources(previous, current);
+        let paths = merged
+            .iter()
+            .filter_map(|resource| resource.path.as_ref().map(TargetPath::as_str))
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(paths, BTreeSet::from(["/first", "/second"]));
     }
 
     #[test]
