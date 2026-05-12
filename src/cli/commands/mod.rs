@@ -110,6 +110,48 @@ fn opt_task_tag<'a>() -> ap::OptSpec<'a, Context> {
     .validator(validate_selector_value)
 }
 
+fn opt_set<'a>() -> ap::OptSpec<'a, Context> {
+    ap::OptSpec::value("set", |value: &OsStr, ctx: &mut Context| {
+        if let Ok((key, value)) = parse_set(value) {
+            ctx.vars
+                .insert(key.to_string(), serde_json::Value::String(value.to_string()));
+        }
+    })
+    .long("set")
+    .metavar("KEY=VALUE")
+    .help("Set a manifest variable override; may be repeated")
+    .repeatable()
+    .validator(validate_set)
+}
+
+fn validate_set(value: &OsStr) -> Result<(), &'static str> {
+    parse_set(value).map(|_| ())
+}
+
+fn parse_set(value: &OsStr) -> Result<(&str, &str), &'static str> {
+    let Some(raw) = value.to_str() else {
+        return Err("--set must be valid UTF-8");
+    };
+    let Some((key, value)) = raw.split_once('=') else {
+        return Err("--set must use KEY=VALUE");
+    };
+    validate_set_key(key)?;
+    Ok((key, value))
+}
+
+fn validate_set_key(key: &str) -> Result<(), &'static str> {
+    if key.is_empty() {
+        return Err("--set key must not be empty");
+    }
+    if key.trim() != key {
+        return Err("--set key must not contain leading or trailing whitespace");
+    }
+    if key.chars().any(char::is_control) {
+        return Err("--set key must not contain control characters");
+    }
+    Ok(())
+}
+
 fn opt_state_file<'a>() -> ap::OptSpec<'a, Context> {
     ap::OptSpec::value("state-file", |value: &OsStr, ctx: &mut Context| {
         ctx.state_file = Some(std::path::PathBuf::from(value));
@@ -170,7 +212,9 @@ fn load_manifest(ctx: &Context) -> Result<wali::manifest::Manifest, ap::Error> {
         return Err(ap::Error::User(format!("Manifest file {} not found", manifest.display())));
     }
 
-    Ok(wali::manifest::load_from_file(manifest.as_path())?)
+    let mut manifest = wali::manifest::load_from_file(manifest.as_path())?;
+    manifest.vars.extend(ctx.vars.clone());
+    Ok(manifest)
 }
 
 fn load_plan(ctx: &Context) -> Result<wali::plan::Plan, ap::Error> {

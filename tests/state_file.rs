@@ -378,6 +378,27 @@ return {{
 }
 
 #[test]
+fn invalid_existing_state_file_is_rejected_before_manifest_loading() {
+    let sandbox = Sandbox::new("state-file-invalid-before-manifest");
+    let state_file = sandbox.path("apply-state.json");
+    let missing_manifest = sandbox.path("missing-manifest.lua");
+    std::fs::write(&state_file, "previous state\n").expect("failed to seed invalid state file");
+
+    let output = run_wali_failure(&[
+        "--json",
+        "apply",
+        "--state-file",
+        state_file.to_str().expect("non-utf8 state path"),
+        missing_manifest.to_str().expect("non-utf8 manifest path"),
+    ]);
+
+    let combined = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(combined.contains("is not a valid Wali apply state"), "unexpected failure output: {combined}");
+    assert!(!combined.contains("Manifest file"), "state preflight should run before manifest loading: {combined}");
+    assert_eq!(std::fs::read_to_string(&state_file).expect("failed to read seeded state file"), "previous state\n");
+}
+
+#[test]
 fn existing_invalid_state_file_is_rejected_before_apply_mutates_hosts() {
     let sandbox = Sandbox::new("state-file-invalid-existing");
     let state_file = sandbox.path("apply-state.json");

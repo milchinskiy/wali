@@ -87,12 +87,58 @@ wali cleanup --state-file apply-state.json manifest.lua
 `plan` compiles the manifest without connecting to hosts. `check` connects,
 prepares modules, evaluates host predicates, normalizes arguments, and validates
 module input without mutating hosts. `apply` performs the checked changes.
-`cleanup` removes only target-host filesystem entries recorded as `created` in an
-apply state file. `apply --state-file FILE` updates that file after every
+`cleanup` removes only target-host filesystem entries recorded as `created` in
+an apply state file. `apply --state-file FILE` updates that file after every
 reported apply run, including failed runs; only successful task results add
 cleanup resources, and existing `created` records are preserved across repeated
-applies. Controller-side artifacts reported by pull operations are not removed by
-host cleanup.
+applies. Controller-side artifacts reported by pull operations are not removed
+by host cleanup.
+
+## Variables and templated task arguments
+
+Manifest, host, and task `vars` are merged for each task. CLI `--set KEY=VALUE`
+adds string overrides at the manifest level, so host and task variables still
+win:
+
+```text
+manifest vars < CLI --set vars < host vars < task vars
+```
+
+String values inside task `args` are rendered with MiniJinja before module
+schema validation. This keeps reusable manifests simple for dotfiles and
+per-user paths:
+
+```lua
+local m = require("manifest")
+
+return {
+    vars = { user = "alice", home = "/home/alice" },
+
+    hosts = {
+        m.host.localhost("localhost"),
+    },
+
+    tasks = {
+        m.task("link zshrc")("wali.builtin.link", {
+            src = m.here("dotfiles", "zshrc"),
+            dest = "{{ home }}/.zshrc",
+            replace = true,
+        }),
+    },
+}
+```
+
+Run the same manifest with another home directory:
+
+```sh
+wali apply --set user=bob --set home=/home/bob dotfiles.lua
+```
+
+`--set` values are strings and should be quoted by the shell when they contain
+spaces or special characters. Use manifest `vars` for typed values such as
+booleans, numbers, arrays, and objects. Literal MiniJinja syntax in task
+arguments can be escaped with raw blocks, for example
+`{% raw %}{{ literal }}{% endraw %}`.
 
 ## Builtin modules
 

@@ -7,6 +7,7 @@ pub fn cleanup<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new("cleanup")
         .handler_try(cleanup_handler)
         .opt(super::opt_jobs())
+        .opt(super::opt_set())
         .opt(super::opt_host())
         .opt(super::opt_host_tag())
         .opt(super::opt_task())

@@ -35,6 +35,12 @@ Common option names are reused across modules:
 - `mode` / `owner`: metadata for one path or as recursive defaults.
 - `dir_mode` / `file_mode`, `dir_owner` / `file_owner`: recursive overrides.
 
+Task argument strings are rendered with MiniJinja before builtin schema
+validation, using the effective manifest/CLI/host/task variables for that
+host-task instance. For example, `dest = "/home/{{ user }}/.zshrc"` becomes a
+concrete path before `wali.builtin.link` validates it. Rendering is strict:
+undefined variables are manifest errors.
+
 ## `wali.builtin.touch`
 
 Creates a regular file if it is absent. Existing regular-file content is never
@@ -68,9 +74,10 @@ Options: `path`, `parents`, `mode`, `owner`.
 ## `wali.builtin.write`
 
 Writes text to a target-host regular file. The source is exactly one of
-`content` or controller-side `src`. When task variables or `vars` are present,
-the text is rendered through MiniJinja before writing; otherwise it is written
-verbatim.
+`content` or controller-side `src`. Destination and other string options are
+rendered as normal task arguments. Inline `content` and controller-side source
+file contents are rendered through MiniJinja by the module when task variables
+or module-local `vars` are present; otherwise the text is written verbatim.
 
 ```lua
 m.task("write config")("wali.builtin.write", {

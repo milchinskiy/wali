@@ -13,7 +13,7 @@ manifest.host = {}
 ---@class WaliManifestDefinition
 ---@field name? string Optional display name. Defaults to the manifest file path when omitted or empty.
 ---@field base_path? string Controller-side base directory for controller file APIs, write sources, and transfer sources.
----@field vars? table<string, WaliJsonValue> Manifest variables merged before host and task variables.
+---@field vars? table<string, WaliJsonValue> Manifest variables merged before CLI --set, host, and task variables.
 ---@field hosts? WaliManifestHost[] Target hosts. A useful manifest normally has at least one host.
 ---@field modules? WaliManifestModuleSource[] Custom module sources.
 ---@field tasks WaliManifestTask[] Tasks to plan and run.
@@ -23,7 +23,7 @@ manifest.host = {}
 ---@class WaliManifestHostBase
 ---@field id string Unique host id.
 ---@field tags? string[] Host tags used by task host selectors and CLI selectors.
----@field vars? table<string, WaliJsonValue> Host variables merged after manifest variables.
+---@field vars? table<string, WaliJsonValue> Host variables merged after manifest and CLI --set variables.
 ---@field run_as? WaliManifestRunAs[] Host-local privilege-switching profiles.
 ---@field command_timeout? string Human duration such as '30s' or '5m'.
 
@@ -215,7 +215,7 @@ function manifest.host.ssh(id, opts) end
 ---@class WaliManifestTask: WaliManifestTaskOpts
 ---@field id string Unique task id.
 ---@field module WaliBuiltinModuleName|string Dotted module name, for example 'wali.builtin.write'.
----@field args WaliBuiltinModuleArgs|WaliJsonValue|table Module argument value. The helper defaults this to `{}` when omitted.
+---@field args WaliBuiltinModuleArgs|WaliJsonValue|table Module argument value. String values are rendered with effective vars before validation. The helper defaults this to `{}` when omitted.
 
 ---@alias WaliManifestTaskFactory
 ---| fun(module: 'wali.builtin.touch', args?: WaliBuiltinTouchArgs, opts?: WaliManifestTaskOpts): WaliManifestTask

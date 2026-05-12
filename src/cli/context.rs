@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+
+use serde_json::Value;
 
 #[derive(Default, Clone)]
 pub struct Context {
@@ -8,4 +11,5 @@ pub struct Context {
     pub jobs: Option<std::num::NonZeroUsize>,
     pub selection: wali::plan::Selection,
     pub state_file: Option<PathBuf>,
+    pub vars: BTreeMap<String, Value>,
 }

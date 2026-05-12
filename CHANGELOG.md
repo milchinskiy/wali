@@ -8,6 +8,16 @@ manifest, module, and state-file contracts may still evolve before 1.0.
 
 ## 0.2.1
 
+### Added
+
+- `plan`, `check`, `apply`, and `cleanup` now accept repeatable
+  `--set KEY=VALUE` options. These values are string manifest-variable overrides
+  with precedence `manifest vars < CLI --set vars < host vars < task vars`.
+- String values inside task `args` are now rendered with MiniJinja against the
+  effective variable map before module schema validation. This allows reusable
+  manifests such as dotfile manifests to express paths like
+  `dest = "/home/{{ user }}/.zshrc"`.
+
 ### Changed
 
 - `apply --state-file FILE` now updates the state file after the apply run is
@@ -17,8 +27,10 @@ manifest, module, and state-file contracts may still evolve before 1.0.
   replaced wholesale. Existing `created` resource records are preserved when a
   later apply reports the same resource as `unchanged` or `updated`, so repeated
   applies do not erase future cleanup obligations.
-- Existing state files are validated before apply mutates hosts. Invalid or
-  unsupported state files are rejected instead of being overwritten.
+- Existing state files are validated before manifest loading and before apply
+  mutates hosts. Invalid or unsupported state files are rejected instead of
+  being overwritten.
+- Release smoke coverage now exercises `--set` and task-argument rendering.
 
 ## 0.2.0
 

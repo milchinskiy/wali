@@ -114,18 +114,25 @@ absolute paths when the module documents that behavior.
 
 ### `vars`
 
-Optional table of JSON-like values. Manifest, host, and task variables are
+Optional table of JSON-like values. Manifest, CLI, host, and task variables are
 merged shallowly for each task:
 
 ```text
-manifest vars < host vars < task vars
+manifest vars < CLI --set vars < host vars < task vars
 ```
 
-Later levels replace earlier values with the same top-level key. Values keep
-their Lua/JSON shape: strings, numbers, booleans, arrays, objects, and explicit
-`null`. Variable keys must be non-empty and must not have leading or trailing
-whitespace. Plan output shows variable keys, not values; do not treat variables
-as a secret store.
+Later levels replace earlier values with the same top-level key. Manifest, host,
+and task values keep their Lua/JSON shape: strings, numbers, booleans, arrays,
+objects, and explicit `null`. CLI `--set KEY=VALUE` values are strings. Variable
+keys must be non-empty and must not have leading or trailing whitespace. Plan
+output shows variable keys, not values; do not treat variables as a secret
+store.
+
+The effective variable map is used in two places:
+
+- modules receive it as `ctx.vars`;
+- string values inside task `args` are rendered with MiniJinja before module
+  schema validation.
 
 Example:
 
@@ -149,14 +156,40 @@ return {
             id = "write config",
             module = "custom.write_config",
             vars = { config_name = "demo.conf" },
-            args = {},
+            args = {
+                dest = "{{ base_dir }}/{{ config_name }}",
+            },
         },
     },
 }
 ```
 
 The module receives `ctx.vars.app`, `ctx.vars.role`, `ctx.vars.port`, and
-`ctx.vars.config_name`.
+`ctx.vars.config_name`; the task argument `dest` is rendered to
+`/opt/demo/demo.conf` before the module validates it.
+
+Task-argument rendering is strict. Referencing an undefined variable is an
+invalid manifest error for that host/task instance. Rendering applies to string
+values recursively inside `args`; booleans, numbers, arrays, and objects keep
+their JSON shape. Since rendered templates produce strings, use manifest Lua
+values directly for typed fields such as booleans and integers.
+
+Literal MiniJinja syntax can be passed through a rendered task argument with a
+raw block. For example, `{% raw %}{{ literal }}{% endraw %}` renders to
+`{{ literal }}`.
+
+`wali.builtin.write` keeps rendering inline `content` and source-file contents
+inside the module, so its existing `vars` option continues to work for file
+content templates. Other string options, such as `dest`, are rendered as normal
+task arguments. Custom modules receive already-rendered string arguments. If a
+custom module needs to receive raw template text, document that callers must
+escape MiniJinja syntax with raw blocks, or accept a controller-side source file
+path and read the payload itself.
+
+CLI `--set` values are applied after the Lua manifest is loaded. They are
+available to task-argument templates and to module `ctx.vars`; they are not
+available to Lua code that decides which hosts or tasks to create. Use ordinary
+Lua variables inside the manifest for that kind of structure.
 
 ## Hosts
 

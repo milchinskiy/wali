@@ -7,6 +7,7 @@ pub fn apply<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new("apply")
         .handler_try(apply_handler)
         .opt(super::opt_jobs())
+        .opt(super::opt_set())
         .opt(super::opt_host())
         .opt(super::opt_host_tag())
         .opt(super::opt_task())
@@ -22,11 +23,14 @@ pub fn apply<'a>() -> ap::CmdSpec<'a, Context> {
 }
 
 fn apply_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {
+    if let Some(state_file) = ctx.state_file.as_deref() {
+        wali::state_file::check_apply_state_file_for_update(state_file)?;
+    }
+
     let execution = super::load_execution_plan(ctx)?;
     let render_kind = super::render_kind(ctx);
 
     if let Some(state_file) = ctx.state_file.as_deref() {
-        wali::state_file::check_apply_state_file_for_update(state_file)?;
         let launcher = wali::launcher::Launcher::prepare(&execution.plan)?;
         let (layout, capture) = ApplyLayout::with_state_capture(render_kind);
         let report = Reporter::new(layout);

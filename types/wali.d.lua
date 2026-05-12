@@ -150,7 +150,7 @@ null = nil
 ---@class WaliValidateCtx
 ---@field phase 'validate'
 ---@field task WaliTaskCtx
----@field vars table<string, WaliJsonValue>
+---@field vars table<string, WaliJsonValue> Effective manifest/CLI/host/task variables.
 ---@field run_as? WaliRunAs
 ---@field host WaliValidateHostCtx
 ---@field controller WaliControllerCtx
@@ -163,7 +163,7 @@ null = nil
 ---@class WaliApplyCtx
 ---@field phase 'apply'
 ---@field task WaliTaskCtx
----@field vars table<string, WaliJsonValue>
+---@field vars table<string, WaliJsonValue> Effective manifest/CLI/host/task variables.
 ---@field run_as? WaliRunAs
 ---@field host WaliApplyHostCtx
 ---@field controller WaliControllerCtx

@@ -411,10 +411,18 @@ ctx.transfer.*
 Validation context does not expose mutation helpers, command execution, random
 helpers, or sleep helpers.
 
-`ctx.vars` contains the effective manifest/host/task variables for the current
-host task. The merge is shallow and deterministic: manifest variables are the
-base, host variables override them, and task variables override both. Modules
-should treat `ctx.vars` as read-only configuration data.
+`ctx.vars` contains the effective manifest/CLI/host/task variables for the
+current host task. The merge is shallow and deterministic: manifest variables
+are the base, CLI `--set` string variables override manifest values, host
+variables override those, and task variables override all previous levels.
+Modules should treat `ctx.vars` as read-only configuration data. String values
+in task `args` are already rendered with this effective variable map before
+module schema validation runs, except for template payloads that a module
+intentionally renders itself, such as `wali.builtin.write` content. Custom
+modules normally receive concrete strings, not raw template text. If a module
+needs a raw template payload, document the caller-facing escape form
+`{% raw %}{{ literal }}{% endraw %}`, or accept a controller-side source path
+and read the payload from the module.
 
 `ctx.controller.path` exposes lexical controller path helpers: `resolve`,
 `is_absolute`, `join`, `normalize`, `parent`, `basename`, and `strip_prefix`.

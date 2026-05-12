@@ -207,3 +207,189 @@ return {
         assert_wali_failure_contains(&["--json", "plan", manifest.to_str().expect("non-utf8 manifest path")], expected);
     }
 }
+
+#[test]
+fn task_args_render_with_effective_vars_per_host() {
+    let sandbox = Sandbox::new("vars-render-task-args");
+    let alice_file = sandbox.path("alice-home/.zshrc");
+    let bob_file = sandbox.path("bob-home/.zshrc");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    vars = {{ root = {} }},
+    hosts = {{
+        {{ id = "alice", transport = "local", vars = {{ user = "alice", home = "alice-home" }} }},
+        {{ id = "bob", transport = "local", vars = {{ user = "bob", home = "bob-home" }} }},
+    }},
+    tasks = {{
+        {{
+            id = "write zshrc",
+            module = "wali.builtin.write",
+            args = {{
+                dest = "{{{{ root }}}}/{{{{ home }}}}/.zshrc",
+                content = "managed for {{{{ user }}}}\n",
+                parents = true,
+            }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&sandbox.root)
+    ));
+
+    run_wali_json(&["--json", "apply", manifest_path(&manifest)]);
+
+    assert_eq!(std::fs::read_to_string(&alice_file).expect("missing alice file"), "managed for alice\n");
+    assert_eq!(std::fs::read_to_string(&bob_file).expect("missing bob file"), "managed for bob\n");
+}
+
+#[test]
+fn cli_set_overrides_manifest_vars_and_preserves_special_characters() {
+    let sandbox = Sandbox::new("vars-cli-set-special");
+    let output = sandbox.path("out.txt");
+    let special = r#"some/value\with spaces 'quotes' "double" $dollar {braces}=and=equals"#;
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    vars = {{ value = "manifest-default" }},
+    hosts = {{ {{ id = "localhost", transport = "local" }} }},
+    tasks = {{
+        {{
+            id = "write value",
+            module = "wali.builtin.write",
+            args = {{
+                dest = {},
+                content = "{{{{ value }}}}\n",
+            }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&output)
+    ));
+    let set_arg = format!("value={special}");
+
+    run_wali_json(&["--json", "apply", "--set", &set_arg, manifest_path(&manifest)]);
+
+    assert_eq!(std::fs::read_to_string(&output).expect("missing output"), format!("{special}\n"));
+}
+
+#[test]
+fn host_and_task_vars_override_cli_set_values() {
+    let sandbox = Sandbox::new("vars-cli-set-precedence");
+    let output = sandbox.path("out.txt");
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    vars = {{ value = "manifest" }},
+    hosts = {{
+        {{ id = "localhost", transport = "local", vars = {{ value = "host" }} }},
+    }},
+    tasks = {{
+        {{
+            id = "write value",
+            module = "wali.builtin.write",
+            vars = {{ value = "task" }},
+            args = {{
+                dest = {},
+                content = "{{{{ value }}}}\n",
+            }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&output)
+    ));
+
+    run_wali_json(&["--json", "apply", "--set", "value=cli", manifest_path(&manifest)]);
+
+    assert_eq!(std::fs::read_to_string(&output).expect("missing output"), "task\n");
+}
+
+#[test]
+fn task_arg_template_raw_block_preserves_literal_minijinja_syntax() {
+    let sandbox = Sandbox::new("vars-render-raw-block");
+    let modules = sandbox.mkdir("modules");
+    let output = sandbox.path("out.txt");
+
+    std::fs::write(
+        modules.join("write_arg.lua"),
+        r#"
+return {
+    apply = function(ctx, args)
+        return ctx.host.fs.write(args.path, args.value .. "\n", { create_parents = true })
+    end,
+}
+"#,
+    )
+    .expect("failed to write test module");
+
+    let manifest = sandbox.write_manifest(&format!(
+        r#"
+return {{
+    vars = {{ name = "alice" }},
+    hosts = {{ {{ id = "localhost", transport = "local" }} }},
+    modules = {{ {{ path = {} }} }},
+    tasks = {{
+        {{
+            id = "write literal template",
+            module = "write_arg",
+            args = {{
+                path = {},
+                value = "{{% raw %}}hello {{{{ name }}}}{{% endraw %}}",
+            }},
+        }},
+    }},
+}}
+"#,
+        lua_string(&modules),
+        lua_string(&output),
+    ));
+
+    run_wali_json(&["--json", "apply", manifest_path(&manifest)]);
+
+    assert_eq!(std::fs::read_to_string(&output).expect("missing output"), "hello {{ name }}\n");
+}
+
+#[test]
+fn task_arg_template_requires_defined_variables() {
+    let sandbox = Sandbox::new("vars-render-missing");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = { { id = "localhost", transport = "local" } },
+    tasks = {
+        {
+            id = "bad template",
+            module = "wali.builtin.touch",
+            args = { path = "/tmp/{{ missing }}/file" },
+        },
+    },
+}
+"#,
+    );
+
+    assert_wali_failure_contains(
+        &["--json", "plan", manifest_path(&manifest)],
+        "Task 'bad template' on host 'localhost' has invalid template at args.path",
+    );
+}
+
+#[test]
+fn invalid_cli_set_values_are_rejected() {
+    let sandbox = Sandbox::new("vars-cli-set-invalid");
+    let manifest = sandbox.write_manifest(
+        r#"
+return {
+    hosts = { { id = "localhost", transport = "local" } },
+    tasks = {},
+}
+"#,
+    );
+
+    assert_wali_failure_contains(&["--json", "plan", "--set", "missing-equals", manifest_path(&manifest)], "KEY=VALUE");
+    assert_wali_failure_contains(
+        &["--json", "plan", "--set", " =bad", manifest_path(&manifest)],
+        "key must not contain",
+    );
+}
