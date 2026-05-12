@@ -7,6 +7,7 @@ use crate::spec::runas::RunAs;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod selection;
+mod template;
 pub use self::selection::Selection;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -195,10 +196,13 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                 .iter()
                 .filter(|task| task_matches_host(task, host))
                 .map(|task| -> crate::Result<_> {
+                    let vars = merged_vars(&manifest.vars, &host.vars, &task.vars);
+                    let args = template::render_task_args(&host.id, task, &vars)?;
+
                     Ok(TaskInstance {
                         id: task.id.clone(),
                         tags: task.tags.clone().unwrap_or_default(),
-                        vars: merged_vars(&manifest.vars, &host.vars, &task.vars),
+                        vars,
                         depends_on: task.depends_on.clone().unwrap_or_default(),
                         on_change: task.on_change.clone().unwrap_or_default(),
                         when: task.when.clone(),
@@ -212,7 +216,7 @@ pub fn compile(manifest: Manifest) -> crate::Result<Plan> {
                             )?),
                         },
                         module: task.module.clone(),
-                        args: task.args.clone(),
+                        args,
                     })
                 })
                 .collect::<crate::Result<Vec<_>>>()?;

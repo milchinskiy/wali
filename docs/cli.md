@@ -30,10 +30,48 @@ wali --json-pretty cleanup --state-file apply-state.json manifest.lua
 `--json` and `--json-pretty` are mutually exclusive. The short forms are `-j`
 and `-J`.
 
+## Variables
+
+`plan`, `check`, `apply`, and `cleanup` accept `--set KEY=VALUE`. The option may
+be repeated and injects string values as manifest-level variable overrides:
+
+```sh
+wali apply --set user=alice --set home=/home/alice dotfiles.lua
+```
+
+`--set` values join the ordinary variable merge as:
+
+```text
+manifest vars < CLI --set vars < host vars < task vars
+```
+
+This means CLI values override manifest defaults, while host and task variables
+can still specialize a run. The value is taken exactly as passed by the shell,
+so quote it when it contains spaces or shell metacharacters:
+
+```sh
+wali apply --set 'home=/home/test user' --set 'prefix=some/value\with special_chars' manifest.lua
+```
+
+`--set` is intended for string overrides such as users, home directories,
+profiles, installation prefixes, and target paths. Use manifest `vars` for typed
+values such as booleans, numbers, arrays, and objects. Variables are not a
+secret store: command-line arguments may be visible to other local processes,
+and values can appear in reports or state files if a manifest uses them in paths
+or task arguments.
+
+String values inside task `args` are rendered with MiniJinja against the
+effective variable map before module schema validation. Rendering is strict: an
+undefined variable makes the manifest invalid for that host/task instance. To
+pass literal MiniJinja syntax through a rendered task argument, use a raw block:
+`{% raw %}{{ literal }}{% endraw %}` renders as `{{ literal }}`. `--set` is
+applied after Lua manifest loading, so it does not affect Lua code that creates
+hosts or tasks.
+
 ## `plan`
 
 ```sh
-wali plan [selectors] MANIFEST
+wali plan [--set KEY=VALUE] [selectors] MANIFEST
 ```
 
 `plan` loads and validates the manifest, compiles the effective per-host task
@@ -47,7 +85,7 @@ host or module-source side effects are possible.
 ## `check`
 
 ```sh
-wali check [--jobs N] [selectors] MANIFEST
+wali check [--jobs N] [--set KEY=VALUE] [selectors] MANIFEST
 ```
 
 `check` prepares module sources, resolves task modules, connects to selected
@@ -63,33 +101,40 @@ apply-time race.
 ## `apply`
 
 ```sh
-wali apply [--jobs N] [--state-file FILE] [selectors] MANIFEST
+wali apply [--jobs N] [--set KEY=VALUE] [--state-file FILE] [selectors] MANIFEST
 ```
 
 `apply` performs the same preparation and validation as `check`, then calls each
 selected module's `apply` function in per-host task order.
 
-Use `--state-file FILE` to write a successful apply snapshot:
+Use `--state-file FILE` to update an apply state file:
 
 ```sh
 wali apply --state-file apply-state.json manifest.lua
 ```
 
-The snapshot contains the selected effective plan, resource records, and the
-final apply report state. It is written atomically after a successful apply.
-Failed applies do not overwrite an existing state file.
+The state file contains the selected effective plan from the latest run, an
+accumulated resource ledger, and the final apply report state. Wali validates an
+existing state file before mutating hosts, then writes the updated document
+atomically after the run has been reported. This update also happens when one or
+more tasks fail: only successful task results contribute resource records, while
+failed or skipped tasks do not.
+
+When `FILE` already exists, it must be a valid Wali apply-state document. Wali
+updates it instead of replacing the cleanup ledger. Existing `created` resource
+records are preserved when a later apply reports the same path as `unchanged` or
+`updated`, so repeated applies do not erase cleanup obligations.
 
 ## `cleanup`
 
 ```sh
-wali cleanup --state-file FILE [--jobs N] [selectors] MANIFEST
+wali cleanup --state-file FILE [--jobs N] [--set KEY=VALUE] [selectors] MANIFEST
 ```
 
-`cleanup` reads a previous successful apply state file and removes target-host
-filesystem entries recorded as `created` resources inside the current selected
-manifest scope. It uses the current manifest for host connection data.
-Controller-side artifacts reported by pull operations are not removed by host
-cleanup.
+`cleanup` reads an apply state file and removes target-host filesystem entries
+recorded as `created` resources inside the current selected manifest scope. It
+uses the current manifest for host connection data. Controller-side artifacts
+reported by pull operations are not removed by host cleanup.
 
 Cleanup intentionally does less than apply:
 
@@ -98,8 +143,10 @@ Cleanup intentionally does less than apply:
 - it does not rewrite the apply state file;
 - it still respects host and task selectors.
 
-Run `apply --state-file FILE` again after cleanup or after a later successful
-apply when you want a new baseline.
+Run `apply --state-file FILE` whenever you want to extend or refresh the cleanup
+ledger. Reusing the same file is intentional: new `created` resources are added,
+and previous `created` resources remain eligible for cleanup unless cleanup is
+run with selectors that leave them out of scope.
 
 ## Selectors
 

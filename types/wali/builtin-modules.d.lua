@@ -2,7 +2,9 @@
 
 -- Typed argument tables for Wali's builtin task modules.
 -- Builtins are imperative verbs: they do work directly and do not expose
--- declarative `state` fields.
+-- declarative `state` fields. String argument values are rendered with
+-- effective manifest/CLI/host/task variables before validation, except template
+-- payloads rendered by the builtin itself such as write.content.
 
 ---@alias WaliPermissionsSymlinkPolicy
 ---| 'skip'

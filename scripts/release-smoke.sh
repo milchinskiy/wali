@@ -3,54 +3,54 @@
 set -eu
 
 if [ "$#" -ne 1 ]; then
-  echo "usage: $0 PATH_TO_WALI_BINARY" >&2
-  exit 2
+    echo "usage: $0 PATH_TO_WALI_BINARY" >&2
+    exit 2
 fi
 
 wali=$1
 if [ ! -x "$wali" ]; then
-  echo "wali binary is not executable: $wali" >&2
-  exit 1
+    echo "wali binary is not executable: $wali" >&2
+    exit 1
 fi
 
 root="$(mktemp -d "${TMPDIR:-/tmp}/wali-smoke.XXXXXX")"
 trap 'rm -rf "$root"' EXIT HUP INT TERM
 
 fail() {
-  echo "release smoke test failed: $*" >&2
-  echo "smoke root: $root" >&2
+    echo "release smoke test failed: $*" >&2
+    echo "smoke root: $root" >&2
 
-  if [ -d "$root" ]; then
-    echo "smoke root contents:" >&2
-    find "$root" -maxdepth 5 -print >&2 || true
-  fi
+    if [ -d "$root" ]; then
+        echo "smoke root contents:" >&2
+        find "$root" -maxdepth 5 -print >&2 || true
+    fi
 
-  exit 1
+    exit 1
 }
 
 run() {
-  label=$1
-  shift
-  echo "smoke: $label" >&2
-  "$@" || fail "$label"
+    label=$1
+    shift
+    echo "smoke: $label" >&2
+    "$@" || fail "$label"
 }
 
 assert_file() {
-  [ -f "$1" ] || fail "expected regular file: $1"
+    [ -f "$1" ] || fail "expected regular file: $1"
 }
 
 assert_symlink() {
-  [ -L "$1" ] || fail "expected symlink: $1"
+    [ -L "$1" ] || fail "expected symlink: $1"
 }
 
 assert_absent() {
-  if [ -e "$1" ] || [ -L "$1" ]; then
-    fail "expected path to be absent: $1"
-  fi
+    if [ -e "$1" ] || [ -L "$1" ]; then
+        fail "expected path to be absent: $1"
+    fi
 }
 
 lua_quote() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 manifest="$root/manifest.lua"
@@ -58,26 +58,28 @@ created_state_file="$root/apply-created-state.json"
 idempotent_state_file="$root/apply-idempotent-state.json"
 smoke_root="$root/host"
 controller_tree="$root/controller-tree"
-smoke_root_lua="$(lua_quote "$smoke_root")"
+set_root="root=$smoke_root"
 
 mkdir -p "$controller_tree/sub"
-printf '%s\n' 'controller tree item' > "$controller_tree/sub/item.txt"
+printf '%s\n' 'controller tree item' >"$controller_tree/sub/item.txt"
 
-cat > "$manifest" <<EOF_MANIFEST
+cat >"$manifest" <<EOF_MANIFEST
 local m = require("manifest")
-local root = "$smoke_root_lua"
 local function p(path)
-    return root .. "/" .. path
+    return "{{ root }}/" .. path
 end
 
 return {
     name = "release smoke test",
+    vars = {
+        root = "/wali-smoke-root-not-overridden",
+    },
     hosts = {
         m.host.localhost("localhost"),
     },
     tasks = {
         m.task("create workspace")("wali.builtin.mkdir", {
-            path = root,
+            path = "{{ root }}",
             parents = true,
             mode = "0755",
         }),
@@ -186,10 +188,10 @@ return {
 EOF_MANIFEST
 
 run "wali --version" "$wali" --version
-run "wali plan" "$wali" plan "$manifest"
-run "wali check" "$wali" check "$manifest"
-run "wali apply creates resources" "$wali" apply --state-file "$created_state_file" "$manifest"
-run "wali apply is idempotent" "$wali" apply --state-file "$idempotent_state_file" "$manifest"
+run "wali plan" "$wali" plan --set "$set_root" "$manifest"
+run "wali check" "$wali" check --set "$set_root" "$manifest"
+run "wali apply creates resources" "$wali" apply --set "$set_root" --state-file "$created_state_file" "$manifest"
+run "wali apply is idempotent" "$wali" apply --set "$set_root" --state-file "$idempotent_state_file" "$manifest"
 
 assert_file "$smoke_root/source.txt"
 assert_file "$smoke_root/copy.txt"
@@ -201,5 +203,5 @@ assert_file "$root/pulled-tree/sub/item.txt"
 assert_file "$smoke_root/command.txt"
 assert_absent "$smoke_root/stale.txt"
 
-run "wali cleanup" "$wali" cleanup --state-file "$created_state_file" "$manifest"
+run "wali cleanup" "$wali" cleanup --set "$set_root" --state-file "$created_state_file" "$manifest"
 assert_absent "$smoke_root"

@@ -7,6 +7,7 @@ pub fn cleanup<'a>() -> ap::CmdSpec<'a, Context> {
     ap::CmdSpec::new("cleanup")
         .handler_try(cleanup_handler)
         .opt(super::opt_jobs())
+        .opt(super::opt_set())
         .opt(super::opt_host())
         .opt(super::opt_host_tag())
         .opt(super::opt_task())
@@ -18,7 +19,7 @@ pub fn cleanup<'a>() -> ap::CmdSpec<'a, Context> {
             })
             .required(),
         )
-        .help("Cleanup filesystem entries created by a previous successful apply")
+        .help("Cleanup filesystem entries recorded as created in apply state")
 }
 
 fn cleanup_handler(_: &ap::Matches, ctx: &mut Context) -> Result<(), ap::Error> {

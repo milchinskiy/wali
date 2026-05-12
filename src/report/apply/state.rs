@@ -40,6 +40,7 @@ impl State {
 #[serde(rename_all = "snake_case")]
 enum HostStatus {
     Ok,
+    Failed,
     Error(String),
 }
 
@@ -161,6 +162,7 @@ impl State {
                 error,
             } => {
                 let host = get_host(host_id, &mut self.hosts)?;
+                host.status = HostStatus::Failed;
                 let task = get_task(task_id, &mut host.tasks)?;
                 task.status = StateTaskStatus::Fail(error.clone());
             }

@@ -104,9 +104,12 @@ changed, failed, and skipped work. Resource records are not cosmetic: cleanup
 uses them to decide what may be removed later.
 
 Cleanup is deliberately conservative. It removes target-host resources recorded
-as `created` by a previous successful apply and inside the currently selected
-manifest scope. It does not remove entries that were updated, unchanged, not
-recorded, or reported as controller-side artifacts by pull operations.
+as `created` in the apply state file and inside the currently selected manifest
+scope. Apply state behaves as a cleanup ledger: successful task results are
+recorded even when a later task fails, and existing `created` records are not
+downgraded by later unchanged or updated reports. Cleanup does not remove
+entries that were updated, unchanged, not recorded, or reported as
+controller-side artifacts by pull operations.
 
 ## Compatibility
 
